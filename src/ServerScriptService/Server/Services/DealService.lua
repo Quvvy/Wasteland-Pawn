@@ -46,6 +46,13 @@ local function currencyWord(): string
 	return HaggleTuning.currencyName or "scraps"
 end
 
+local function buyerInterestFor(buyer, category: string?): string?
+	if not buyer or not category then
+		return nil
+	end
+	return TacticHaggleMath.getBuyerInterestLabel(buyer, category)
+end
+
 function DealService:Init()
 	Remotes.setup()
 end
@@ -155,6 +162,23 @@ function DealService:_setDealCooldown(player: Player)
 	playerNextDealAt[player] = os.clock() + (HaggleTuning.dealCooldownSeconds or 0)
 end
 
+function DealService:_spendFrictionCost(player: Player, amount: number, reason: string, required: boolean): (boolean, string?)
+	if amount <= 0 then
+		return true, nil
+	end
+
+	local cur = currencyWord()
+	if DataService:spend(player, amount) then
+		return true, `Spent {amount} {cur} {reason}.`
+	end
+
+	if required then
+		return false, `Need {amount} {cur} {reason}.`
+	end
+
+	return true, `Couldn't pay {amount} {cur} {reason}.`
+end
+
 function DealService:_pushState(player: Player)
 	local deal = activeDeals[player]
 	if not deal then
@@ -208,6 +232,7 @@ function DealService:_initDealState(customer, item, hiddenOutcome, askingPrice, 
 		buyerOffer = nil,
 		buyerOpeningOffer = nil,
 		buyerMaximum = nil,
+		buyerInterest = nil,
 		buyerHeat = 0,
 		buyerHeatMax = HaggleTuning.heatMax,
 		dealSummary = nil,
@@ -235,10 +260,9 @@ function DealService:_buildSnapshot(player: Player, deal)
 		askingPrice = deal.currentSellerPrice,
 		currentSellerPrice = deal.currentSellerPrice,
 		originalAskingPrice = deal.originalAskingPrice,
-		minimumAccept = deal.minimumAccept,
 		buyerOffer = deal.currentBuyerOffer,
 		currentBuyerOffer = deal.currentBuyerOffer,
-		buyerMaximum = deal.buyerMaximum,
+		buyerInterest = deal.buyerInterest,
 		estimatedLow = deal.estimatedLow,
 		estimatedHigh = deal.estimatedHigh,
 		playerCash = DataService:getCash(player),
@@ -263,9 +287,11 @@ function DealService:_buildSnapshot(player: Player, deal)
 	}
 
 	if deal.hiddenOutcome then
-		if phase == "Purchased" or phase == "Selling" or phase == "Result" then
+		if phase == "Result" then
 			snapshot.trueValue = deal.hiddenOutcome.trueValue
 			snapshot.rarityName = rarity and rarity.displayName or deal.hiddenOutcome.rarityId
+			snapshot.buyerMaximum = deal.buyerMaximum
+			snapshot.minimumAccept = deal.minimumAccept
 		end
 	end
 
@@ -350,7 +376,7 @@ function DealService:useBuyTactic(player: Player, tacticId: any)
 			deal.estimatedHigh,
 			deal.hiddenOutcome.trueValue
 		)
-		deal.inspectHint = "They slipped — estimate tightened."
+		deal.inspectHint = "They slipped - estimate tightened."
 	end
 
 	deal.currentSellerPrice = result.newPrice
@@ -442,7 +468,7 @@ function DealService:_completePurchase(player: Player, price: number, deal)
 	deal.pendingInstanceId = instanceId
 	deal.purchasePrice = price
 	deal.phase = "Purchased"
-	deal.dialogue = `Bought for {price} {currencyWord()}. True value: {deal.hiddenOutcome.trueValue} {currencyWord()}. Find a buyer!`
+	deal.dialogue = `Bought for {price} {currencyWord()}. Find a buyer to reveal the real margin.`
 	self:_pushState(player)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end
@@ -464,8 +490,15 @@ function DealService:startSelling(player: Player, instanceId: any?)
 end
 
 function DealService:_rerollBuyer(player: Player, deal)
+	local paid, costMessage = self:_spendFrictionCost(player, HaggleTuning.buyerRerollCost or 0, "to find another buyer", true)
+	if not paid then
+		deal.dialogue = costMessage
+		self:_pushState(player)
+		return { ok = false, error = costMessage }
+	end
+
 	self:_beginBuyerNegotiation(deal, BuyerService:rollBuyer(self:_getRng(player)), self:_getRng(player))
-	deal.dialogue = `New buyer: {deal.buyer.displayName}. Offer: {deal.currentBuyerOffer} {currencyWord()}.`
+	deal.dialogue = `{if costMessage then costMessage .. " " else ""}New buyer: {deal.buyer.displayName}. Offer: {deal.currentBuyerOffer} {currencyWord()}.`
 	self:_pushState(player)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end
@@ -485,6 +518,7 @@ function DealService:_beginBuyerNegotiation(deal, buyer, rng: Random)
 	deal.buyerHeat = 0
 	deal.buyerHeatMax = HaggleTuning.heatMax
 	deal.buyerTell = NpcTells.forBuyer(buyer, category, rng)
+	deal.buyerInterest = buyerInterestFor(buyer, category)
 	deal.phase = "Selling"
 	deal.heatWarning = nil
 	deal.dialogue = `{buyer.openingLine} Offer: {offer} {cur}.`
@@ -615,8 +649,9 @@ function DealService:passDeal(player: Player)
 		playerNextDealAt[player] = nil
 		return self:startDeal(player)
 	end
+	local _, costMessage = self:_spendFrictionCost(player, HaggleTuning.passPenaltyCaps or 0, "for passing", false)
 	deal.phase = "WalkedAway"
-	deal.dialogue = "You let them walk."
+	deal.dialogue = if costMessage then `You let them walk. {costMessage}` else "You let them walk."
 	self:_pushState(player)
 	self:_scheduleNextDeal(player, HaggleTuning.autoNextDelayPass, deal)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }

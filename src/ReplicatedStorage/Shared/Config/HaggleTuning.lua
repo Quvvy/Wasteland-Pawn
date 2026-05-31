@@ -8,7 +8,8 @@ local HaggleTuning = {
 	autoNextDelayResult = 2.5,
 	autoNextDelayPass = 1.5,
 
-	passPenaltyCaps = 0,
+	passPenaltyCaps = 5,
+	buyerRerollCost = 10,
 	walkawayPenaltyCaps = 0,
 	dealCooldownSeconds = 0,
 
@@ -36,19 +37,19 @@ local HaggleTuning = {
 	buyerOfferGreedPenalty = 0.08,
 	buyerOfferUrgencyBonus = 0.12,
 	buyerOfferJitter = 0.05,
-	buyerMaximumBaseRatio = 1.08,
-	buyerMaximumUrgencyBonus = 0.4,
-	buyerMaximumKnowledgePenalty = 0.05,
-	buyerMaximumGreedPenalty = 0.06,
+	buyerMaximumBaseRatio = 1.0,
+	buyerMaximumUrgencyBonus = 0.32,
+	buyerMaximumKnowledgePenalty = 0.07,
+	buyerMaximumGreedPenalty = 0.08,
 
 	-- Buy tactic heat
 	heatBuySplit = 10,
 	heatBuyFlaw = 18,
 	heatBuyPressure = 22,
 	heatBuyLowball = 38,
-	heatMismatchBonus = 12,
-	heatGoodMatchReduction = 6,
-	heatRepeatTactic = 14,
+	heatMismatchBonus = 18,
+	heatGoodMatchReduction = 4,
+	heatRepeatTactic = 20,
 
 	-- Sell tactic heat
 	heatSellSmallBump = 9,
@@ -57,27 +58,27 @@ local HaggleTuning = {
 	heatSellBluff = 40,
 
 	-- Price movement ratios (fraction of gap or current price)
-	buySplitDropRatio = 0.42,
-	buyFlawDropRatio = 0.28,
-	buyPressureDropRatio = 0.35,
-	buyLowballDropRatio = 0.55,
-	buyLowballBigWinRatio = 0.72,
-	buyInspectFlawBonus = 0.12,
-	buyScamFlawBonus = 0.18,
+	buySplitDropRatio = 0.34,
+	buyFlawDropRatio = 0.23,
+	buyPressureDropRatio = 0.28,
+	buyLowballDropRatio = 0.44,
+	buyLowballBigWinRatio = 0.62,
+	buyInspectFlawBonus = 0.1,
+	buyScamFlawBonus = 0.14,
 
-	sellSmallBumpRatio = 0.1,
-	sellPitchRatio = 0.28,
-	sellHoldRatio = 0.22,
-	sellBluffRatio = 0.45,
-	sellBluffBigWinRatio = 0.65,
-	sellCategoryPitchBonus = 0.14,
+	sellSmallBumpRatio = 0.08,
+	sellPitchRatio = 0.22,
+	sellHoldRatio = 0.18,
+	sellBluffRatio = 0.34,
+	sellBluffBigWinRatio = 0.54,
+	sellCategoryPitchBonus = 0.11,
 
 	-- Walk / success chances
-	buyLowballWalkChanceBad = 0.35,
-	buyLowballWalkChanceGood = 0.08,
-	sellBluffWalkChanceBad = 0.4,
-	sellBluffWalkChanceGood = 0.1,
-	tacticWalkChanceAtHighHeat = 0.55,
+	buyLowballWalkChanceBad = 0.5,
+	buyLowballWalkChanceGood = 0.1,
+	sellBluffWalkChanceBad = 0.55,
+	sellBluffWalkChanceGood = 0.12,
+	tacticWalkChanceAtHighHeat = 0.68,
 
 	-- Inspection
 	inspectInflatedThreshold = 0.28,

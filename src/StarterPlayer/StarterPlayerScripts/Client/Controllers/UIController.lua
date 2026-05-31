@@ -79,7 +79,7 @@ function UIController:Init()
 	root.Size = UDim2.fromOffset(440, 620)
 	root.Parent = screenGui
 
-	labels.title = createLabel(root, "Title", "Wasteland Pawn — Tactics", UDim2.fromOffset(12, 8), UDim2.fromOffset(416, 26))
+	labels.title = createLabel(root, "Title", "Wasteland Pawn - Tactics", UDim2.fromOffset(12, 8), UDim2.fromOffset(416, 26))
 	labels.title.TextSize = 17
 	labels.title.Font = Enum.Font.GothamBold
 
@@ -123,7 +123,13 @@ function UIController:Init()
 	buttons.flaw = createButton(root, "Flaw", "Point Flaw", UDim2.fromOffset(220, 464), UDim2.fromOffset(98, 30))
 	buttons.pressure = createButton(root, "Pressure", "Pressure", UDim2.fromOffset(324, 464), UDim2.fromOffset(104, 30))
 	buttons.acceptBuy = createButton(root, "AcceptBuy", "Accept Price", UDim2.fromOffset(12, 500), UDim2.fromOffset(130, 30))
-	buttons.pass = createButton(root, "Pass", "Pass", UDim2.fromOffset(148, 500), UDim2.fromOffset(80, 30))
+	buttons.pass = createButton(
+		root,
+		"Pass",
+		`Pass (-{HaggleTuning.passPenaltyCaps})`,
+		UDim2.fromOffset(148, 500),
+		UDim2.fromOffset(80, 30)
+	)
 	buttons.inspectBtn = createButton(
 		root,
 		"InspectBtn",
@@ -139,7 +145,13 @@ function UIController:Init()
 	buttons.bluff = createButton(root, "Bluff", "Bluff", UDim2.fromOffset(324, 464), UDim2.fromOffset(104, 30))
 	buttons.acceptSell = createButton(root, "AcceptSell", "Accept Offer", UDim2.fromOffset(12, 500), UDim2.fromOffset(130, 30))
 	buttons.findBuyer = createButton(root, "FindBuyer", "Find Buyer", UDim2.fromOffset(12, 500), UDim2.fromOffset(120, 30))
-	buttons.findAnother = createButton(root, "FindAnother", "Another Buyer", UDim2.fromOffset(148, 500), UDim2.fromOffset(120, 30))
+	buttons.findAnother = createButton(
+		root,
+		"FindAnother",
+		`New Buyer (-{HaggleTuning.buyerRerollCost})`,
+		UDim2.fromOffset(148, 500),
+		UDim2.fromOffset(120, 30)
+	)
 	buttons.keep = createButton(root, "Keep", "Keep Item", UDim2.fromOffset(276, 500), UDim2.fromOffset(100, 30))
 	buttons.next = createButton(root, "Next", "Next Customer", UDim2.fromOffset(276, 500), UDim2.fromOffset(152, 30))
 
@@ -235,8 +247,8 @@ function UIController:updateSnapshot(snapshot)
 	end
 	if isSell and snapshot.currentBuyerOffer then
 		table.insert(lines, `Buyer offer: {snapshot.currentBuyerOffer} {cur}`)
-		if snapshot.buyerMaximum then
-			table.insert(lines, `Buyer max (~): {snapshot.buyerMaximum} {cur}`)
+		if snapshot.buyerInterest then
+			table.insert(lines, `Buyer interest: {snapshot.buyerInterest}`)
 		end
 	end
 	if snapshot.estimatedLow and snapshot.estimatedHigh and phase ~= "Result" then
@@ -251,7 +263,7 @@ function UIController:updateSnapshot(snapshot)
 	if snapshot.salePrice then
 		table.insert(lines, `Sold: {snapshot.salePrice} {cur}`)
 	end
-	labels.prices.Text = if #lines > 0 then table.concat(lines, "\n") else "—"
+	labels.prices.Text = if #lines > 0 then table.concat(lines, "\n") else "-"
 
 	labels.cash.Text = `Your {cur}: {snapshot.playerCash or 0}`
 
@@ -260,20 +272,20 @@ function UIController:updateSnapshot(snapshot)
 	updateHeatBar(heat, heatMax)
 	labels.heat.Text = `{if isSell then "Buyer" else "Seller"} heat: {heat}/{heatMax}`
 	if snapshot.heatWarning then
-		labels.heat.Text ..= ` — {snapshot.heatWarning}`
+		labels.heat.Text ..= ` - {snapshot.heatWarning}`
 	end
 
 	if snapshot.lastTacticResult then
 		local display = TACTIC_RESULT_DISPLAY[snapshot.lastTacticResult] or snapshot.lastTacticResult
-		labels.outcome.Text = `Last: {snapshot.lastTactic or "?"} → {display}`
+		labels.outcome.Text = `Last: {snapshot.lastTactic or "?"} -> {display}`
 	else
 		labels.outcome.Text = ""
 	end
 
 	if snapshot.dealSummary then
 		labels.result.Text = snapshot.dealSummary.resultText or ""
-	elseif snapshot.trueValue and phase == "Purchased" then
-		labels.result.Text = `True value: {snapshot.trueValue} {cur}. Find a buyer.`
+	elseif phase == "Purchased" then
+		labels.result.Text = "Find a buyer to reveal the real margin."
 	else
 		labels.result.Text = ""
 	end

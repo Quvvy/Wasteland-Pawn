@@ -186,6 +186,18 @@ function TacticHaggleMath.getBuyerCategoryMatch(buyer, category: string): number
 	return math.clamp((open + max) / 2 - 1, -0.2, 0.45)
 end
 
+function TacticHaggleMath.getBuyerInterestLabel(buyer, category: string): string
+	local match = TacticHaggleMath.getBuyerCategoryMatch(buyer, category)
+	if match >= 0.25 then
+		return "Very interested"
+	elseif match >= 0.06 then
+		return "Interested"
+	elseif match <= -0.08 then
+		return "Low interest"
+	end
+	return "Curious"
+end
+
 function TacticHaggleMath.calculateAskingPrice(customer, trueValue: number, rng: Random?): number
 	local random = rng or Random.new()
 	local greed = customer.greed or 0
@@ -304,16 +316,19 @@ function TacticHaggleMath.evaluateBuyTactic(tacticId: string, ctx): any
 	end
 
 	if match < 0 then
-		baseHeat += HaggleTuning.heatMismatchBonus
+		baseHeat += HaggleTuning.heatMismatchBonus + math.floor(math.abs(match) * 10)
+		dropRatio *= math.clamp(1 + match * 0.45, 0.45, 0.9)
 	elseif match >= 0.5 then
 		baseHeat = math.max(0, baseHeat - HaggleTuning.heatGoodMatchReduction)
-		dropRatio += 0.08
+		dropRatio += 0.05 + match * 0.05
+	elseif match < 0.25 then
+		dropRatio *= 0.85
 	end
 
 	local gap = price - floor
-	local drop = math.max(math.floor(gap * dropRatio), math.floor(price * 0.08))
+	local drop = math.max(math.floor(gap * dropRatio), math.floor(price * 0.05))
 	if match >= 0.7 and tacticId == HaggleTactics.Buy.Lowball then
-		drop = math.max(drop, math.floor(gap * 0.65))
+		drop = math.max(drop, math.floor(gap * 0.56))
 		bigWin = true
 	end
 
@@ -321,10 +336,11 @@ function TacticHaggleMath.evaluateBuyTactic(tacticId: string, ctx): any
 	local heatDelta = baseHeat
 	local newHeat = math.min(heat + heatDelta, heatMax + 20)
 
+	local isRiskyBuyTactic = tacticId == HaggleTactics.Buy.Lowball or tacticId == HaggleTactics.Buy.Pressure
 	local walkRoll = if match < 0
-		then HaggleTuning.buyLowballWalkChanceBad
+		then HaggleTuning.buyLowballWalkChanceBad + math.abs(match) * 0.18
 		else HaggleTuning.buyLowballWalkChanceGood
-	if tacticId == HaggleTactics.Buy.Lowball and rng:NextNumber() < walkRoll and match < 0.2 then
+	if isRiskyBuyTactic and rng:NextNumber() < walkRoll and match < 0.2 then
 		walkedAway = true
 		outcome = "walkaway"
 	elseif newHeat >= HaggleTuning.heatWalkThreshold then
@@ -338,7 +354,7 @@ function TacticHaggleMath.evaluateBuyTactic(tacticId: string, ctx): any
 		outcome = "warning"
 	end
 
-	if tacticId == HaggleTactics.Buy.Lowball and match >= 0.45 and rng:NextNumber() < 0.22 then
+	if tacticId == HaggleTactics.Buy.Lowball and match >= 0.55 and rng:NextNumber() < 0.16 then
 		crack = true
 		outcome = "crack"
 	end
@@ -409,32 +425,37 @@ function TacticHaggleMath.evaluateSellTactic(tacticId: string, ctx): any
 	end
 
 	if match < 0 then
-		baseHeat += HaggleTuning.heatMismatchBonus
+		baseHeat += HaggleTuning.heatMismatchBonus + math.floor(math.abs(match) * 10)
+		raiseRatio *= math.clamp(1 + match * 0.5, 0.4, 0.9)
 	elseif match >= 0.45 then
 		baseHeat = math.max(0, baseHeat - HaggleTuning.heatGoodMatchReduction)
-		raiseRatio += 0.1
+		raiseRatio += 0.06 + match * 0.05
+	elseif match < 0.2 then
+		raiseRatio *= 0.85
 	end
 
 	if ctx.inspected and tacticId == HaggleTactics.Sell.PitchValue then
-		raiseRatio += 0.06
+		raiseRatio += 0.04
 	end
 
 	local gap = maxOffer - offer
-	local raise = math.max(math.floor(gap * raiseRatio), math.floor(offer * 0.08))
+	local raise = math.max(math.floor(gap * raiseRatio), math.floor(offer * 0.05))
 	if match >= 0.65 and tacticId == HaggleTactics.Sell.Bluff then
-		raise = math.max(raise, math.floor(gap * 0.7))
+		raise = math.max(raise, math.floor(gap * 0.58))
 		bigWin = true
 	end
 
 	local newOffer = clamp(offer + raise, offer + 1, maxOffer)
 	if categoryMatch >= 0.25 and tacticId == HaggleTactics.Sell.PitchValue then
-		newOffer = clamp(offer + math.floor(gap * (raiseRatio + 0.12)), offer + 1, maxOffer)
+		newOffer = clamp(offer + math.floor(gap * (raiseRatio + 0.08)), offer + 1, maxOffer)
 	end
 
 	local heatDelta = baseHeat
 	local newHeat = math.min(heat + heatDelta, heatMax + 20)
 
-	local walkRoll = if match < 0 then HaggleTuning.sellBluffWalkChanceBad else HaggleTuning.sellBluffWalkChanceGood
+	local walkRoll = if match < 0
+		then HaggleTuning.sellBluffWalkChanceBad + math.abs(match) * 0.18
+		else HaggleTuning.sellBluffWalkChanceGood
 	if tacticId == HaggleTactics.Sell.Bluff and match < 0.15 and rng:NextNumber() < walkRoll then
 		walkedAway = true
 		outcome = "walkaway"

@@ -79,7 +79,7 @@ function ItemValuation.getInspectHint(
 	local hint
 
 	if rarityId == "Legendary" or rarityId == "Epic" then
-		hint = "Inspection: big opportunity — this could be worth a lot."
+		hint = "Inspection: big opportunity - this could be worth a lot."
 	elseif rarityId == "Rare" then
 		hint = "Inspection: solid find. Could turn a good profit."
 	elseif rarityId == "Uncommon" then
@@ -96,7 +96,7 @@ function ItemValuation.getInspectHint(
 		and estimatedHigh
 		and ItemValuation.isEstimateInflated(estimatedLow, estimatedHigh, trueValue)
 	then
-		hint ..= " Seller's estimate looks inflated — they may be bluffing."
+		hint ..= " Seller's estimate looks inflated - they may be bluffing."
 	end
 
 	return hint
