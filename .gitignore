@@ -1,0 +1,31 @@
+# Rojo output
+*.sourcemap.json
+sourcemap.json
+
+# Roblox place and build artifacts
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+build/
+dist/
+out/
+
+# Packages, if added later
+Packages/
+ServerPackages/
+node_modules/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.log
+
+# Editor and system files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+*.code-workspace

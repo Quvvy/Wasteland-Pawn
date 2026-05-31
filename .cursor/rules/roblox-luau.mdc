@@ -1,0 +1,23 @@
+---
+description: Roblox Luau and Rojo project rules for Wasteland Pawn
+globs:
+  - "**/*.lua"
+  - "default.project.json"
+alwaysApply: true
+---
+
+# Wasteland Pawn Roblox Luau Rules
+
+- This is a Roblox Luau project using Rojo.
+- Server code lives in `src/ServerScriptService/Server`.
+- Client code lives in `src/StarterPlayer/StarterPlayerScripts/Client`.
+- Shared modules live in `src/ReplicatedStorage/Shared`.
+- Server owns all money, item values, customer stats, deal outcomes, and inventory.
+- Never trust client-provided prices, money, item values, or inventory state.
+- Keep code small, boring, and readable.
+- Prefer plain Luau modules over frameworks.
+- Do not add Knit, Roact, Fusion, Matter, ECS frameworks, or large architecture before the prototype proves it needs them.
+- Do not add Wally packages unless there is a clear reason.
+- Do not invent Roblox APIs. Use real Roblox services, instances, events, and Luau syntax.
+- Do not add large systems before the haggling prototype is proven.
+- The first gameplay goal is a haggling loop, not a full tycoon.
