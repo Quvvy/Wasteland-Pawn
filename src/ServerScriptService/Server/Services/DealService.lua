@@ -17,6 +17,7 @@ local DealService = {}
 
 local activeDeals: { [Player]: any } = {}
 local playerRng: { [Player]: Random } = {}
+local playerNextDealAt: { [Player]: number } = {}
 
 function DealService:Init()
 	Remotes.setup()
@@ -31,8 +32,8 @@ function DealService:Start()
 	local keepItem = Remotes.get("KeepItem") :: RemoteFunction
 	local startDeal = Remotes.get("StartDeal") :: RemoteFunction
 
-	makeOffer.OnServerInvoke = function(player, amount)
-		return self:makeOffer(player, amount)
+	makeOffer.OnServerInvoke = function(player, amount, offerKind)
+		return self:makeOffer(player, amount, offerKind)
 	end
 
 	inspectItem.OnServerInvoke = function(player)
@@ -62,6 +63,7 @@ function DealService:Start()
 	Players.PlayerRemoving:Connect(function(player)
 		activeDeals[player] = nil
 		playerRng[player] = nil
+		playerNextDealAt[player] = nil
 	end)
 
 	if RunService:IsStudio() then
@@ -103,6 +105,7 @@ function DealService:_handleDebugChat(player: Player, message: string)
 			print("[WastelandPawn] Usage: /deal <customerId> <itemId>")
 			return
 		end
+		playerNextDealAt[player] = nil
 		self:startDeal(player, customerId, itemId)
 	else
 		return
@@ -115,7 +118,7 @@ function DealService:_logDealDebug(player: Player, deal)
 	end
 
 	print(
-		`[WastelandPawn] {player.Name} | {deal.customer.displayName} + {deal.item.displayName} | ask={deal.askingPrice} min={deal.minimumAccept} true={deal.hiddenOutcome.trueValue} ({deal.hiddenOutcome.rarityId})`
+		`[WastelandPawn] {player.Name} | {deal.customer.displayName} + {deal.item.displayName} | ask={deal.askingPrice} min={deal.minimumAccept} effective={deal.effectiveMinimum} true={deal.hiddenOutcome.trueValue}`
 	)
 end
 
@@ -138,6 +141,75 @@ function DealService:_sanitizeAmount(amount: any): number?
 	return math.clamp(math.floor(amount + 0.5), 1, 999999)
 end
 
+function DealService:_sanitizeOfferKind(offerKind: any): string
+	if offerKind == "lowball" then
+		return "lowball"
+	end
+	return "normal"
+end
+
+function DealService:_canStartDeal(player: Player): (boolean, string?)
+	local waitUntil = playerNextDealAt[player]
+	if waitUntil and os.clock() < waitUntil then
+		local remaining = math.ceil(waitUntil - os.clock())
+		return false, `Wait {remaining}s for the next customer.`
+	end
+	return true, nil
+end
+
+function DealService:_setDealCooldown(player: Player)
+	if HaggleTuning.dealCooldownSeconds > 0 then
+		playerNextDealAt[player] = os.clock() + HaggleTuning.dealCooldownSeconds
+	end
+end
+
+function DealService:_applyCapPenalty(player: Player, amount: number, reason: string): string?
+	if amount <= 0 then
+		return nil
+	end
+	if DataService:spend(player, amount) then
+		return `Lost {amount} caps ({reason}).`
+	end
+	return `Couldn't pay {amount} caps ({reason}).`
+end
+
+function DealService:_scheduleNextDeal(player: Player, delay: number, deal)
+	self:_setDealCooldown(player)
+	task.delay(delay, function()
+		if activeDeals[player] == deal then
+			self:startDeal(player)
+		end
+	end)
+end
+
+function DealService:_handleWalkaway(player: Player, deal, evaluation, penaltyReason: string)
+	deal.phase = "WalkedAway"
+	deal.counterOffer = nil
+	deal.dialogue = evaluation.reactionText
+	local penaltyMsg = self:_applyCapPenalty(player, HaggleTuning.walkawayPenaltyCaps, penaltyReason)
+	deal.penaltyMessage = penaltyMsg
+	self:_pushState(player)
+	self:_scheduleNextDeal(player, HaggleTuning.autoNextDelayWalkedAway, deal)
+end
+
+function DealService:_applyLowballCrack(deal)
+	local trueValue = deal.hiddenOutcome.trueValue
+	deal.estimatedLow = math.max(1, math.floor(trueValue * 0.75))
+	deal.estimatedHigh = math.floor(trueValue * 1.25)
+	deal.inspectHint = "Lowball tipped them off. Estimate tightened sharply."
+end
+
+function DealService:_applyScamCallout(deal)
+	if deal.scamCalloutUsed then
+		return
+	end
+	deal.scamCalloutUsed = true
+	local reduction = math.floor(deal.askingPrice * HaggleTuning.lowballScamAskReduction)
+	deal.askingPrice = math.max(deal.effectiveMinimum, deal.askingPrice - reduction)
+	deal.effectiveMinimum = HaggleMath.calculateEffectiveMinimum(deal.customer, deal.minimumAccept, deal.askingPrice)
+	deal.dialogue = `They blinked. Asking lowered to {deal.askingPrice} caps.`
+end
+
 function DealService:_pushState(player: Player)
 	local deal = activeDeals[player]
 	if not deal then
@@ -150,6 +222,7 @@ end
 
 function DealService:_buildSnapshot(player: Player, deal)
 	local rarity = Rarities[deal.hiddenOutcome.rarityId]
+	local waitUntil = playerNextDealAt[player]
 	local snapshot = {
 		phase = deal.phase,
 		customerId = deal.customer.id,
@@ -174,7 +247,15 @@ function DealService:_buildSnapshot(player: Player, deal)
 		resultMessage = deal.resultMessage,
 		lastOutcome = deal.lastOutcome,
 		patienceDelta = deal.lastPatienceDelta,
+		requiredNextOffer = HaggleMath.getRequiredNextOffer(deal),
+		repeatBlocked = deal.repeatBlocked,
+		lowballResult = deal.lowballResult,
+		penaltyMessage = deal.penaltyMessage,
 	}
+
+	if waitUntil and os.clock() < waitUntil then
+		snapshot.nextDealAvailableAt = waitUntil
+	end
 
 	if deal.phase == "Purchased" or deal.phase == "Result" then
 		snapshot.trueValue = deal.hiddenOutcome.trueValue
@@ -185,31 +266,17 @@ function DealService:_buildSnapshot(player: Player, deal)
 	return snapshot
 end
 
-function DealService:startDeal(player: Player, customerId: string?, itemId: string?)
-	if not player.Parent then
-		return { ok = false, error = "Player left" }
-	end
-
-	local rng = self:_getRng(player)
-	local customer = if customerId then CustomerService:getCustomer(customerId) else CustomerService:rollCustomer(rng)
-	local item = if itemId then CustomerService:getItem(itemId) else CustomerService:rollItem(rng)
-
-	if not customer or not item then
-		return { ok = false, error = "Invalid customer or item id" }
-	end
-
-	local hiddenOutcome = ItemValuation.createHiddenOutcome(item, customer, rng)
-	local estimatedLow, estimatedHigh = ItemValuation.generateEstimatedRange(item, customer, hiddenOutcome.trueValue, rng)
-	local askingPrice = HaggleMath.calculateAskingPrice(customer, hiddenOutcome.trueValue, rng)
-	local minimumAccept = HaggleMath.calculateMinimumAcceptPrice(customer, item, hiddenOutcome.trueValue, askingPrice)
+function DealService:_initDealState(customer, item, hiddenOutcome, askingPrice, minimumAccept, estimatedLow, estimatedHigh)
+	local effectiveMinimum = HaggleMath.calculateEffectiveMinimum(customer, minimumAccept, askingPrice)
 	local maxPatience = HaggleMath.getStartingPatience(customer)
 
-	local deal = {
+	return {
 		customer = customer,
 		item = item,
 		hiddenOutcome = hiddenOutcome,
 		askingPrice = askingPrice,
 		minimumAccept = minimumAccept,
+		effectiveMinimum = effectiveMinimum,
 		counterOffer = nil,
 		patience = maxPatience,
 		maxPatience = maxPatience,
@@ -224,8 +291,41 @@ function DealService:startDeal(player: Player, customerId: string?, itemId: stri
 		resultMessage = nil,
 		lastOutcome = nil,
 		lastPatienceDelta = nil,
+		lastOfferAmount = nil,
+		bestOfferAmount = nil,
+		repeatOfferStreak = 0,
+		repeatBlocked = false,
+		lowballResult = nil,
+		penaltyMessage = nil,
+		scamCalloutUsed = false,
 		dialogue = customer.openingLine .. ` Asking {askingPrice} caps.`,
 	}
+end
+
+function DealService:startDeal(player: Player, customerId: string?, itemId: string?)
+	if not player.Parent then
+		return { ok = false, error = "Player left" }
+	end
+
+	local canStart, waitError = self:_canStartDeal(player)
+	if not canStart then
+		return { ok = false, error = waitError }
+	end
+
+	local rng = self:_getRng(player)
+	local customer = if customerId then CustomerService:getCustomer(customerId) else CustomerService:rollCustomer(rng)
+	local item = if itemId then CustomerService:getItem(itemId) else CustomerService:rollItem(rng)
+
+	if not customer or not item then
+		return { ok = false, error = "Invalid customer or item id" }
+	end
+
+	local hiddenOutcome = ItemValuation.createHiddenOutcome(item, customer, rng)
+	local estimatedLow, estimatedHigh = ItemValuation.generateEstimatedRange(item, customer, hiddenOutcome.trueValue, rng)
+	local askingPrice = HaggleMath.calculateAskingPrice(customer, hiddenOutcome.trueValue, rng)
+	local minimumAccept = HaggleMath.calculateMinimumAcceptPrice(customer, item, hiddenOutcome.trueValue, askingPrice)
+
+	local deal = self:_initDealState(customer, item, hiddenOutcome, askingPrice, minimumAccept, estimatedLow, estimatedHigh)
 
 	activeDeals[player] = deal
 	self:_logDealDebug(player, deal)
@@ -234,7 +334,7 @@ function DealService:startDeal(player: Player, customerId: string?, itemId: stri
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end
 
-function DealService:makeOffer(player: Player, amount: any)
+function DealService:makeOffer(player: Player, amount: any, offerKind: any)
 	local deal = activeDeals[player]
 	if not deal or (deal.phase ~= "Haggling" and deal.phase ~= "Counter") then
 		return { ok = false, error = "No active haggle" }
@@ -245,12 +345,56 @@ function DealService:makeOffer(player: Player, amount: any)
 		return { ok = false, error = "Invalid offer" }
 	end
 
+	local kind = self:_sanitizeOfferKind(offerKind)
+	if kind == "lowball" and deal.phase ~= "Haggling" then
+		return { ok = false, error = "Lowball only before a counter" }
+	end
+
 	deal.roundCount += 1
-	local evaluation = HaggleMath.evaluateOffer(deal.customer, deal.item, offerAmount, deal, self:_getRng(player))
+	deal.dialogueOverride = nil
+	deal.lowballResult = nil
+	deal.penaltyMessage = nil
+	deal.repeatBlocked = false
+
+	local rng = self:_getRng(player)
+	local evaluation
+
+	if kind == "lowball" then
+		evaluation = HaggleMath.evaluateLowball(deal.customer, deal.item, offerAmount, deal, rng)
+	else
+		evaluation = HaggleMath.evaluateOffer(deal.customer, deal.item, offerAmount, deal, rng)
+	end
+
+	deal.repeatOfferStreak = evaluation.repeatStreak or 0
+	deal.lastOfferAmount = offerAmount
+	if not deal.bestOfferAmount or offerAmount > deal.bestOfferAmount then
+		deal.bestOfferAmount = offerAmount
+	end
+
 	deal.patience = math.clamp(deal.patience + evaluation.patienceDelta, 0, deal.maxPatience)
 	deal.lastOutcome = evaluation.outcome
 	deal.lastPatienceDelta = evaluation.patienceDelta
+	deal.repeatBlocked = evaluation.repeatBlocked or false
 	deal.dialogue = evaluation.reactionText
+
+	if evaluation.lowballResult then
+		deal.lowballResult = evaluation.lowballResult
+	end
+
+	if evaluation.outcome == "crack" then
+		self:_applyLowballCrack(deal)
+		deal.phase = "Haggling"
+		deal.lastOutcome = "crack"
+		self:_pushState(player)
+		return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
+	end
+
+	if evaluation.scamCallout then
+		self:_applyScamCallout(deal)
+		deal.lowballResult = "scam_callout"
+		self:_pushState(player)
+		return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
+	end
 
 	if evaluation.outcome == "accept" then
 		deal.lastOutcome = "accept"
@@ -258,15 +402,7 @@ function DealService:makeOffer(player: Player, amount: any)
 	end
 
 	if evaluation.outcome == "walkaway" then
-		deal.phase = "WalkedAway"
-		deal.counterOffer = nil
-		deal.dialogue = evaluation.reactionText
-		self:_pushState(player)
-		task.delay(HaggleTuning.autoNextDelayWalkedAway, function()
-			if activeDeals[player] == deal and deal.phase == "WalkedAway" then
-				self:startDeal(player)
-			end
-		end)
+		self:_handleWalkaway(player, deal, evaluation, "customer left")
 		return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 	end
 
@@ -276,8 +412,10 @@ function DealService:makeOffer(player: Player, amount: any)
 		deal.lastOutcome = "counter"
 		deal.dialogue = `{evaluation.reactionText} Counter: {deal.counterOffer} caps.`
 	else
-		deal.phase = "Haggling"
-		deal.counterOffer = nil
+		deal.phase = if deal.phase == "Counter" then "Counter" else "Haggling"
+		if deal.phase ~= "Counter" then
+			deal.counterOffer = nil
+		end
 		deal.lastOutcome = "reject"
 	end
 
@@ -372,20 +510,18 @@ function DealService:passDeal(player: Player)
 	end
 
 	if deal.phase == "WalkedAway" or deal.phase == "Result" then
-		self:startDeal(player)
-		return { ok = true }
+		playerNextDealAt[player] = nil
+		return self:startDeal(player)
 	end
 
+	local penaltyMsg = self:_applyCapPenalty(player, HaggleTuning.passPenaltyCaps, "passed")
 	deal.phase = "WalkedAway"
-	deal.dialogue = "You let them walk. Another customer will show up."
+	deal.dialogue = "You let them walk."
+	deal.penaltyMessage = penaltyMsg
 	deal.lastOutcome = "walkaway"
 	self:_pushState(player)
 
-	task.delay(HaggleTuning.autoNextDelayPass, function()
-		if activeDeals[player] == deal then
-			self:startDeal(player)
-		end
-	end)
+	self:_scheduleNextDeal(player, HaggleTuning.autoNextDelayPass, deal)
 
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end
@@ -419,11 +555,7 @@ function DealService:sellItem(player: Player, instanceId: any)
 
 	self:_pushState(player)
 
-	task.delay(HaggleTuning.autoNextDelayResult, function()
-		if activeDeals[player] == deal and deal.phase == "Result" then
-			self:startDeal(player)
-		end
-	end)
+	self:_scheduleNextDeal(player, HaggleTuning.autoNextDelayResult, deal)
 
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end
@@ -452,11 +584,7 @@ function DealService:keepItem(player: Player, instanceId: any)
 
 	self:_pushState(player)
 
-	task.delay(HaggleTuning.autoNextDelayResult, function()
-		if activeDeals[player] == deal and deal.phase == "Result" then
-			self:startDeal(player)
-		end
-	end)
+	self:_scheduleNextDeal(player, HaggleTuning.autoNextDelayResult, deal)
 
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end

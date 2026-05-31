@@ -14,11 +14,16 @@ local HaggleTuning = {
 	offerRatioInsult = 0.45,
 	nearAskAcceptRatio = 0.98,
 
-	-- Accept roll when offer >= minimumAccept
-	acceptChanceBase = 0.52,
-	acceptChanceDesperationScale = 0.38,
-	acceptChanceKnowledgePenalty = 0.12,
-	acceptChanceNearAsk = 0.92,
+	-- Must offer at least this fraction of stated ask before accept RNG (unless lowball steal)
+	minOfferRatioOfAsk = 0.85,
+	minRaiseStepCaps = 5,
+	minRaiseStepAskPercent = 0.03,
+
+	-- Accept roll when offer >= effectiveMinimum
+	acceptChanceBase = 0.38,
+	acceptChanceDesperationScale = 0.32,
+	acceptChanceKnowledgePenalty = 0.14,
+	acceptChanceNearAsk = 0.88,
 
 	-- Asking price markup over true value
 	askingMarkupBase = 1.08,
@@ -27,7 +32,7 @@ local HaggleTuning = {
 	askingMarkupDesperation = 0.24,
 	askingMarkupJitter = 0.06,
 
-	-- Minimum acceptable buy price
+	-- Minimum acceptable buy price (hidden true-value floor)
 	minAcceptValueBase = 0.7,
 	minAcceptGreed = 0.2,
 	minAcceptDesperation = 0.26,
@@ -39,16 +44,40 @@ local HaggleTuning = {
 	counterGreedBias = 0.28,
 	counterDesperationBias = 0.16,
 	counterJitter = 6,
+	counterDesperationSlip = 8,
+
+	-- Repeat offer anti-spam
+	repeatPatiencePenalty = 12,
+	repeatOfferWalkawayAt = 3,
+	repeatBlockAcceptAt = 2,
 
 	-- Patience loss (base + temper * scale)
-	patienceLossCounterNearAccept = { base = 3, temperScale = 3 },
-	patienceLossCounter = { base = 7, temperScale = 7 },
-	patienceLossReject = { base = 11, temperScale = 13 },
-	patienceLossInsult = { base = 18, temperScale = 20 },
+	patienceLossCounterNearAccept = { base = 5, temperScale = 5 },
+	patienceLossCounter = { base = 8, temperScale = 8 },
+	patienceLossReject = { base = 12, temperScale = 14 },
+	patienceLossInsult = { base = 20, temperScale = 22 },
+	patienceLossBelowCounter = { base = 22, temperScale = 24 },
+	patienceLossRepeat = { base = 14, temperScale = 10 },
 
 	-- customer.patience stat (0-1) scales starting deal patience
 	customerPatienceMin = 0.42,
 	customerPatienceMax = 1.0,
+
+	-- Lowball
+	lowballMaxRatio = 0.5,
+	lowballStealBase = 0.06,
+	lowballStealDesperationScale = 0.22,
+	lowballCrackBase = 0.22,
+	lowballCrackKnowledgeScale = 0.12,
+	lowballOffendedTemperScale = 0.35,
+	lowballScamCalloutChance = 0.35,
+	lowballScamAskReduction = 0.12,
+	lowballInstantWalkawayTemper = 0.75,
+
+	-- Pass / walkaway costs
+	passPenaltyCaps = 8,
+	walkawayPenaltyCaps = 12,
+	dealCooldownSeconds = 0,
 
 	-- Item estimate spread
 	estimateSpreadBase = 0.36,

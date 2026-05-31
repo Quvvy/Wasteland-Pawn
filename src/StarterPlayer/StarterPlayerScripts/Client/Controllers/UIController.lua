@@ -25,6 +25,14 @@ local OUTCOME_DISPLAY = {
 	counter = "Counter",
 	reject = "Rejected",
 	walkaway = "Walked away",
+	crack = "Intel gained",
+}
+
+local LOWBALL_DISPLAY = {
+	steal = "Lowball steal!",
+	crack = "Lowball intel",
+	offended = "Lowball failed",
+	scam_callout = "Called their bluff",
 }
 
 local function createLabel(parent: Instance, name: string, text: string, position: UDim2, size: UDim2): TextLabel
@@ -136,7 +144,13 @@ function UIController:Init()
 	buttons.fair = createButton(root, "FairBtn", "Fair Offer", UDim2.fromOffset(108, 472), UDim2.fromOffset(90, 32))
 	buttons.ask = createButton(root, "AskBtn", "Match Ask", UDim2.fromOffset(204, 472), UDim2.fromOffset(90, 32))
 	buttons.acceptCounter = createButton(root, "AcceptCounterBtn", "Accept Counter", UDim2.fromOffset(12, 472), UDim2.fromOffset(130, 32))
-	buttons.pass = createButton(root, "PassBtn", "Pass", UDim2.fromOffset(300, 472), UDim2.fromOffset(108, 32))
+	buttons.pass = createButton(
+		root,
+		"PassBtn",
+		`Pass (-{HaggleTuning.passPenaltyCaps})`,
+		UDim2.fromOffset(300, 472),
+		UDim2.fromOffset(108, 32)
+	)
 	buttons.sell = createButton(root, "SellBtn", "Sell Item", UDim2.fromOffset(12, 472), UDim2.fromOffset(120, 32))
 	buttons.keep = createButton(root, "KeepBtn", "Keep Item", UDim2.fromOffset(140, 472), UDim2.fromOffset(120, 32))
 	buttons.next = createButton(root, "NextBtn", "Next Customer", UDim2.fromOffset(270, 472), UDim2.fromOffset(138, 32))
@@ -238,6 +252,9 @@ function UIController:updateSnapshot(snapshot)
 	if snapshot.counterOffer then
 		table.insert(priceLines, `Counter: {snapshot.counterOffer} caps`)
 	end
+	if snapshot.requiredNextOffer and snapshot.phase == "Counter" then
+		table.insert(priceLines, `Need at least: {snapshot.requiredNextOffer} caps`)
+	end
 	if snapshot.estimatedLow and snapshot.estimatedHigh then
 		table.insert(priceLines, `Estimate: {snapshot.estimatedLow}-{snapshot.estimatedHigh} caps`)
 	end
@@ -259,7 +276,10 @@ function UIController:updateSnapshot(snapshot)
 	updatePatienceBar(patience, maxPatience, snapshot.patienceDelta)
 	labels.patience.Text = `Patience: {patience}/{maxPatience}`
 
-	if snapshot.lastOutcome then
+	if snapshot.lowballResult then
+		local lowballText = LOWBALL_DISPLAY[snapshot.lowballResult] or snapshot.lowballResult
+		labels.outcome.Text = lowballText
+	elseif snapshot.lastOutcome then
 		local display = OUTCOME_DISPLAY[snapshot.lastOutcome] or snapshot.lastOutcome
 		local deltaText = ""
 		if snapshot.patienceDelta and snapshot.patienceDelta < 0 then
@@ -268,6 +288,14 @@ function UIController:updateSnapshot(snapshot)
 		labels.outcome.Text = `Last: {display}{deltaText}`
 	else
 		labels.outcome.Text = ""
+	end
+
+	if snapshot.repeatBlocked then
+		labels.outcome.Text ..= " — raise your offer!"
+	end
+
+	if snapshot.penaltyMessage then
+		labels.outcome.Text = `{labels.outcome.Text}\n{snapshot.penaltyMessage}`
 	end
 
 	if snapshot.inspected and snapshot.inspectHint then
@@ -290,8 +318,10 @@ function UIController:updateSnapshot(snapshot)
 	end
 
 	if snapshot.askingPrice and phase ~= "Purchased" and phase ~= "Result" and phase ~= "WalkedAway" then
-		if offerBox.Text == "" then
-			self:setOfferAmount(math.floor(snapshot.askingPrice * 0.7))
+		if snapshot.counterOffer and phase == "Counter" then
+			self:setOfferAmount(snapshot.counterOffer)
+		elseif offerBox.Text == "" then
+			self:setOfferAmount(math.floor(snapshot.askingPrice * 0.82))
 		end
 	end
 end

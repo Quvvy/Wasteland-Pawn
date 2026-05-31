@@ -8,6 +8,7 @@ local UIController = require(script.Parent.UIController)
 local DealController = {}
 
 local OFFER_COOLDOWN = 0.5
+local REPEAT_BLOCK_COOLDOWN = 1.2
 
 local function invokeRemote(remoteName: string, ...: any): (boolean, any)
 	local remote = Remotes.get(remoteName) :: RemoteFunction
@@ -23,9 +24,9 @@ local function invokeRemote(remoteName: string, ...: any): (boolean, any)
 	return true, result
 end
 
-local function briefOfferCooldown()
+local function briefOfferCooldown(duration: number?)
 	UIController:setHaggleButtonsEnabled(false)
-	task.delay(OFFER_COOLDOWN, function()
+	task.delay(duration or OFFER_COOLDOWN, function()
 		UIController:setHaggleButtonsEnabled(true)
 	end)
 end
@@ -41,7 +42,10 @@ function DealController:_bindUi()
 			return
 		end
 		briefOfferCooldown()
-		invokeRemote("MakeOffer", amount)
+		local _, result = invokeRemote("MakeOffer", amount, "normal")
+		if result and result.snapshot and result.snapshot.repeatBlocked then
+			briefOfferCooldown(REPEAT_BLOCK_COOLDOWN)
+		end
 	end)
 
 	UIController:onQuickOffer(function(kind: string)
@@ -52,15 +56,20 @@ function DealController:_bindUi()
 
 		local asking = snapshot.askingPrice
 		local amount = asking
+		local offerKind = "normal"
 		if kind == "lowball" then
 			amount = math.floor(asking * 0.45)
+			offerKind = "lowball"
 		elseif kind == "fair" then
 			amount = math.floor(asking * 0.82)
 		end
 
 		UIController:setOfferAmount(amount)
 		briefOfferCooldown()
-		invokeRemote("MakeOffer", amount)
+		local _, result = invokeRemote("MakeOffer", amount, offerKind)
+		if result and result.snapshot and result.snapshot.repeatBlocked then
+			briefOfferCooldown(REPEAT_BLOCK_COOLDOWN)
+		end
 	end)
 
 	UIController:onInspect(function()
@@ -99,6 +108,9 @@ function DealController:Start()
 	local dealUpdate = Remotes.get("DealStateUpdate") :: RemoteEvent
 	dealUpdate.OnClientEvent:Connect(function(snapshot)
 		UIController:updateSnapshot(snapshot)
+		if snapshot.repeatBlocked then
+			briefOfferCooldown(REPEAT_BLOCK_COOLDOWN)
+		end
 	end)
 
 	task.defer(function()

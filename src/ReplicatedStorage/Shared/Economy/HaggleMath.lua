@@ -53,6 +53,30 @@ function HaggleMath.getStartingPatience(customer): number
 	return math.clamp(math.floor(HaggleTuning.startingPatience * mult + 0.5), 25, HaggleTuning.startingPatience)
 end
 
+function HaggleMath.getMinAskRatio(customer): number
+	return customer.minAskRatio or HaggleTuning.minOfferRatioOfAsk
+end
+
+function HaggleMath.calculateEffectiveMinimum(customer, minimumAccept: number, askingPrice: number): number
+	local askFloor = askingPrice * HaggleMath.getMinAskRatio(customer)
+	return clamp(math.max(minimumAccept, askFloor), 1, askingPrice)
+end
+
+function HaggleMath.getRequiredNextOffer(dealState): number?
+	if dealState.phase == "Counter" and dealState.counterOffer then
+		return dealState.counterOffer
+	end
+	if dealState.effectiveMinimum then
+		return dealState.effectiveMinimum
+	end
+	return nil
+end
+
+function HaggleMath.getMinRaiseAmount(askingPrice: number): number
+	local percentRaise = math.floor(askingPrice * HaggleTuning.minRaiseStepAskPercent)
+	return math.max(HaggleTuning.minRaiseStepCaps, percentRaise)
+end
+
 function HaggleMath.getOfferRatioBand(offerRatio: number): string
 	if offerRatio < HaggleTuning.offerRatioInsult then
 		return "insult"
@@ -105,7 +129,8 @@ function HaggleMath.calculateCounterOffer(
 	offerAmount: number,
 	askingPrice: number,
 	minimumAccept: number,
-	rng: Random?
+	rng: Random?,
+	previousCounter: number?
 ): number
 	local random = rng or Random.new()
 	local greed = customer.greed or 0
@@ -116,14 +141,30 @@ function HaggleMath.calculateCounterOffer(
 	local counter = midpoint + gap * (HaggleTuning.counterMidBias + greed * HaggleTuning.counterGreedBias)
 	counter -= desperation * gap * HaggleTuning.counterDesperationBias
 	counter += random:NextNumber(-3, HaggleTuning.counterJitter)
+	counter = clamp(counter, minimumAccept, askingPrice)
+
+	if previousCounter then
+		local slip = math.floor(HaggleTuning.counterDesperationSlip * desperation)
+		counter = math.max(counter, previousCounter - slip)
+	end
 
 	return clamp(counter, minimumAccept, askingPrice)
+end
+
+local function applyPatienceWalkaway(patience: number, patienceDelta: number, outcome: string, counterOffer: number?)
+	local newPatience = patience + patienceDelta
+	if newPatience <= 0 and outcome ~= "accept" then
+		return "walkaway", nil, newPatience
+	end
+	return outcome, counterOffer, newPatience
 end
 
 function HaggleMath.evaluateOffer(customer, item, offerAmount: number, dealState, rng: Random?)
 	local random = rng or Random.new()
 	local askingPrice = dealState.askingPrice
 	local minimumAccept = dealState.minimumAccept
+	local effectiveMinimum = dealState.effectiveMinimum
+		or HaggleMath.calculateEffectiveMinimum(customer, minimumAccept, askingPrice)
 	local maxPatience = dealState.maxPatience or HaggleTuning.startingPatience
 	local patience = dealState.patience or maxPatience
 
@@ -135,47 +176,216 @@ function HaggleMath.evaluateOffer(customer, item, offerAmount: number, dealState
 	local patienceDelta = 0
 	local outcome = "reject"
 	local counterOffer: number? = nil
+	local repeatBlocked = false
+	local blockAccept = false
 
-	if offerAmount >= minimumAccept then
-		local acceptChance = HaggleTuning.acceptChanceBase
-			+ desperation * HaggleTuning.acceptChanceDesperationScale
-			- knowledge * HaggleTuning.acceptChanceKnowledgePenalty
-		if offerAmount >= askingPrice * HaggleTuning.nearAskAcceptRatio then
-			acceptChance = HaggleTuning.acceptChanceNearAsk
+	local lastOffer = dealState.lastOfferAmount
+	local repeatStreak = 0
+	if lastOffer and offerAmount <= lastOffer then
+		repeatStreak = (dealState.repeatOfferStreak or 0) + 1
+		patienceDelta += patienceLoss(HaggleTuning.patienceLossRepeat, temper)
+		if repeatStreak >= HaggleTuning.repeatOfferWalkawayAt then
+			outcome = "walkaway"
+			blockAccept = true
+			repeatBlocked = true
+			patienceDelta += patienceLoss(HaggleTuning.patienceLossInsult, temper)
+		elseif repeatStreak >= HaggleTuning.repeatBlockAcceptAt then
+			blockAccept = true
+			repeatBlocked = true
 		end
+	end
 
-		if random:NextNumber() <= acceptChance or offerAmount >= askingPrice then
-			outcome = "accept"
-			patienceDelta = 0
-		else
+	if not blockAccept and dealState.phase == "Counter" and dealState.counterOffer then
+		if offerAmount < dealState.counterOffer then
+			blockAccept = true
+			patienceDelta += patienceLoss(HaggleTuning.patienceLossBelowCounter, temper)
+			outcome = "reject"
+			if temper >= HaggleTuning.lowballInstantWalkawayTemper and random:NextNumber() < 0.4 then
+				outcome = "walkaway"
+			else
+				dealState.dialogueOverride = `I already said {dealState.counterOffer} caps.`
+			end
+		elseif dealState.bestOfferAmount and offerAmount < dealState.bestOfferAmount then
+			blockAccept = true
+			patienceDelta += patienceLoss(HaggleTuning.patienceLossReject, temper)
+			outcome = "reject"
+		end
+	end
+
+	if not blockAccept and not repeatBlocked then
+		if offerAmount >= effectiveMinimum then
+			local canRollAccept = true
+			if dealState.phase == "Counter" and dealState.counterOffer then
+				local minRaise = HaggleMath.getMinRaiseAmount(askingPrice)
+				local improvedEnough = offerAmount >= dealState.counterOffer
+					or (dealState.bestOfferAmount and offerAmount >= dealState.bestOfferAmount + minRaise)
+				canRollAccept = improvedEnough
+			end
+
+			if canRollAccept then
+				local acceptChance = HaggleTuning.acceptChanceBase
+					+ desperation * HaggleTuning.acceptChanceDesperationScale
+					- knowledge * HaggleTuning.acceptChanceKnowledgePenalty
+				if offerAmount >= askingPrice * HaggleTuning.nearAskAcceptRatio then
+					acceptChance = HaggleTuning.acceptChanceNearAsk
+				end
+				if repeatStreak >= 1 then
+					acceptChance *= 0.35
+				end
+
+				if random:NextNumber() <= acceptChance or offerAmount >= askingPrice then
+					outcome = "accept"
+					patienceDelta = 0
+				else
+					outcome = "counter"
+					counterOffer = HaggleMath.calculateCounterOffer(
+						customer,
+						item,
+						offerAmount,
+						askingPrice,
+						effectiveMinimum,
+						random,
+						dealState.counterOffer
+					)
+					patienceDelta += patienceLoss(HaggleTuning.patienceLossCounterNearAccept, temper)
+				end
+			else
+				outcome = "counter"
+				counterOffer = HaggleMath.calculateCounterOffer(
+					customer,
+					item,
+					offerAmount,
+					askingPrice,
+					effectiveMinimum,
+					random,
+					dealState.counterOffer
+				)
+				patienceDelta += patienceLoss(HaggleTuning.patienceLossCounter, temper)
+			end
+		elseif ratio >= HaggleTuning.offerRatioCounter then
 			outcome = "counter"
-			counterOffer = HaggleMath.calculateCounterOffer(customer, item, offerAmount, askingPrice, minimumAccept, random)
-			patienceDelta = patienceLoss(HaggleTuning.patienceLossCounterNearAccept, temper)
+			counterOffer = HaggleMath.calculateCounterOffer(
+				customer,
+				item,
+				offerAmount,
+				askingPrice,
+				effectiveMinimum,
+				random,
+				dealState.counterOffer
+			)
+			patienceDelta += patienceLoss(HaggleTuning.patienceLossCounter, temper)
+		elseif ratio >= HaggleTuning.offerRatioReject then
+			outcome = "reject"
+			patienceDelta += patienceLoss(HaggleTuning.patienceLossReject, temper)
+		else
+			outcome = "reject"
+			patienceDelta += patienceLoss(HaggleTuning.patienceLossInsult, temper)
 		end
-	elseif ratio >= HaggleTuning.offerRatioCounter then
-		outcome = "counter"
-		counterOffer = HaggleMath.calculateCounterOffer(customer, item, offerAmount, askingPrice, minimumAccept, random)
-		patienceDelta = patienceLoss(HaggleTuning.patienceLossCounter, temper)
-	elseif ratio >= HaggleTuning.offerRatioReject then
-		outcome = "reject"
-		patienceDelta = patienceLoss(HaggleTuning.patienceLossReject, temper)
-	else
-		outcome = "reject"
-		patienceDelta = patienceLoss(HaggleTuning.patienceLossInsult, temper)
 	end
 
-	local newPatience = patience + patienceDelta
-	if newPatience <= 0 and outcome ~= "accept" then
-		outcome = "walkaway"
-		counterOffer = nil
-	end
+	outcome, counterOffer, patience = applyPatienceWalkaway(patience, patienceDelta, outcome, counterOffer)
+
+	local reactionText = dealState.dialogueOverride
+		or HaggleMath.getReactionText(customer, outcome, ratio, rng)
 
 	return {
 		outcome = outcome,
 		patienceDelta = patienceDelta,
 		offerRatio = ratio,
-		reactionText = HaggleMath.getReactionText(customer, outcome, ratio, rng),
+		reactionText = reactionText,
 		counterOffer = counterOffer,
+		repeatStreak = repeatStreak,
+		repeatBlocked = repeatBlocked,
+		requiredNextOffer = HaggleMath.getRequiredNextOffer({
+			phase = if counterOffer then "Counter" else dealState.phase,
+			counterOffer = counterOffer,
+			effectiveMinimum = effectiveMinimum,
+		}),
+	}
+end
+
+function HaggleMath.evaluateLowball(customer, item, offerAmount: number, dealState, rng: Random?)
+	local random = rng or Random.new()
+	local askingPrice = dealState.askingPrice
+	local trueValue = dealState.hiddenOutcome and dealState.hiddenOutcome.trueValue or askingPrice
+	local ratio = offerAmount / math.max(askingPrice, 1)
+	local temper = customer.temper or 0.5
+	local desperation = customer.desperation or 0
+	local knowledge = customer.knowledge or 0
+	local scamBias = customer.scamBias or 0
+
+	if ratio > HaggleTuning.lowballMaxRatio then
+		return {
+			outcome = "reject",
+			lowballResult = "invalid",
+			patienceDelta = 0,
+			reactionText = "That's not a lowball.",
+			repeatStreak = dealState.repeatOfferStreak or 0,
+			repeatBlocked = false,
+		}
+	end
+
+	local stealChance = HaggleTuning.lowballStealBase + desperation * HaggleTuning.lowballStealDesperationScale
+	local crackChance = HaggleTuning.lowballCrackBase + knowledge * HaggleTuning.lowballCrackKnowledgeScale
+	local roll = random:NextNumber()
+
+	if roll <= stealChance then
+		local reaction = pickReaction(customer.reactions and customer.reactions.lowball_steal or REACTIONS.accept, random)
+		return {
+			outcome = "accept",
+			lowballResult = "steal",
+			patienceDelta = 0,
+			reactionText = reaction,
+			repeatStreak = 0,
+			repeatBlocked = false,
+		}
+	end
+
+	if roll <= stealChance + crackChance then
+		local reaction = pickReaction(customer.reactions and customer.reactions.lowball_crack or {
+			"You might be onto something...",
+			"Fine, think what you want.",
+			"Don't push your luck.",
+		}, random)
+		return {
+			outcome = "crack",
+			lowballResult = "crack",
+			patienceDelta = -math.floor(4 + temper * 3),
+			reactionText = reaction,
+			repeatStreak = dealState.repeatOfferStreak or 0,
+			repeatBlocked = false,
+		}
+	end
+
+	local patienceDelta = patienceLoss(HaggleTuning.patienceLossInsult, temper)
+	patienceDelta -= math.floor(HaggleTuning.lowballOffendedTemperScale * temper * 10)
+
+	local outcome = "reject"
+	if temper >= HaggleTuning.lowballInstantWalkawayTemper and random:NextNumber() < 0.35 + temper * 0.25 then
+		outcome = "walkaway"
+		patienceDelta = -dealState.patience
+	end
+
+	local newPatience = (dealState.patience or 100) + patienceDelta
+	if newPatience <= 0 and outcome ~= "walkaway" then
+		outcome = "walkaway"
+	end
+
+	local scamCallout = false
+	if scamBias > 0.2 and not dealState.scamCalloutUsed and random:NextNumber() < HaggleTuning.lowballScamCalloutChance then
+		scamCallout = true
+	end
+
+	local reaction = pickReaction(customer.reactions and customer.reactions.lowball_offended or REACTIONS.reject_insult, random)
+
+	return {
+		outcome = outcome,
+		lowballResult = if scamCallout then "scam_callout" else "offended",
+		patienceDelta = patienceDelta,
+		reactionText = reaction,
+		scamCallout = scamCallout,
+		repeatStreak = dealState.repeatOfferStreak or 0,
+		repeatBlocked = false,
 	}
 end
 
