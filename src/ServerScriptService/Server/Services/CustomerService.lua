@@ -18,4 +18,12 @@ function CustomerService:rollItem(rng: Random?)
 	return Items.getRandom(rng)
 end
 
+function CustomerService:getCustomer(customerId: string)
+	return Customers.get(customerId)
+end
+
+function CustomerService:getItem(itemId: string)
+	return Items.get(itemId)
+end
+
 return CustomerService

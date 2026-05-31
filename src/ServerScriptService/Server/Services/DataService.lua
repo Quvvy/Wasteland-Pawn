@@ -1,8 +1,12 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local HaggleTuning = require(Shared.Config.HaggleTuning)
 
 local DataService = {}
 
-DataService.STARTING_CASH = 500
+DataService.STARTING_CASH = HaggleTuning.startingCash
 
 local playerData: { [Player]: { cash: number } } = {}
 
@@ -28,13 +32,18 @@ function DataService:_ensurePlayer(player: Player)
 	end
 
 	playerData[player] = {
-		cash = DataService.STARTING_CASH,
+		cash = HaggleTuning.startingCash,
 	}
 end
 
 function DataService:getCash(player: Player): number
 	self:_ensurePlayer(player)
 	return playerData[player].cash
+end
+
+function DataService:setCash(player: Player, amount: number)
+	self:_ensurePlayer(player)
+	playerData[player].cash = math.clamp(math.floor(amount + 0.5), 0, 999999999)
 end
 
 function DataService:canAfford(player: Player, amount: number): boolean

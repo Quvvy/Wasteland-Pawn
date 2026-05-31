@@ -7,6 +7,8 @@ local UIController = require(script.Parent.UIController)
 
 local DealController = {}
 
+local OFFER_COOLDOWN = 0.5
+
 local function invokeRemote(remoteName: string, ...: any): (boolean, any)
 	local remote = Remotes.get(remoteName) :: RemoteFunction
 	local ok, result = pcall(function(...)
@@ -21,6 +23,13 @@ local function invokeRemote(remoteName: string, ...: any): (boolean, any)
 	return true, result
 end
 
+local function briefOfferCooldown()
+	UIController:setHaggleButtonsEnabled(false)
+	task.delay(OFFER_COOLDOWN, function()
+		UIController:setHaggleButtonsEnabled(true)
+	end)
+end
+
 function DealController:Init()
 	self:_bindUi()
 end
@@ -31,6 +40,7 @@ function DealController:_bindUi()
 		if not amount then
 			return
 		end
+		briefOfferCooldown()
 		invokeRemote("MakeOffer", amount)
 	end)
 
@@ -49,6 +59,7 @@ function DealController:_bindUi()
 		end
 
 		UIController:setOfferAmount(amount)
+		briefOfferCooldown()
 		invokeRemote("MakeOffer", amount)
 	end)
 
@@ -57,6 +68,7 @@ function DealController:_bindUi()
 	end)
 
 	UIController:onAcceptCounter(function()
+		briefOfferCooldown()
 		invokeRemote("AcceptCounter")
 	end)
 

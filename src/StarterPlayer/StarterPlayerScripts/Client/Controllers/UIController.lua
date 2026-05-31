@@ -1,4 +1,8 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local HaggleTuning = require(Shared.Config.HaggleTuning)
 
 local UIController = {}
 
@@ -9,9 +13,19 @@ local screenGui: ScreenGui
 local labels: { [string]: TextLabel } = {}
 local offerBox: TextBox
 local buttons: { [string]: TextButton } = {}
+local patienceBarBg: Frame
+local patienceBarFill: Frame
 
 local currentSnapshot: any = nil
 local lastItemId: string? = nil
+local haggleButtonsEnabled = true
+
+local OUTCOME_DISPLAY = {
+	accept = "Accepted",
+	counter = "Counter",
+	reject = "Rejected",
+	walkaway = "Walked away",
+}
 
 local function createLabel(parent: Instance, name: string, text: string, position: UDim2, size: UDim2): TextLabel
 	local label = Instance.new("TextLabel")
@@ -57,7 +71,7 @@ function UIController:Init()
 	root.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
 	root.BorderSizePixel = 0
 	root.Position = UDim2.fromOffset(20, 20)
-	root.Size = UDim2.fromOffset(420, 520)
+	root.Size = UDim2.fromOffset(420, 540)
 	root.Parent = screenGui
 
 	labels.title = createLabel(root, "Title", "Wasteland Pawn — Counter", UDim2.fromOffset(12, 8), UDim2.fromOffset(396, 28))
@@ -69,9 +83,31 @@ function UIController:Init()
 	labels.item = createLabel(root, "Item", "Item: —", UDim2.fromOffset(12, 132), UDim2.fromOffset(396, 48))
 	labels.prices = createLabel(root, "Prices", "Ask: —", UDim2.fromOffset(12, 184), UDim2.fromOffset(396, 48))
 	labels.cash = createLabel(root, "Cash", "Your caps: —", UDim2.fromOffset(12, 236), UDim2.fromOffset(396, 24))
-	labels.patience = createLabel(root, "Patience", "Patience: —", UDim2.fromOffset(12, 264), UDim2.fromOffset(396, 24))
-	labels.inspect = createLabel(root, "Inspect", "", UDim2.fromOffset(12, 292), UDim2.fromOffset(396, 40))
-	labels.result = createLabel(root, "Result", "", UDim2.fromOffset(12, 340), UDim2.fromOffset(396, 60))
+
+	labels.outcome = createLabel(root, "Outcome", "", UDim2.fromOffset(12, 262), UDim2.fromOffset(396, 20))
+	labels.outcome.TextSize = 14
+	labels.outcome.Font = Enum.Font.GothamBold
+
+	patienceBarBg = Instance.new("Frame")
+	patienceBarBg.Name = "PatienceBarBg"
+	patienceBarBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	patienceBarBg.BorderSizePixel = 0
+	patienceBarBg.Position = UDim2.fromOffset(12, 286)
+	patienceBarBg.Size = UDim2.fromOffset(396, 14)
+	patienceBarBg.Parent = root
+
+	patienceBarFill = Instance.new("Frame")
+	patienceBarFill.Name = "PatienceBarFill"
+	patienceBarFill.BackgroundColor3 = Color3.fromRGB(90, 200, 120)
+	patienceBarFill.BorderSizePixel = 0
+	patienceBarFill.Size = UDim2.new(1, 0, 1, 0)
+	patienceBarFill.Parent = patienceBarBg
+
+	labels.patience = createLabel(root, "Patience", "Patience: —", UDim2.fromOffset(12, 304), UDim2.fromOffset(396, 22))
+	labels.patience.BackgroundTransparency = 1
+
+	labels.inspect = createLabel(root, "Inspect", "", UDim2.fromOffset(12, 330), UDim2.fromOffset(396, 36))
+	labels.result = createLabel(root, "Result", "", UDim2.fromOffset(12, 370), UDim2.fromOffset(396, 56))
 	labels.result.Visible = false
 
 	offerBox = Instance.new("TextBox")
@@ -84,20 +120,26 @@ function UIController:Init()
 	offerBox.Text = ""
 	offerBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 	offerBox.TextSize = 16
-	offerBox.Position = UDim2.fromOffset(12, 408)
+	offerBox.Position = UDim2.fromOffset(12, 432)
 	offerBox.Size = UDim2.fromOffset(200, 32)
 	offerBox.Parent = root
 
-	buttons.offer = createButton(root, "OfferBtn", "Make Offer", UDim2.fromOffset(220, 408), UDim2.fromOffset(90, 32))
-	buttons.inspect = createButton(root, "InspectBtn", "Inspect (25)", UDim2.fromOffset(318, 408), UDim2.fromOffset(90, 32))
-	buttons.lowball = createButton(root, "LowballBtn", "Lowball", UDim2.fromOffset(12, 448), UDim2.fromOffset(90, 32))
-	buttons.fair = createButton(root, "FairBtn", "Fair Offer", UDim2.fromOffset(108, 448), UDim2.fromOffset(90, 32))
-	buttons.ask = createButton(root, "AskBtn", "Match Ask", UDim2.fromOffset(204, 448), UDim2.fromOffset(90, 32))
-	buttons.acceptCounter = createButton(root, "AcceptCounterBtn", "Accept Counter", UDim2.fromOffset(12, 448), UDim2.fromOffset(130, 32))
-	buttons.pass = createButton(root, "PassBtn", "Pass", UDim2.fromOffset(300, 448), UDim2.fromOffset(108, 32))
-	buttons.sell = createButton(root, "SellBtn", "Sell Item", UDim2.fromOffset(12, 448), UDim2.fromOffset(120, 32))
-	buttons.keep = createButton(root, "KeepBtn", "Keep Item", UDim2.fromOffset(140, 448), UDim2.fromOffset(120, 32))
-	buttons.next = createButton(root, "NextBtn", "Next Customer", UDim2.fromOffset(270, 448), UDim2.fromOffset(138, 32))
+	buttons.offer = createButton(root, "OfferBtn", "Make Offer", UDim2.fromOffset(220, 432), UDim2.fromOffset(90, 32))
+	buttons.inspect = createButton(
+		root,
+		"InspectBtn",
+		`Inspect ({HaggleTuning.inspectCost})`,
+		UDim2.fromOffset(318, 432),
+		UDim2.fromOffset(90, 32)
+	)
+	buttons.lowball = createButton(root, "LowballBtn", "Lowball", UDim2.fromOffset(12, 472), UDim2.fromOffset(90, 32))
+	buttons.fair = createButton(root, "FairBtn", "Fair Offer", UDim2.fromOffset(108, 472), UDim2.fromOffset(90, 32))
+	buttons.ask = createButton(root, "AskBtn", "Match Ask", UDim2.fromOffset(204, 472), UDim2.fromOffset(90, 32))
+	buttons.acceptCounter = createButton(root, "AcceptCounterBtn", "Accept Counter", UDim2.fromOffset(12, 472), UDim2.fromOffset(130, 32))
+	buttons.pass = createButton(root, "PassBtn", "Pass", UDim2.fromOffset(300, 472), UDim2.fromOffset(108, 32))
+	buttons.sell = createButton(root, "SellBtn", "Sell Item", UDim2.fromOffset(12, 472), UDim2.fromOffset(120, 32))
+	buttons.keep = createButton(root, "KeepBtn", "Keep Item", UDim2.fromOffset(140, 472), UDim2.fromOffset(120, 32))
+	buttons.next = createButton(root, "NextBtn", "Next Customer", UDim2.fromOffset(270, 472), UDim2.fromOffset(138, 32))
 
 	buttons.acceptCounter.Visible = false
 	buttons.sell.Visible = false
@@ -121,6 +163,39 @@ function UIController:setOfferAmount(amount: number)
 	offerBox.Text = tostring(amount)
 end
 
+function UIController:setHaggleButtonsEnabled(enabled: boolean)
+	haggleButtonsEnabled = enabled
+	local alpha = if enabled then 0 else 0.45
+	for _, name in { "offer", "lowball", "fair", "ask", "inspect", "acceptCounter" } do
+		local button = buttons[name]
+		if button then
+			button.Active = enabled
+			button.AutoButtonColor = enabled
+			button.BackgroundTransparency = alpha
+		end
+	end
+end
+
+local function updatePatienceBar(patience: number, maxPatience: number, patienceDelta: number?)
+	local ratio = math.clamp(patience / math.max(maxPatience, 1), 0, 1)
+	patienceBarFill.Size = UDim2.new(ratio, 0, 1, 0)
+
+	if patience <= 30 then
+		patienceBarFill.BackgroundColor3 = Color3.fromRGB(220, 80, 80)
+	elseif patience <= 60 then
+		patienceBarFill.BackgroundColor3 = Color3.fromRGB(220, 180, 70)
+	else
+		patienceBarFill.BackgroundColor3 = Color3.fromRGB(90, 200, 120)
+	end
+
+	if patienceDelta and patienceDelta <= -10 then
+		patienceBarBg.BackgroundColor3 = Color3.fromRGB(120, 40, 40)
+		task.delay(0.35, function()
+			patienceBarBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+		end)
+	end
+end
+
 function UIController:setPhaseControls(phase: string)
 	local haggling = phase == "Haggling" or phase == "Counter"
 	local purchased = phase == "Purchased"
@@ -137,6 +212,10 @@ function UIController:setPhaseControls(phase: string)
 	buttons.sell.Visible = purchased
 	buttons.keep.Visible = purchased
 	buttons.next.Visible = terminal
+
+	patienceBarBg.Visible = haggling
+	labels.patience.Visible = haggling
+	labels.outcome.Visible = haggling
 
 	labels.result.Visible = purchased or terminal
 end
@@ -174,20 +253,27 @@ function UIController:updateSnapshot(snapshot)
 	labels.prices.Text = table.concat(priceLines, "\n")
 
 	labels.cash.Text = `Your caps: {snapshot.playerCash or 0}`
-	labels.patience.Text = `Patience: {snapshot.patience or 0}/100`
 
-	if snapshot.patience and snapshot.patience <= 25 then
-		labels.patience.TextColor3 = Color3.fromRGB(255, 120, 120)
-	elseif snapshot.patience and snapshot.patience <= 50 then
-		labels.patience.TextColor3 = Color3.fromRGB(255, 200, 120)
+	local maxPatience = snapshot.maxPatience or HaggleTuning.startingPatience
+	local patience = snapshot.patience or maxPatience
+	updatePatienceBar(patience, maxPatience, snapshot.patienceDelta)
+	labels.patience.Text = `Patience: {patience}/{maxPatience}`
+
+	if snapshot.lastOutcome then
+		local display = OUTCOME_DISPLAY[snapshot.lastOutcome] or snapshot.lastOutcome
+		local deltaText = ""
+		if snapshot.patienceDelta and snapshot.patienceDelta < 0 then
+			deltaText = ` ({snapshot.patienceDelta})`
+		end
+		labels.outcome.Text = `Last: {display}{deltaText}`
 	else
-		labels.patience.TextColor3 = Color3.fromRGB(235, 235, 235)
+		labels.outcome.Text = ""
 	end
 
 	if snapshot.inspected and snapshot.inspectHint then
 		labels.inspect.Text = snapshot.inspectHint
 	else
-		labels.inspect.Text = if snapshot.inspected then "Already inspected." else "Inspect costs 25 caps."
+		labels.inspect.Text = `Inspect costs {HaggleTuning.inspectCost} caps.`
 	end
 
 	if snapshot.resultMessage or snapshot.trueValue then
@@ -211,7 +297,12 @@ function UIController:updateSnapshot(snapshot)
 end
 
 function UIController:onOffer(callback: () -> ())
-	buttons.offer.MouseButton1Click:Connect(callback)
+	buttons.offer.MouseButton1Click:Connect(function()
+		if not haggleButtonsEnabled then
+			return
+		end
+		callback()
+	end)
 end
 
 function UIController:onInspect(callback: () -> ())
@@ -223,7 +314,12 @@ function UIController:onPass(callback: () -> ())
 end
 
 function UIController:onAcceptCounter(callback: () -> ())
-	buttons.acceptCounter.MouseButton1Click:Connect(callback)
+	buttons.acceptCounter.MouseButton1Click:Connect(function()
+		if not haggleButtonsEnabled then
+			return
+		end
+		callback()
+	end)
 end
 
 function UIController:onSell(callback: () -> ())
@@ -240,12 +336,21 @@ end
 
 function UIController:onQuickOffer(callback: (string) -> ())
 	buttons.lowball.MouseButton1Click:Connect(function()
+		if not haggleButtonsEnabled then
+			return
+		end
 		callback("lowball")
 	end)
 	buttons.fair.MouseButton1Click:Connect(function()
+		if not haggleButtonsEnabled then
+			return
+		end
 		callback("fair")
 	end)
 	buttons.ask.MouseButton1Click:Connect(function()
+		if not haggleButtonsEnabled then
+			return
+		end
 		callback("ask")
 	end)
 end

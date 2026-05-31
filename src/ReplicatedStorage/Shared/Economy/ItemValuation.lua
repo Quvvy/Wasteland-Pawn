@@ -1,4 +1,5 @@
 local Rarities = require(script.Parent.Parent.Config.Rarities)
+local HaggleTuning = require(script.Parent.Parent.Config.HaggleTuning)
 local TableUtil = require(script.Parent.Parent.Util.TableUtil)
 
 local ItemValuation = {}
@@ -36,14 +37,22 @@ function ItemValuation.generateEstimatedRange(item, customer, trueValue: number,
 	local knowledge = customer.knowledge or 0
 	local scamBias = customer.scamBias or 0
 
-	local spread = 0.35 - knowledge * 0.15 + scamBias * 0.25
-	spread = math.clamp(spread, 0.12, 0.55)
+	local spread = HaggleTuning.estimateSpreadBase
+		- knowledge * HaggleTuning.estimateSpreadKnowledge
+		+ scamBias * HaggleTuning.estimateSpreadScam
+	spread = math.clamp(spread, HaggleTuning.estimateSpreadMin, HaggleTuning.estimateSpreadMax)
 
-	local center = trueValue * (1 + scamBias * random:NextNumber(0.15, 0.45))
+	local inflate = scamBias * random:NextNumber(HaggleTuning.scamInflateMin, HaggleTuning.scamInflateMax)
+	local center = trueValue * (1 + inflate)
 	local low = clamp(center * (1 - spread), 1, 999999)
 	local high = clamp(center * (1 + spread), low, 999999)
 
 	return low, high
+end
+
+function ItemValuation.isEstimateInflated(estimatedLow: number, estimatedHigh: number, trueValue: number): boolean
+	local mid = (estimatedLow + estimatedHigh) / 2
+	return mid > trueValue * (1 + HaggleTuning.inspectInflatedThreshold)
 end
 
 function ItemValuation.narrowEstimateAfterInspect(estimatedLow: number, estimatedHigh: number, trueValue: number): (number, number)
@@ -59,21 +68,36 @@ function ItemValuation.narrowEstimateAfterInspect(estimatedLow: number, estimate
 	return newLow, newHigh
 end
 
-function ItemValuation.getInspectHint(rarityId: string, trueValue: number): string
+function ItemValuation.getInspectHint(
+	rarityId: string,
+	trueValue: number,
+	customer,
+	estimatedLow: number?,
+	estimatedHigh: number?
+): string
 	local rarity = Rarities[rarityId]
-	if not rarity then
-		return "Your gut says the value is unclear."
-	end
+	local hint
 
 	if rarityId == "Legendary" or rarityId == "Epic" then
-		return "Inspection: this might be seriously valuable."
+		hint = "Inspection: this might be seriously valuable."
 	elseif rarityId == "Rare" or rarityId == "Uncommon" then
-		return "Inspection: decent find, not trash."
+		hint = "Inspection: decent find, not trash."
 	elseif trueValue < 30 then
-		return "Inspection: probably low-tier junk."
+		hint = "Inspection: probably low-tier junk."
 	else
-		return "Inspection: common salvage at best."
+		hint = "Inspection: common salvage at best."
 	end
+
+	if
+		customer
+		and estimatedLow
+		and estimatedHigh
+		and ItemValuation.isEstimateInflated(estimatedLow, estimatedHigh, trueValue)
+	then
+		hint ..= " Estimate may be inflated."
+	end
+
+	return hint
 end
 
 return ItemValuation
