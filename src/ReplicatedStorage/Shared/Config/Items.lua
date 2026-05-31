@@ -35,7 +35,7 @@ local itemList = {
 		displayName = "Stack of Empty Cans",
 		category = "Scrap",
 		baseValue = 9,
-		flavorText = "Pre-war soup labels faded beyond reading.",
+		flavorText = "Dead-era soup labels faded beyond reading.",
 	},
 	{
 		id = "scrap_broken_shovel",
@@ -45,46 +45,46 @@ local itemList = {
 		flavorText = "Handle snapped off. Handle probably worth more.",
 	},
 
-	-- Pre-War Tech
+	-- Old World Tech
 	{
 		id = "tech_handheld_radio",
 		displayName = "Handheld Radio",
-		category = "Pre-War Tech",
+		category = "Old World Tech",
 		baseValue = 55,
 		flavorText = "Picks up static and distant ads.",
 	},
 	{
 		id = "tech_solar_cell",
 		displayName = "Cracked Solar Cell",
-		category = "Pre-War Tech",
+		category = "Old World Tech",
 		baseValue = 70,
 		flavorText = "Works on sunny days. Today is not sunny.",
 	},
 	{
 		id = "tech_flashlight",
 		displayName = "Military Flashlight",
-		category = "Pre-War Tech",
+		category = "Old World Tech",
 		baseValue = 42,
 		flavorText = "Heavy. Reliable. Battery not included.",
 	},
 	{
 		id = "tech_gps_unit",
 		displayName = "Dead GPS Unit",
-		category = "Pre-War Tech",
+		category = "Old World Tech",
 		baseValue = 88,
 		flavorText = "Screen shows one blinking pixel.",
 	},
 	{
 		id = "tech_med_scanner",
 		displayName = "Portable Med Scanner",
-		category = "Pre-War Tech",
+		category = "Old World Tech",
 		baseValue = 120,
 		flavorText = "Beeps ominously near rads.",
 	},
 	{
 		id = "tech_drone_wing",
 		displayName = "Delivery Drone Wing",
-		category = "Pre-War Tech",
+		category = "Old World Tech",
 		baseValue = 95,
 		flavorText = "Corporate logo half melted off.",
 	},
@@ -179,8 +179,8 @@ local itemList = {
 
 	-- Collectibles
 	{
-		id = "collect_vault_bobblehead",
-		displayName = "Vault Guard Bobblehead",
+		id = "collect_bunker_bobblehead",
+		displayName = "Bunker Guard Bobblehead",
 		category = "Collectibles",
 		baseValue = 80,
 		flavorText = "Nodding approval not guaranteed.",
@@ -194,7 +194,7 @@ local itemList = {
 	},
 	{
 		id = "collect_stamp_book",
-		displayName = "Pre-War Stamp Book",
+		displayName = "Old World Stamp Book",
 		category = "Collectibles",
 		baseValue = 75,
 		flavorText = "One stamp depicts a rocket. It is missing.",

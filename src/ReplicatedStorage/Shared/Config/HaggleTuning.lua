@@ -1,5 +1,6 @@
 -- Central balance knobs for the haggling prototype. Tune here first.
 local HaggleTuning = {
+	currencyName = "scraps",
 	startingCash = 500,
 	inspectCost = 25,
 	startingPatience = 100,
@@ -65,19 +66,37 @@ local HaggleTuning = {
 
 	-- Lowball
 	lowballMaxRatio = 0.5,
+	lowballMinUsefulRatio = 0.32,
 	lowballStealBase = 0.06,
 	lowballStealDesperationScale = 0.22,
-	lowballCrackBase = 0.22,
-	lowballCrackKnowledgeScale = 0.12,
+	lowballCrackBase = 0.12,
+	lowballCrackDesperationScale = 0.18,
+	lowballCrackKnowledgeScale = 0.16,
+	lowballCrackMin = 0.03,
+	lowballCrackMax = 0.5,
 	lowballOffendedTemperScale = 0.35,
 	lowballScamCalloutChance = 0.35,
 	lowballScamAskReduction = 0.12,
 	lowballInstantWalkawayTemper = 0.75,
 
-	-- Pass / walkaway costs
-	passPenaltyCaps = 8,
-	walkawayPenaltyCaps = 12,
+	-- Pass / walkaway costs (0 while playtesting)
+	passPenaltyCaps = 0,
+	walkawayPenaltyCaps = 0,
 	dealCooldownSeconds = 0,
+
+	-- Sell-side haggle
+	buyerOfferBaseRatio = 0.62,
+	buyerOfferGreedPenalty = 0.14,
+	buyerOfferUrgencyBonus = 0.12,
+	buyerMaximumBaseRatio = 0.92,
+	buyerMaximumUrgencyBonus = 0.28,
+	buyerMaximumKnowledgePenalty = 0.08,
+	sellAcceptChanceBase = 0.4,
+	sellAcceptUrgencyScale = 0.35,
+	sellAcceptKnowledgePenalty = 0.15,
+	sellCounterStepRatio = 0.35,
+	sellRepeatWalkawayAt = 3,
+	sellRepeatBlockAt = 2,
 
 	-- Item estimate spread
 	estimateSpreadBase = 0.36,

@@ -1,9 +1,15 @@
+local Players = game:GetService("Players")
+
 local InventoryService = {}
 
 local inventories: { [Player]: { any } } = {}
 local nextInstanceId = 0
 
-function InventoryService:Init() end
+function InventoryService:Init()
+	Players.PlayerRemoving:Connect(function(player)
+		inventories[player] = nil
+	end)
+end
 
 function InventoryService:Start() end
 

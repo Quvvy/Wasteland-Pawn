@@ -56,13 +56,13 @@ function ItemValuation.isEstimateInflated(estimatedLow: number, estimatedHigh: n
 end
 
 function ItemValuation.narrowEstimateAfterInspect(estimatedLow: number, estimatedHigh: number, trueValue: number): (number, number)
-	local mid = (estimatedLow + estimatedHigh) / 2
-	local newLow = clamp(math.min(estimatedLow, trueValue * 0.85), 1, 999999)
-	local newHigh = clamp(math.max(estimatedHigh, trueValue * 1.15), newLow, 999999)
+	local targetLow = clamp(trueValue * 0.8, 1, 999999)
+	local targetHigh = clamp(trueValue * 1.2, targetLow, 999999)
+	local newLow = clamp(math.max(estimatedLow, targetLow), 1, 999999)
+	local newHigh = clamp(math.min(estimatedHigh, targetHigh), newLow, 999999)
 
-	if math.abs(mid - trueValue) > trueValue * 0.5 then
-		newLow = clamp(trueValue * 0.7, 1, 999999)
-		newHigh = clamp(trueValue * 1.3, newLow, 999999)
+	if newLow >= newHigh then
+		return targetLow, targetHigh
 	end
 
 	return newLow, newHigh

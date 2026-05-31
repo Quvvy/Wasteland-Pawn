@@ -47,11 +47,15 @@ function DataService:setCash(player: Player, amount: number)
 end
 
 function DataService:canAfford(player: Player, amount: number): boolean
+	if type(amount) ~= "number" or amount ~= amount or amount < 0 or amount == math.huge then
+		return false
+	end
+
 	return self:getCash(player) >= amount
 end
 
 function DataService:spend(player: Player, amount: number): boolean
-	if amount < 0 then
+	if type(amount) ~= "number" or amount ~= amount or amount < 0 or amount == math.huge then
 		return false
 	end
 

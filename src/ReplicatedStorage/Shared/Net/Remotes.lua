@@ -14,6 +14,9 @@ local REMOTE_DEFINITIONS = {
 	SellItem = "RemoteFunction",
 	KeepItem = "RemoteFunction",
 	StartDeal = "RemoteFunction",
+	StartSelling = "RemoteFunction",
+	MakeSellAsk = "RemoteFunction",
+	AcceptBuyerOffer = "RemoteFunction",
 }
 
 local cache: { [string]: Instance } = {}

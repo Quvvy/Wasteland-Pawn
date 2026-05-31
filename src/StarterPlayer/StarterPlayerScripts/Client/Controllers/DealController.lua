@@ -31,26 +31,53 @@ local function briefOfferCooldown(duration: number?)
 	end)
 end
 
+local function afterOfferResult(result: any)
+	if result and result.snapshot and result.snapshot.repeatBlocked then
+		briefOfferCooldown(REPEAT_BLOCK_COOLDOWN)
+	end
+end
+
 function DealController:Init()
 	self:_bindUi()
 end
 
 function DealController:_bindUi()
 	UIController:onOffer(function()
+		local snapshot = UIController:getSnapshot()
 		local amount = UIController:getOfferAmount()
 		if not amount then
 			return
 		end
 		briefOfferCooldown()
-		local _, result = invokeRemote("MakeOffer", amount, "normal")
-		if result and result.snapshot and result.snapshot.repeatBlocked then
-			briefOfferCooldown(REPEAT_BLOCK_COOLDOWN)
+
+		local phase = snapshot and snapshot.phase
+		if phase == "Selling" or phase == "BuyerCounter" then
+			local _, result = invokeRemote("MakeSellAsk", amount)
+			afterOfferResult(result)
+		else
+			local _, result = invokeRemote("MakeOffer", amount, "normal")
+			afterOfferResult(result)
 		end
 	end)
 
 	UIController:onQuickOffer(function(kind: string)
 		local snapshot = UIController:getSnapshot()
-		if not snapshot or not snapshot.askingPrice then
+		if not snapshot then
+			return
+		end
+
+		local phase = snapshot.phase
+		if phase == "Selling" or phase == "BuyerCounter" then
+			local base = snapshot.buyerCounterOffer or snapshot.buyerOffer or snapshot.trueValue or 0
+			local amount = math.floor(base * (if kind == "fair" then 1.12 else 1.25))
+			UIController:setOfferAmount(amount)
+			briefOfferCooldown()
+			local _, result = invokeRemote("MakeSellAsk", amount)
+			afterOfferResult(result)
+			return
+		end
+
+		if not snapshot.askingPrice then
 			return
 		end
 
@@ -67,9 +94,7 @@ function DealController:_bindUi()
 		UIController:setOfferAmount(amount)
 		briefOfferCooldown()
 		local _, result = invokeRemote("MakeOffer", amount, offerKind)
-		if result and result.snapshot and result.snapshot.repeatBlocked then
-			briefOfferCooldown(REPEAT_BLOCK_COOLDOWN)
-		end
+		afterOfferResult(result)
 	end)
 
 	UIController:onInspect(function()
@@ -81,15 +106,35 @@ function DealController:_bindUi()
 		invokeRemote("AcceptCounter")
 	end)
 
-	UIController:onPass(function()
-		invokeRemote("PassDeal")
-	end)
-
-	UIController:onSell(function()
+	UIController:onFindBuyer(function()
 		local snapshot = UIController:getSnapshot()
 		if snapshot and snapshot.instanceId then
-			invokeRemote("SellItem", snapshot.instanceId)
+			invokeRemote("StartSelling", snapshot.instanceId)
+		else
+			invokeRemote("StartSelling")
 		end
+	end)
+
+	UIController:onAcceptBuyer(function()
+		briefOfferCooldown()
+		invokeRemote("AcceptBuyerOffer")
+	end)
+
+	UIController:onSellBump(function()
+		local snapshot = UIController:getSnapshot()
+		if not snapshot then
+			return
+		end
+		local base = UIController:getOfferAmount() or snapshot.buyerCounterOffer or snapshot.buyerOffer or 0
+		local amount = math.floor(base * 1.1)
+		UIController:setOfferAmount(amount)
+		briefOfferCooldown()
+		local _, result = invokeRemote("MakeSellAsk", amount)
+		afterOfferResult(result)
+	end)
+
+	UIController:onPass(function()
+		invokeRemote("PassDeal")
 	end)
 
 	UIController:onKeep(function()
