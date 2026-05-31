@@ -7,14 +7,17 @@ local FOLDER_NAME = "WastelandPawnRemotes"
 
 local REMOTE_DEFINITIONS = {
 	DealStateUpdate = "RemoteEvent",
-	MakeOffer = "RemoteFunction",
+	UseBuyTactic = "RemoteFunction",
+	UseSellTactic = "RemoteFunction",
 	InspectItem = "RemoteFunction",
-	AcceptCounter = "RemoteFunction",
 	PassDeal = "RemoteFunction",
-	SellItem = "RemoteFunction",
-	KeepItem = "RemoteFunction",
 	StartDeal = "RemoteFunction",
 	StartSelling = "RemoteFunction",
+	KeepItem = "RemoteFunction",
+	-- Legacy (routed to tactics on server)
+	MakeOffer = "RemoteFunction",
+	AcceptCounter = "RemoteFunction",
+	SellItem = "RemoteFunction",
 	MakeSellAsk = "RemoteFunction",
 	AcceptBuyerOffer = "RemoteFunction",
 }

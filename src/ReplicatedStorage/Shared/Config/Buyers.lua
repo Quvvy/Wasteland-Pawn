@@ -9,6 +9,9 @@ local buyerList = {
 		urgency = 0.25,
 		knowledge = 0.35,
 		temper = 0.55,
+		categoryPreferences = {
+			default = { open = 0.88, max = 0.96 },
+		},
 		openingLine = "I'll take it off your hands. Cheap.",
 		reactions = {
 			accept = { "Fine. Scraps is scraps.", "Deal. Don't expect more.", "Grab it and go." },
@@ -25,6 +28,11 @@ local buyerList = {
 		urgency = 0.35,
 		knowledge = 0.8,
 		temper = 0.2,
+		categoryPreferences = {
+			Collectibles = { open = 0.92, max = 1.42 },
+			["Cursed Junk"] = { open = 0.9, max = 1.28 },
+			default = { open = 0.86, max = 1.18 },
+		},
 		openingLine = "I may be interested. Convince me it's worth my offer.",
 		reactions = {
 			accept = { "Acceptable. I'll take it.", "Done. Have your scraps.", "Fine. Add it to the collection." },
@@ -41,6 +49,11 @@ local buyerList = {
 		urgency = 0.9,
 		knowledge = 0.4,
 		temper = 0.45,
+		categoryPreferences = {
+			Scrap = { open = 0.95, max = 1.45 },
+			["Old World Tech"] = { open = 0.93, max = 1.4 },
+			default = { open = 0.88, max = 1.22 },
+		},
 		openingLine = "I need parts. What's your price?",
 		reactions = {
 			accept = { "Yes! Before someone else grabs it!", "Deal! My rig lives another day.", "Take the scraps!" },
@@ -57,6 +70,11 @@ local buyerList = {
 		urgency = 0.2,
 		knowledge = 0.25,
 		temper = 0.15,
+		categoryPreferences = {
+			["Alien Tech"] = { open = 1.0, max = 1.38 },
+			["Cursed Junk"] = { open = 0.98, max = 1.32 },
+			default = { open = 0.82, max = 1.12 },
+		},
 		openingLine = "Souvenir purchase? Offer in scraps?",
 		reactions = {
 			accept = { "Joy! Trade complete.", "Yes yes. Scraps exchanged.", "Happy Earth shopping." },
@@ -73,6 +91,9 @@ local buyerList = {
 		urgency = 0.15,
 		knowledge = 0.95,
 		temper = 0.1,
+		categoryPreferences = {
+			default = { open = 0.9, max = 1.06 },
+		},
 		openingLine = "APPRAISAL MODE. OPENING OFFER CALCULATED.",
 		reactions = {
 			accept = { "TRANSACTION ACCEPTED.", "DEAL LOGGED.", "TRANSFER AUTHORIZED." },
@@ -89,6 +110,11 @@ local buyerList = {
 		urgency = 0.55,
 		knowledge = 0.65,
 		temper = 0.5,
+		categoryPreferences = {
+			["Cursed Junk"] = { open = 0.84, max = 1.2 },
+			Collectibles = { open = 0.82, max = 1.15 },
+			default = { open = 0.8, max = 1.1 },
+		},
 		openingLine = "Quiet sale. I open low. You know the game.",
 		reactions = {
 			accept = { "Pleasure.", "Moving product.", "Don't make me regret it." },

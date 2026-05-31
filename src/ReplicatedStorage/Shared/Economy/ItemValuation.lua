@@ -56,8 +56,8 @@ function ItemValuation.isEstimateInflated(estimatedLow: number, estimatedHigh: n
 end
 
 function ItemValuation.narrowEstimateAfterInspect(estimatedLow: number, estimatedHigh: number, trueValue: number): (number, number)
-	local targetLow = clamp(trueValue * 0.8, 1, 999999)
-	local targetHigh = clamp(trueValue * 1.2, targetLow, 999999)
+	local targetLow = clamp(trueValue * HaggleTuning.inspectNarrowLowRatio, 1, 999999)
+	local targetHigh = clamp(trueValue * HaggleTuning.inspectNarrowHighRatio, targetLow, 999999)
 	local newLow = clamp(math.max(estimatedLow, targetLow), 1, 999999)
 	local newHigh = clamp(math.min(estimatedHigh, targetHigh), newLow, 999999)
 
@@ -79,13 +79,15 @@ function ItemValuation.getInspectHint(
 	local hint
 
 	if rarityId == "Legendary" or rarityId == "Epic" then
-		hint = "Inspection: this might be seriously valuable."
-	elseif rarityId == "Rare" or rarityId == "Uncommon" then
-		hint = "Inspection: decent find, not trash."
+		hint = "Inspection: big opportunity — this could be worth a lot."
+	elseif rarityId == "Rare" then
+		hint = "Inspection: solid find. Could turn a good profit."
+	elseif rarityId == "Uncommon" then
+		hint = "Inspection: decent salvage, not trash."
 	elseif trueValue < 30 then
-		hint = "Inspection: probably low-tier junk."
+		hint = "Inspection: low-tier junk. Don't overpay."
 	else
-		hint = "Inspection: common salvage at best."
+		hint = "Inspection: ordinary stock. Play it safe or skip."
 	end
 
 	if
@@ -94,7 +96,7 @@ function ItemValuation.getInspectHint(
 		and estimatedHigh
 		and ItemValuation.isEstimateInflated(estimatedLow, estimatedHigh, trueValue)
 	then
-		hint ..= " Estimate may be inflated."
+		hint ..= " Seller's estimate looks inflated — they may be bluffing."
 	end
 
 	return hint

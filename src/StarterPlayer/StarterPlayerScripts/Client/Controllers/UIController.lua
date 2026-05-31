@@ -11,35 +11,25 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 local screenGui: ScreenGui
 local labels: { [string]: TextLabel } = {}
-local offerBox: TextBox
 local buttons: { [string]: TextButton } = {}
-local patienceBarBg: Frame
-local patienceBarFill: Frame
+local heatBarBg: Frame
+local heatBarFill: Frame
 
 local currentSnapshot: any = nil
-local lastItemId: string? = nil
-local haggleButtonsEnabled = true
+local tacticButtonsEnabled = true
 
-local OUTCOME_DISPLAY = {
-	accept = "Accepted",
-	counter = "Counter",
-	reject = "Rejected",
+local TACTIC_RESULT_DISPLAY = {
+	price_drop = "Price dropped",
+	price_raise = "Offer raised",
+	warning = "Warning",
 	walkaway = "Walked away",
 	crack = "Intel gained",
-}
-
-local LOWBALL_DISPLAY = {
-	steal = "Lowball steal!",
-	crack = "Lowball intel",
-	offended = "Lowball failed",
-	scam_callout = "Called their bluff",
+	big_win = "Big win!",
+	accept = "Accepted",
 }
 
 local function currencyLabel(snapshot: any?): string
-	if snapshot and snapshot.currencyName then
-		return snapshot.currencyName
-	end
-	return HaggleTuning.currencyName or "scraps"
+	return (snapshot and snapshot.currencyName) or HaggleTuning.currencyName or "scraps"
 end
 
 local function createLabel(parent: Instance, name: string, text: string, position: UDim2, size: UDim2): TextLabel
@@ -50,7 +40,7 @@ local function createLabel(parent: Instance, name: string, text: string, positio
 	label.BorderSizePixel = 0
 	label.Font = Enum.Font.Gotham
 	label.TextColor3 = Color3.fromRGB(235, 235, 235)
-	label.TextSize = 16
+	label.TextSize = 15
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.TextWrapped = true
 	label.Text = text
@@ -67,7 +57,7 @@ local function createButton(parent: Instance, name: string, text: string, positi
 	button.BorderSizePixel = 0
 	button.Font = Enum.Font.GothamBold
 	button.TextColor3 = Color3.fromRGB(255, 255, 255)
-	button.TextSize = 14
+	button.TextSize = 13
 	button.Text = text
 	button.Position = position
 	button.Size = size
@@ -86,161 +76,134 @@ function UIController:Init()
 	root.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
 	root.BorderSizePixel = 0
 	root.Position = UDim2.fromOffset(20, 20)
-	root.Size = UDim2.fromOffset(420, 560)
+	root.Size = UDim2.fromOffset(440, 620)
 	root.Parent = screenGui
 
-	labels.title = createLabel(root, "Title", "Wasteland Pawn - Counter", UDim2.fromOffset(12, 8), UDim2.fromOffset(396, 28))
-	labels.title.TextSize = 18
+	labels.title = createLabel(root, "Title", "Wasteland Pawn — Tactics", UDim2.fromOffset(12, 8), UDim2.fromOffset(416, 26))
+	labels.title.TextSize = 17
 	labels.title.Font = Enum.Font.GothamBold
 
-	labels.customer = createLabel(root, "Customer", "Trader: -", UDim2.fromOffset(12, 44), UDim2.fromOffset(396, 24))
-	labels.dialogue = createLabel(root, "Dialogue", "...", UDim2.fromOffset(12, 72), UDim2.fromOffset(396, 56))
-	labels.item = createLabel(root, "Item", "Item: -", UDim2.fromOffset(12, 132), UDim2.fromOffset(396, 48))
-	labels.prices = createLabel(root, "Prices", "Ask: -", UDim2.fromOffset(12, 184), UDim2.fromOffset(396, 56))
-	labels.cash = createLabel(root, "Cash", "Your scraps: -", UDim2.fromOffset(12, 244), UDim2.fromOffset(396, 24))
+	labels.customer = createLabel(root, "Customer", "Trader: -", UDim2.fromOffset(12, 38), UDim2.fromOffset(416, 22))
+	labels.tell = createLabel(root, "Tell", "Tell: -", UDim2.fromOffset(12, 62), UDim2.fromOffset(416, 36))
+	labels.tell.TextColor3 = Color3.fromRGB(180, 220, 255)
 
-	labels.outcome = createLabel(root, "Outcome", "", UDim2.fromOffset(12, 270), UDim2.fromOffset(396, 20))
-	labels.outcome.TextSize = 14
+	labels.dialogue = createLabel(root, "Dialogue", "...", UDim2.fromOffset(12, 100), UDim2.fromOffset(416, 48))
+	labels.item = createLabel(root, "Item", "Item: -", UDim2.fromOffset(12, 150), UDim2.fromOffset(416, 44))
+	labels.prices = createLabel(root, "Prices", "", UDim2.fromOffset(12, 196), UDim2.fromOffset(416, 52))
+	labels.cash = createLabel(root, "Cash", "Your scraps: -", UDim2.fromOffset(12, 250), UDim2.fromOffset(416, 22))
+
+	labels.outcome = createLabel(root, "Outcome", "", UDim2.fromOffset(12, 274), UDim2.fromOffset(416, 20))
 	labels.outcome.Font = Enum.Font.GothamBold
 
-	patienceBarBg = Instance.new("Frame")
-	patienceBarBg.Name = "PatienceBarBg"
-	patienceBarBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-	patienceBarBg.BorderSizePixel = 0
-	patienceBarBg.Position = UDim2.fromOffset(12, 294)
-	patienceBarBg.Size = UDim2.fromOffset(396, 14)
-	patienceBarBg.Parent = root
+	heatBarBg = Instance.new("Frame")
+	heatBarBg.Name = "HeatBarBg"
+	heatBarBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	heatBarBg.BorderSizePixel = 0
+	heatBarBg.Position = UDim2.fromOffset(12, 298)
+	heatBarBg.Size = UDim2.fromOffset(416, 16)
+	heatBarBg.Parent = root
 
-	patienceBarFill = Instance.new("Frame")
-	patienceBarFill.Name = "PatienceBarFill"
-	patienceBarFill.BackgroundColor3 = Color3.fromRGB(90, 200, 120)
-	patienceBarFill.BorderSizePixel = 0
-	patienceBarFill.Size = UDim2.new(1, 0, 1, 0)
-	patienceBarFill.Parent = patienceBarBg
+	heatBarFill = Instance.new("Frame")
+	heatBarFill.Name = "HeatBarFill"
+	heatBarFill.BackgroundColor3 = Color3.fromRGB(90, 200, 120)
+	heatBarFill.BorderSizePixel = 0
+	heatBarFill.Size = UDim2.new(0, 0, 1, 0)
+	heatBarFill.Parent = heatBarBg
 
-	labels.patience = createLabel(root, "Patience", "Patience: -", UDim2.fromOffset(12, 312), UDim2.fromOffset(396, 22))
-	labels.patience.BackgroundTransparency = 1
+	labels.heat = createLabel(root, "Heat", "Heat: 0", UDim2.fromOffset(12, 318), UDim2.fromOffset(416, 22))
+	labels.heat.BackgroundTransparency = 1
 
-	labels.inspect = createLabel(root, "Inspect", "", UDim2.fromOffset(12, 338), UDim2.fromOffset(396, 36))
-	labels.result = createLabel(root, "Result", "", UDim2.fromOffset(12, 378), UDim2.fromOffset(396, 72))
+	labels.inspect = createLabel(root, "Inspect", "", UDim2.fromOffset(12, 342), UDim2.fromOffset(416, 32))
+	labels.result = createLabel(root, "Result", "", UDim2.fromOffset(12, 376), UDim2.fromOffset(416, 80))
 	labels.result.Visible = false
 
-	offerBox = Instance.new("TextBox")
-	offerBox.Name = "OfferBox"
-	offerBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-	offerBox.BorderSizePixel = 0
-	offerBox.ClearTextOnFocus = false
-	offerBox.Font = Enum.Font.Gotham
-	offerBox.PlaceholderText = "Amount (scraps)"
-	offerBox.Text = ""
-	offerBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-	offerBox.TextSize = 16
-	offerBox.Position = UDim2.fromOffset(12, 456)
-	offerBox.Size = UDim2.fromOffset(200, 32)
-	offerBox.Parent = root
-
-	buttons.offer = createButton(root, "OfferBtn", "Make Offer", UDim2.fromOffset(220, 456), UDim2.fromOffset(90, 32))
-	buttons.inspect = createButton(
+	-- Buy tactics
+	buttons.lowball = createButton(root, "Lowball", "Lowball", UDim2.fromOffset(12, 464), UDim2.fromOffset(98, 30))
+	buttons.split = createButton(root, "Split", "Split Diff", UDim2.fromOffset(116, 464), UDim2.fromOffset(98, 30))
+	buttons.flaw = createButton(root, "Flaw", "Point Flaw", UDim2.fromOffset(220, 464), UDim2.fromOffset(98, 30))
+	buttons.pressure = createButton(root, "Pressure", "Pressure", UDim2.fromOffset(324, 464), UDim2.fromOffset(104, 30))
+	buttons.acceptBuy = createButton(root, "AcceptBuy", "Accept Price", UDim2.fromOffset(12, 500), UDim2.fromOffset(130, 30))
+	buttons.pass = createButton(root, "Pass", "Pass", UDim2.fromOffset(148, 500), UDim2.fromOffset(80, 30))
+	buttons.inspectBtn = createButton(
 		root,
 		"InspectBtn",
 		`Inspect ({HaggleTuning.inspectCost})`,
-		UDim2.fromOffset(318, 456),
-		UDim2.fromOffset(90, 32)
+		UDim2.fromOffset(234, 500),
+		UDim2.fromOffset(100, 30)
 	)
-	buttons.lowball = createButton(root, "LowballBtn", "Lowball", UDim2.fromOffset(12, 496), UDim2.fromOffset(90, 32))
-	buttons.fair = createButton(root, "FairBtn", "Fair Offer", UDim2.fromOffset(108, 496), UDim2.fromOffset(90, 32))
-	buttons.ask = createButton(root, "AskBtn", "Match Ask", UDim2.fromOffset(204, 496), UDim2.fromOffset(90, 32))
-	buttons.acceptCounter = createButton(root, "AcceptCounterBtn", "Accept Counter", UDim2.fromOffset(12, 496), UDim2.fromOffset(130, 32))
-	buttons.pass = createButton(root, "PassBtn", "Pass", UDim2.fromOffset(300, 496), UDim2.fromOffset(108, 32))
-	buttons.findBuyer = createButton(root, "FindBuyerBtn", "Find Buyer", UDim2.fromOffset(12, 496), UDim2.fromOffset(120, 32))
-	buttons.acceptBuyer = createButton(root, "AcceptBuyerBtn", "Accept Offer", UDim2.fromOffset(140, 496), UDim2.fromOffset(120, 32))
-	buttons.sellBump = createButton(root, "SellBumpBtn", "Ask +10%", UDim2.fromOffset(12, 496), UDim2.fromOffset(90, 32))
-	buttons.keep = createButton(root, "KeepBtn", "Keep Item", UDim2.fromOffset(270, 496), UDim2.fromOffset(138, 32))
-	buttons.next = createButton(root, "NextBtn", "Next Customer", UDim2.fromOffset(270, 496), UDim2.fromOffset(138, 32))
 
-	for _, name in { "acceptCounter", "findBuyer", "acceptBuyer", "sellBump", "keep", "next" } do
+	-- Sell tactics
+	buttons.smallBump = createButton(root, "SmallBump", "Small Bump", UDim2.fromOffset(12, 464), UDim2.fromOffset(98, 30))
+	buttons.pitch = createButton(root, "Pitch", "Pitch Value", UDim2.fromOffset(116, 464), UDim2.fromOffset(98, 30))
+	buttons.holdFirm = createButton(root, "HoldFirm", "Hold Firm", UDim2.fromOffset(220, 464), UDim2.fromOffset(98, 30))
+	buttons.bluff = createButton(root, "Bluff", "Bluff", UDim2.fromOffset(324, 464), UDim2.fromOffset(104, 30))
+	buttons.acceptSell = createButton(root, "AcceptSell", "Accept Offer", UDim2.fromOffset(12, 500), UDim2.fromOffset(130, 30))
+	buttons.findBuyer = createButton(root, "FindBuyer", "Find Buyer", UDim2.fromOffset(12, 500), UDim2.fromOffset(120, 30))
+	buttons.findAnother = createButton(root, "FindAnother", "Another Buyer", UDim2.fromOffset(148, 500), UDim2.fromOffset(120, 30))
+	buttons.keep = createButton(root, "Keep", "Keep Item", UDim2.fromOffset(276, 500), UDim2.fromOffset(100, 30))
+	buttons.next = createButton(root, "Next", "Next Customer", UDim2.fromOffset(276, 500), UDim2.fromOffset(152, 30))
+
+	local sellOnly = {
+		"smallBump",
+		"pitch",
+		"holdFirm",
+		"bluff",
+		"acceptSell",
+		"findAnother",
+	}
+	for _, name in sellOnly do
 		buttons[name].Visible = false
 	end
+	buttons.next.Visible = false
 end
 
 function UIController:getSnapshot()
 	return currentSnapshot
 end
 
-function UIController:getOfferAmount(): number?
-	local amount = tonumber(offerBox.Text)
-	if not amount then
-		return nil
-	end
-	return math.floor(amount + 0.5)
-end
-
-function UIController:setOfferAmount(amount: number)
-	offerBox.Text = tostring(amount)
-end
-
-function UIController:setHaggleButtonsEnabled(enabled: boolean)
-	haggleButtonsEnabled = enabled
+function UIController:setTacticButtonsEnabled(enabled: boolean)
+	tacticButtonsEnabled = enabled
 	local alpha = if enabled then 0 else 0.45
-	for _, name in { "offer", "lowball", "fair", "ask", "inspect", "acceptCounter", "acceptBuyer", "sellBump" } do
-		local button = buttons[name]
-		if button then
-			button.Active = enabled
-			button.AutoButtonColor = enabled
-			button.BackgroundTransparency = alpha
-		end
+	for _, button in buttons do
+		button.Active = enabled
+		button.AutoButtonColor = enabled
+		button.BackgroundTransparency = alpha
 	end
 end
 
-local function updatePatienceBar(patience: number, maxPatience: number, patienceDelta: number?)
-	local ratio = math.clamp(patience / math.max(maxPatience, 1), 0, 1)
-	patienceBarFill.Size = UDim2.new(ratio, 0, 1, 0)
-
-	if patience <= 30 then
-		patienceBarFill.BackgroundColor3 = Color3.fromRGB(220, 80, 80)
-	elseif patience <= 60 then
-		patienceBarFill.BackgroundColor3 = Color3.fromRGB(220, 180, 70)
+local function updateHeatBar(heat: number, maxHeat: number)
+	local ratio = math.clamp(heat / math.max(maxHeat, 1), 0, 1)
+	heatBarFill.Size = UDim2.new(ratio, 0, 1, 0)
+	if heat >= (HaggleTuning.heatWalkThreshold or 100) then
+		heatBarFill.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+	elseif heat >= (HaggleTuning.heatWarningThreshold or 60) then
+		heatBarFill.BackgroundColor3 = Color3.fromRGB(220, 170, 60)
 	else
-		patienceBarFill.BackgroundColor3 = Color3.fromRGB(90, 200, 120)
-	end
-
-	if patienceDelta and patienceDelta <= -10 then
-		patienceBarBg.BackgroundColor3 = Color3.fromRGB(120, 40, 40)
-		task.delay(0.35, function()
-			patienceBarBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-		end)
+		heatBarFill.BackgroundColor3 = Color3.fromRGB(90, 200, 120)
 	end
 end
 
 function UIController:setPhaseControls(phase: string)
-	local buyHaggle = phase == "Haggling" or phase == "Counter"
+	local buy = phase == "Haggling"
 	local purchased = phase == "Purchased"
-	local sellHaggle = phase == "Selling" or phase == "BuyerCounter"
+	local sell = phase == "Selling"
 	local terminal = phase == "WalkedAway" or phase == "Result"
 
-	offerBox.Visible = buyHaggle or sellHaggle
-	offerBox.PlaceholderText = if sellHaggle then "Your ask (scraps)" else "Offer amount (scraps)"
-
-	buttons.offer.Visible = buyHaggle or sellHaggle
-	buttons.offer.Text = if sellHaggle then "Make Ask" else "Make Offer"
-
-	buttons.inspect.Visible = buyHaggle
-	buttons.lowball.Visible = phase == "Haggling"
-	buttons.fair.Visible = buyHaggle and not sellHaggle
-	buttons.ask.Visible = buyHaggle and not sellHaggle
-	buttons.acceptCounter.Visible = phase == "Counter"
+	for _, name in { "lowball", "split", "flaw", "pressure", "acceptBuy", "pass", "inspectBtn" } do
+		buttons[name].Visible = buy
+	end
+	for _, name in { "smallBump", "pitch", "holdFirm", "bluff", "acceptSell", "findAnother" } do
+		buttons[name].Visible = sell
+	end
 	buttons.findBuyer.Visible = purchased
-	buttons.acceptBuyer.Visible = sellHaggle
-	buttons.sellBump.Visible = sellHaggle
-	buttons.pass.Visible = buyHaggle or sellHaggle
-	buttons.keep.Visible = purchased or sellHaggle
+	buttons.keep.Visible = purchased or sell
 	buttons.next.Visible = terminal
 
-	patienceBarBg.Visible = buyHaggle or sellHaggle
-	labels.patience.Visible = buyHaggle or sellHaggle
-	labels.outcome.Visible = buyHaggle or sellHaggle or purchased
-	labels.inspect.Visible = buyHaggle
-	labels.result.Visible = purchased or sellHaggle or terminal
+	heatBarBg.Visible = buy or sell
+	labels.heat.Visible = buy or sell
+	labels.tell.Visible = buy or sell or purchased
+	labels.inspect.Visible = buy
+	labels.result.Visible = purchased or sell or terminal
 end
 
 function UIController:updateSnapshot(snapshot)
@@ -253,157 +216,132 @@ function UIController:updateSnapshot(snapshot)
 	local cur = currencyLabel(snapshot)
 	self:setPhaseControls(phase)
 
-	local traderLabel = if phase == "Selling" or phase == "BuyerCounter"
+	local isSell = phase == "Selling"
+	labels.customer.Text = if isSell
 		then `Buyer: {snapshot.buyerName or "?"}`
 		else `Seller: {snapshot.customerName or "?"}`
-	labels.customer.Text = traderLabel
+	labels.tell.Text = `Tell: {if isSell then snapshot.buyerTell or "?" else snapshot.sellerTell or "?"}`
 	labels.dialogue.Text = snapshot.dialogue or "..."
-	labels.item.Text = `{snapshot.itemName or "?"} ({snapshot.category or "?"})`
-		.. `\n{snapshot.flavorText or ""}`
+	labels.item.Text = `{snapshot.itemName or "?"} ({snapshot.category or "?"})\n{snapshot.flavorText or ""}`
 
-	local priceLines = {}
-	if snapshot.askingPrice and phase ~= "Selling" and phase ~= "BuyerCounter" then
-		table.insert(priceLines, `Seller ask: {snapshot.askingPrice} {cur}`)
+	local lines = {}
+	if phase == "Haggling" or phase == "Purchased" then
+		if snapshot.currentSellerPrice then
+			table.insert(lines, `Seller price: {snapshot.currentSellerPrice} {cur}`)
+		end
+		if snapshot.originalAskingPrice and snapshot.originalAskingPrice ~= snapshot.currentSellerPrice then
+			table.insert(lines, `Started at: {snapshot.originalAskingPrice} {cur}`)
+		end
 	end
-	if snapshot.counterOffer and (phase == "Counter" or phase == "Haggling") then
-		table.insert(priceLines, `Seller counter: {snapshot.counterOffer} {cur}`)
-	end
-	if snapshot.buyerOffer and (phase == "Selling" or phase == "BuyerCounter" or phase == "Purchased") then
-		table.insert(priceLines, `Buyer offer: {snapshot.buyerOffer} {cur}`)
-	end
-	if snapshot.buyerCounterOffer and phase == "BuyerCounter" then
-		table.insert(priceLines, `Buyer counter: {snapshot.buyerCounterOffer} {cur}`)
-	end
-	if snapshot.requiredNextOffer and (phase == "Counter" or phase == "BuyerCounter") then
-		table.insert(priceLines, `Need at least: {snapshot.requiredNextOffer} {cur}`)
+	if isSell and snapshot.currentBuyerOffer then
+		table.insert(lines, `Buyer offer: {snapshot.currentBuyerOffer} {cur}`)
+		if snapshot.buyerMaximum then
+			table.insert(lines, `Buyer max (~): {snapshot.buyerMaximum} {cur}`)
+		end
 	end
 	if snapshot.estimatedLow and snapshot.estimatedHigh and phase ~= "Result" then
-		table.insert(priceLines, `Estimate: {snapshot.estimatedLow}-{snapshot.estimatedHigh} {cur}`)
+		table.insert(lines, `Estimate: {snapshot.estimatedLow}-{snapshot.estimatedHigh} {cur}`)
 	end
 	if snapshot.trueValue then
-		table.insert(priceLines, `TRUE VALUE: {snapshot.trueValue} {cur} ({snapshot.rarityName or "?"})`)
+		table.insert(lines, `TRUE VALUE: {snapshot.trueValue} {cur} ({snapshot.rarityName or "?"})`)
 	end
 	if snapshot.purchasePrice then
-		table.insert(priceLines, `Paid: {snapshot.purchasePrice} {cur}`)
+		table.insert(lines, `Paid: {snapshot.purchasePrice} {cur}`)
 	end
 	if snapshot.salePrice then
-		table.insert(priceLines, `Sold for: {snapshot.salePrice} {cur}`)
+		table.insert(lines, `Sold: {snapshot.salePrice} {cur}`)
 	end
-	if #priceLines == 0 then
-		table.insert(priceLines, "—")
-	end
-	labels.prices.Text = table.concat(priceLines, "\n")
+	labels.prices.Text = if #lines > 0 then table.concat(lines, "\n") else "—"
 
 	labels.cash.Text = `Your {cur}: {snapshot.playerCash or 0}`
 
-	local isSell = phase == "Selling" or phase == "BuyerCounter"
-	local patience = if isSell then snapshot.buyerPatience else snapshot.patience
-	local maxPatience = if isSell then snapshot.buyerMaxPatience else snapshot.maxPatience
-	patience = patience or maxPatience or HaggleTuning.startingPatience
-	maxPatience = maxPatience or HaggleTuning.startingPatience
-	updatePatienceBar(patience, maxPatience, snapshot.patienceDelta)
-	labels.patience.Text = `{if isSell then "Buyer" else "Seller"} patience: {patience}/{maxPatience}`
-
-	if snapshot.buyRoundCount or snapshot.sellRoundCount then
-		labels.patience.Text ..= ` | Buy rounds: {snapshot.buyRoundCount or 0} Sell: {snapshot.sellRoundCount or 0}`
+	local heat = if isSell then snapshot.buyerHeat or 0 else snapshot.sellerHeat or 0
+	local heatMax = if isSell then snapshot.buyerHeatMax or 100 else snapshot.sellerHeatMax or 100
+	updateHeatBar(heat, heatMax)
+	labels.heat.Text = `{if isSell then "Buyer" else "Seller"} heat: {heat}/{heatMax}`
+	if snapshot.heatWarning then
+		labels.heat.Text ..= ` — {snapshot.heatWarning}`
 	end
 
-	if snapshot.lowballResult then
-		labels.outcome.Text = LOWBALL_DISPLAY[snapshot.lowballResult] or snapshot.lowballResult
-	elseif snapshot.lastOutcome then
-		local display = OUTCOME_DISPLAY[snapshot.lastOutcome] or snapshot.lastOutcome
-		local deltaText = ""
-		if snapshot.patienceDelta and snapshot.patienceDelta < 0 then
-			deltaText = ` ({snapshot.patienceDelta})`
-		end
-		labels.outcome.Text = `Last: {display}{deltaText}`
+	if snapshot.lastTacticResult then
+		local display = TACTIC_RESULT_DISPLAY[snapshot.lastTacticResult] or snapshot.lastTacticResult
+		labels.outcome.Text = `Last: {snapshot.lastTactic or "?"} → {display}`
 	else
 		labels.outcome.Text = ""
 	end
 
-	if snapshot.repeatBlocked then
-		labels.outcome.Text ..= " — raise your amount!"
-	end
-
 	if snapshot.dealSummary then
-		local s = snapshot.dealSummary
-		labels.result.Text = snapshot.resultMessage
-			or `{s.resultText}\nBuy rounds: {s.buyRounds} | Sell rounds: {s.sellRounds} | Inspected: {s.inspected}`
-	elseif snapshot.resultMessage then
-		labels.result.Text = snapshot.resultMessage
+		labels.result.Text = snapshot.dealSummary.resultText or ""
 	elseif snapshot.trueValue and phase == "Purchased" then
-		labels.result.Text = `True value: {snapshot.trueValue} {cur}. Find a buyer or keep.`
+		labels.result.Text = `True value: {snapshot.trueValue} {cur}. Find a buyer.`
 	else
 		labels.result.Text = ""
 	end
 
 	if snapshot.inspected and snapshot.inspectHint then
 		labels.inspect.Text = snapshot.inspectHint
-	elseif phase == "Haggling" or phase == "Counter" then
-		labels.inspect.Text = `Inspect costs {HaggleTuning.inspectCost} {cur}.`
-	end
-
-	if snapshot.itemId and snapshot.itemId ~= lastItemId then
-		lastItemId = snapshot.itemId
-		offerBox.Text = ""
-	end
-
-	if phase == "Haggling" and snapshot.askingPrice and offerBox.Text == "" then
-		self:setOfferAmount(math.floor(snapshot.askingPrice * 0.82))
-	elseif phase == "Counter" and snapshot.counterOffer then
-		self:setOfferAmount(snapshot.counterOffer)
-	elseif (phase == "Selling" or phase == "BuyerCounter") and offerBox.Text == "" then
-		local base = snapshot.buyerCounterOffer or snapshot.buyerOffer or snapshot.trueValue or 0
-		self:setOfferAmount(math.floor(base * 1.15))
+	elseif phase == "Haggling" then
+		labels.inspect.Text = `Inspect ({HaggleTuning.inspectCost} {cur}) helps Point Out Flaw.`
 	end
 end
 
-function UIController:onOffer(callback: () -> ())
-	buttons.offer.MouseButton1Click:Connect(function()
-		if not haggleButtonsEnabled then
+local function connectTactic(name: string, callback: () -> ())
+	buttons[name].MouseButton1Click:Connect(function()
+		if not tacticButtonsEnabled then
 			return
 		end
 		callback()
+	end)
+end
+
+function UIController:onBuyTactic(callback: (string) -> ())
+	connectTactic("lowball", function()
+		callback("lowball")
+	end)
+	connectTactic("split", function()
+		callback("split")
+	end)
+	connectTactic("flaw", function()
+		callback("flaw")
+	end)
+	connectTactic("pressure", function()
+		callback("pressure")
+	end)
+	connectTactic("acceptBuy", function()
+		callback("acceptBuy")
+	end)
+	connectTactic("pass", function()
+		callback("pass")
+	end)
+end
+
+function UIController:onSellTactic(callback: (string) -> ())
+	connectTactic("smallBump", function()
+		callback("smallBump")
+	end)
+	connectTactic("pitch", function()
+		callback("pitch")
+	end)
+	connectTactic("holdFirm", function()
+		callback("holdFirm")
+	end)
+	connectTactic("bluff", function()
+		callback("bluff")
+	end)
+	connectTactic("acceptSell", function()
+		callback("acceptSell")
+	end)
+	connectTactic("findAnother", function()
+		callback("findAnother")
 	end)
 end
 
 function UIController:onInspect(callback: () -> ())
-	buttons.inspect.MouseButton1Click:Connect(callback)
-end
-
-function UIController:onPass(callback: () -> ())
-	buttons.pass.MouseButton1Click:Connect(callback)
-end
-
-function UIController:onAcceptCounter(callback: () -> ())
-	buttons.acceptCounter.MouseButton1Click:Connect(function()
-		if not haggleButtonsEnabled then
-			return
-		end
-		callback()
-	end)
+	buttons.inspectBtn.MouseButton1Click:Connect(callback)
 end
 
 function UIController:onFindBuyer(callback: () -> ())
 	buttons.findBuyer.MouseButton1Click:Connect(callback)
-end
-
-function UIController:onAcceptBuyer(callback: () -> ())
-	buttons.acceptBuyer.MouseButton1Click:Connect(function()
-		if not haggleButtonsEnabled then
-			return
-		end
-		callback()
-	end)
-end
-
-function UIController:onSellBump(callback: () -> ())
-	buttons.sellBump.MouseButton1Click:Connect(function()
-		if not haggleButtonsEnabled then
-			return
-		end
-		callback()
-	end)
 end
 
 function UIController:onKeep(callback: () -> ())
@@ -412,27 +350,6 @@ end
 
 function UIController:onNext(callback: () -> ())
 	buttons.next.MouseButton1Click:Connect(callback)
-end
-
-function UIController:onQuickOffer(callback: (string) -> ())
-	buttons.lowball.MouseButton1Click:Connect(function()
-		if not haggleButtonsEnabled then
-			return
-		end
-		callback("lowball")
-	end)
-	buttons.fair.MouseButton1Click:Connect(function()
-		if not haggleButtonsEnabled then
-			return
-		end
-		callback("fair")
-	end)
-	buttons.ask.MouseButton1Click:Connect(function()
-		if not haggleButtonsEnabled then
-			return
-		end
-		callback("ask")
-	end)
 end
 
 function UIController:Start() end

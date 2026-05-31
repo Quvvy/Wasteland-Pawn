@@ -9,9 +9,19 @@ local REACTIONS = {
 		"Accepted. Don't make me regret it.",
 	},
 	counter = {
+		"I can move a little.",
 		"Not enough. Meet me higher.",
-		"I can do better than that. Try again.",
 		"You're close. Bump your offer.",
+	},
+	counter_risky = {
+		"You're pushing it, but I'm listening.",
+		"Bold. I'll counter.",
+		"Risky. Here's a step toward you.",
+	},
+	reject_greedy = {
+		"That's ridiculous.",
+		"Dream on with that number.",
+		"No. Not even close.",
 	},
 	reject_insult = {
 		"That's insulting.",
@@ -28,6 +38,18 @@ local REACTIONS = {
 		"Done talking. Goodbye.",
 		"Keep your lowball. I'm leaving.",
 	},
+	walkaway_warning = {
+		"One more stunt and I'm gone.",
+		"Last chance to be serious.",
+		"Don't push your luck again.",
+	},
+}
+
+local BUYER_REACTIONS = {
+	counter_safe = { "I can stretch a little.", "Fine. A small bump.", "Alright, I'll move." },
+	counter_risky = { "You're pushing it, but I'm listening.", "Bold ask. Here's a counter.", "Risky. I'll meet you partway." },
+	reject_greedy = { "That's ridiculous.", "Not a chance at that price.", "You're dreaming." },
+	walkaway_warning = { "One more stunt and I'm gone.", "Last chance.", "Don't push me again." },
 }
 
 local function clamp(value: number, minValue: number, maxValue: number): number
@@ -81,13 +103,41 @@ function HaggleMath.getOfferRatioBand(offerRatio: number): string
 	if offerRatio < HaggleTuning.offerRatioInsult then
 		return "insult"
 	elseif offerRatio < HaggleTuning.offerRatioReject then
-		return "low"
+		return "greedy"
+	elseif offerRatio < HaggleTuning.offerRatioRisky then
+		return "risky"
 	elseif offerRatio < HaggleTuning.offerRatioCounter then
+		return "low"
+	elseif offerRatio < HaggleTuning.offerRatioSafe then
 		return "close"
 	elseif offerRatio < HaggleTuning.nearAskAcceptRatio then
 		return "fair"
 	end
 	return "high"
+end
+
+function HaggleMath.getSellAskBand(playerAsk: number, buyerOffer: number, buyerMaximum: number): string
+	if playerAsk <= buyerOffer * (HaggleTuning.sellAskSafeRatio or 1.08) then
+		return "safe"
+	end
+	if playerAsk <= buyerMaximum * (HaggleTuning.sellAskRiskyRatio or 0.94) then
+		return "risky"
+	end
+	return "greedy"
+end
+
+function HaggleMath.getBuyerCategoryMultipliers(buyer, category: string): (number, number)
+	local prefs = buyer.categoryPreferences
+	if not prefs then
+		return 1, 1
+	end
+
+	local entry = prefs[category] or prefs.default
+	if not entry then
+		return 1, 1
+	end
+
+	return entry.open or 1, entry.max or 1
 end
 
 function HaggleMath.calculateAskingPrice(customer, trueValue: number, rng: Random?): number
@@ -110,17 +160,18 @@ function HaggleMath.calculateMinimumAcceptPrice(customer, item, trueValue: numbe
 	local desperation = customer.desperation or 0
 	local knowledge = customer.knowledge or 0
 
-	local floorFromValue = trueValue
-		* (
-			HaggleTuning.minAcceptValueBase
-			+ greed * HaggleTuning.minAcceptGreed
-			- desperation * HaggleTuning.minAcceptDesperation
-			+ knowledge * HaggleTuning.minAcceptKnowledge
-		)
-	local floorFromAsk = askingPrice
-		* (HaggleTuning.minAcceptAskFactor - desperation * 0.14 + greed * 0.1)
+	local valueRatio = HaggleTuning.minAcceptValueBase
+		+ greed * HaggleTuning.minAcceptGreed
+		- desperation * HaggleTuning.minAcceptDesperation
+		+ knowledge * HaggleTuning.minAcceptKnowledge
+	valueRatio = math.clamp(valueRatio, HaggleTuning.minAcceptFloorOfTrue, HaggleTuning.minAcceptCeilingOfTrue)
 
-	return clamp(math.max(floorFromValue, floorFromAsk * 0.48), 1, askingPrice)
+	local floorFromValue = trueValue * valueRatio
+	local floorFromAsk = askingPrice
+		* (HaggleTuning.minAcceptAskFactor - desperation * 0.22 + greed * 0.08)
+
+	local minimum = math.max(floorFromValue, floorFromAsk)
+	return clamp(minimum, math.floor(trueValue * HaggleTuning.minAcceptFloorOfTrue), askingPrice)
 end
 
 function HaggleMath.calculateCounterOffer(
@@ -137,15 +188,17 @@ function HaggleMath.calculateCounterOffer(
 	local desperation = customer.desperation or 0
 
 	local gap = askingPrice - offerAmount
-	local midpoint = (offerAmount + askingPrice) / 2
-	local counter = midpoint + gap * (HaggleTuning.counterMidBias + greed * HaggleTuning.counterGreedBias)
-	counter -= desperation * gap * HaggleTuning.counterDesperationBias
-	counter += random:NextNumber(-3, HaggleTuning.counterJitter)
-	counter = clamp(counter, minimumAccept, askingPrice)
+	local towardPlayer = HaggleTuning.counterTowardPlayerBase
+		+ desperation * HaggleTuning.counterTowardPlayerDesperation
+		- greed * HaggleTuning.counterTowardPlayerGreedPenalty
+	towardPlayer = math.clamp(towardPlayer, HaggleTuning.counterTowardPlayerMin, HaggleTuning.counterTowardPlayerMax)
+
+	local counter = offerAmount + gap * towardPlayer
+	counter += random:NextNumber(-2, HaggleTuning.counterJitter)
 
 	if previousCounter then
-		local slip = math.floor(HaggleTuning.counterDesperationSlip * desperation)
-		counter = math.max(counter, previousCounter - slip)
+		local minDrop = math.max(3, math.floor(gap * HaggleTuning.counterMinDropFromPrevious))
+		counter = math.min(counter, previousCounter - minDrop)
 	end
 
 	return clamp(counter, minimumAccept, askingPrice)
@@ -200,7 +253,7 @@ function HaggleMath.evaluateOffer(customer, item, offerAmount: number, dealState
 			blockAccept = true
 			patienceDelta += patienceLoss(HaggleTuning.patienceLossBelowCounter, temper)
 			outcome = "reject"
-			if temper >= HaggleTuning.lowballInstantWalkawayTemper and random:NextNumber() < 0.4 then
+			if temper >= HaggleTuning.lowballInstantWalkawayTemper and random:NextNumber() < 0.28 then
 				outcome = "walkaway"
 			end
 		elseif dealState.bestOfferAmount and offerAmount < dealState.bestOfferAmount then
@@ -425,7 +478,9 @@ function HaggleMath.getReactionText(customer, outcome: string, offerRatio: numbe
 		if outcome == "accept" and reactions.accept then
 			return pickReaction(reactions.accept, rng)
 		elseif outcome == "counter" then
-			if band == "close" and reactions.counter_close then
+			if band == "risky" and reactions.counter_risky then
+				return pickReaction(reactions.counter_risky, rng)
+			elseif (band == "close" or band == "fair") and reactions.counter_close then
 				return pickReaction(reactions.counter_close, rng)
 			elseif reactions.counter then
 				return pickReaction(reactions.counter, rng)
@@ -433,7 +488,9 @@ function HaggleMath.getReactionText(customer, outcome: string, offerRatio: numbe
 		elseif outcome == "walkaway" and reactions.walkaway then
 			return pickReaction(reactions.walkaway, rng)
 		elseif outcome == "reject" then
-			if band == "insult" and reactions.reject_insult then
+			if (band == "greedy" or band == "insult") and reactions.reject_greedy then
+				return pickReaction(reactions.reject_greedy, rng)
+			elseif band == "insult" and reactions.reject_insult then
 				return pickReaction(reactions.reject_insult, rng)
 			elseif reactions.reject_low then
 				return pickReaction(reactions.reject_low, rng)
@@ -444,11 +501,14 @@ function HaggleMath.getReactionText(customer, outcome: string, offerRatio: numbe
 	if outcome == "accept" then
 		return pickReaction(REACTIONS.accept, rng)
 	elseif outcome == "counter" then
+		if band == "risky" then
+			return pickReaction(REACTIONS.counter_risky, rng)
+		end
 		return pickReaction(REACTIONS.counter, rng)
 	elseif outcome == "walkaway" then
 		return pickReaction(REACTIONS.walkaway, rng)
-	elseif band == "insult" then
-		return pickReaction(REACTIONS.reject_insult, rng)
+	elseif band == "greedy" or band == "insult" then
+		return pickReaction(REACTIONS.reject_greedy, rng)
 	end
 
 	return pickReaction(REACTIONS.reject_low, rng)
@@ -460,23 +520,39 @@ function HaggleMath.getBuyerStartingPatience(buyer): number
 	return HaggleMath.getStartingPatience(buyer)
 end
 
-function HaggleMath.calculateBuyerOpeningOffer(buyer, trueValue: number, rng: Random?): number
+function HaggleMath.calculateBuyerOpeningOffer(buyer, trueValue: number, itemCategory: string?, rng: Random?): number
 	local random = rng or Random.new()
 	local greed = buyer.greed or 0
 	local urgency = buyer.urgency or 0
-	local ratio = HaggleTuning.buyerOfferBaseRatio - greed * HaggleTuning.buyerOfferGreedPenalty + urgency * HaggleTuning.buyerOfferUrgencyBonus
-	ratio += random:NextNumber(-0.05, 0.05)
+	local openMult, _ = HaggleMath.getBuyerCategoryMultipliers(buyer, itemCategory or "")
+
+	local ratio = (
+		HaggleTuning.buyerOfferBaseRatio
+		- greed * HaggleTuning.buyerOfferGreedPenalty
+		+ urgency * HaggleTuning.buyerOfferUrgencyBonus
+	) * openMult
+	ratio += random:NextNumber(-HaggleTuning.buyerOfferJitter, HaggleTuning.buyerOfferJitter)
+
+	if buyer.id == "alien_tourist" then
+		ratio += random:NextNumber(-0.08, 0.14)
+	end
+
 	return clamp(trueValue * ratio, 1, 999999)
 end
 
-function HaggleMath.calculateBuyerMaximum(buyer, trueValue: number): number
+function HaggleMath.calculateBuyerMaximum(buyer, trueValue: number, itemCategory: string?): number
 	local greed = buyer.greed or 0
 	local urgency = buyer.urgency or 0
 	local knowledge = buyer.knowledge or 0
-	local ratio = HaggleTuning.buyerMaximumBaseRatio
+	local _, maxMult = HaggleMath.getBuyerCategoryMultipliers(buyer, itemCategory or "")
+
+	local ratio = (
+		HaggleTuning.buyerMaximumBaseRatio
 		+ urgency * HaggleTuning.buyerMaximumUrgencyBonus
-		- greed * 0.1
+		- greed * HaggleTuning.buyerMaximumGreedPenalty
 		- knowledge * HaggleTuning.buyerMaximumKnowledgePenalty
+	) * maxMult
+
 	return clamp(trueValue * ratio, 1, 999999)
 end
 
@@ -489,31 +565,66 @@ function HaggleMath.calculateBuyerCounterOffer(
 	previousCounter: number?
 ): number
 	local random = rng or Random.new()
-	local gap = playerAsk - buyerOffer
-	local counter = buyerOffer + gap * (HaggleTuning.sellCounterStepRatio + (buyer.urgency or 0) * 0.2)
-	counter += random:NextNumber(-4, 8)
-	counter = clamp(counter, buyerOffer + 1, buyerMaximum)
+	local standingOffer = previousCounter or buyerOffer
+	local gap = playerAsk - standingOffer
+	local urgency = buyer.urgency or 0
+	local greed = buyer.greed or 0
+
+	local towardAsk = HaggleTuning.sellCounterStepRatio
+		+ urgency * HaggleTuning.sellCounterUrgencyBonus
+		- greed * HaggleTuning.sellCounterGreedPenalty
+	towardAsk = math.clamp(towardAsk, 0.45, 0.85)
+
+	local counter = standingOffer + gap * towardAsk
+	counter += random:NextNumber(-2, HaggleTuning.sellCounterMinBump)
 
 	if previousCounter then
-		counter = math.max(counter, previousCounter)
+		local minBump = math.max(HaggleTuning.sellCounterMinBump, math.floor(gap * 0.12))
+		counter = math.max(counter, previousCounter + minBump)
 	end
 
-	return clamp(counter, buyerOffer + 1, buyerMaximum)
+	return clamp(counter, standingOffer + 1, buyerMaximum)
 end
 
-function HaggleMath.getBuyerReactionText(buyer, outcome: string, rng: Random?): string
+function HaggleMath.getBuyerReactionText(buyer, outcome: string, askBand: string?, rng: Random?): string
 	local reactions = buyer.reactions
 	if reactions then
 		if outcome == "accept" and reactions.accept then
 			return pickReaction(reactions.accept, rng)
-		elseif outcome == "counter" and reactions.counter then
-			return pickReaction(reactions.counter, rng)
-		elseif outcome == "walkaway" and reactions.walkaway then
-			return pickReaction(reactions.walkaway, rng)
-		elseif reactions.reject then
-			return pickReaction(reactions.reject, rng)
+		elseif outcome == "counter" then
+			if askBand == "risky" and reactions.counter_risky then
+				return pickReaction(reactions.counter_risky, rng)
+			elseif askBand == "safe" and reactions.counter_safe then
+				return pickReaction(reactions.counter_safe, rng)
+			elseif reactions.counter then
+				return pickReaction(reactions.counter, rng)
+			end
+		elseif outcome == "walkaway" then
+			if askBand == "greedy" and reactions.walkaway_warning then
+				return pickReaction(reactions.walkaway_warning, rng)
+			elseif reactions.walkaway then
+				return pickReaction(reactions.walkaway, rng)
+			end
+		elseif outcome == "reject" then
+			if askBand == "greedy" and reactions.reject_greedy then
+				return pickReaction(reactions.reject_greedy, rng)
+			elseif reactions.reject then
+				return pickReaction(reactions.reject, rng)
+			end
 		end
 	end
+
+	if outcome == "counter" then
+		if askBand == "risky" then
+			return pickReaction(BUYER_REACTIONS.counter_risky, rng)
+		end
+		return pickReaction(BUYER_REACTIONS.counter_safe, rng)
+	elseif outcome == "reject" and askBand == "greedy" then
+		return pickReaction(BUYER_REACTIONS.reject_greedy, rng)
+	elseif outcome == "walkaway" and askBand == "greedy" then
+		return pickReaction(BUYER_REACTIONS.walkaway_warning, rng)
+	end
+
 	return pickReaction(REACTIONS.reject_low, rng)
 end
 
@@ -535,11 +646,11 @@ function HaggleMath.evaluateSellAsk(buyer, trueValue: number, playerAsk: number,
 	local repeatStreak = 0
 	if lastAsk and playerAsk <= lastAsk then
 		repeatStreak = (dealState.sellRepeatStreak or 0) + 1
-		patienceDelta += patienceLoss(HaggleTuning.patienceLossRepeat, temper)
+		patienceDelta += patienceLoss(HaggleTuning.sellPatienceLossRepeat, temper)
 		if repeatStreak >= HaggleTuning.sellRepeatWalkawayAt then
 			outcome = "walkaway"
 			repeatBlocked = true
-			patienceDelta += patienceLoss(HaggleTuning.patienceLossInsult, temper)
+			patienceDelta += patienceLoss(HaggleTuning.sellPatienceLossInsult, temper)
 		elseif repeatStreak >= HaggleTuning.sellRepeatBlockAt then
 			repeatBlocked = true
 		end
@@ -549,12 +660,15 @@ function HaggleMath.evaluateSellAsk(buyer, trueValue: number, playerAsk: number,
 		if playerAsk < dealState.buyerCounterOffer then
 			repeatBlocked = true
 			outcome = "reject"
-			patienceDelta += patienceLoss(HaggleTuning.patienceLossBelowCounter, temper)
-			if temper >= 0.55 and random:NextNumber() < 0.35 then
+			patienceDelta += patienceLoss(HaggleTuning.sellPatienceLossBelowCounter, temper)
+			if temper >= 0.65 and random:NextNumber() < 0.22 then
 				outcome = "walkaway"
 			end
 		end
 	end
+
+	local standingOffer = dealState.buyerCounterOffer or buyerOffer
+	local askBand = HaggleMath.getSellAskBand(playerAsk, standingOffer, buyerMaximum)
 
 	if not repeatBlocked then
 		if playerAsk <= buyerOffer then
@@ -581,12 +695,12 @@ function HaggleMath.evaluateSellAsk(buyer, trueValue: number, playerAsk: number,
 					random,
 					dealState.buyerCounterOffer
 				)
-				patienceDelta += patienceLoss(HaggleTuning.patienceLossCounter, temper)
+				patienceDelta += patienceLoss(HaggleTuning.sellPatienceLossCounter, temper)
 			end
 		else
 			outcome = "reject"
-			patienceDelta += patienceLoss(HaggleTuning.patienceLossInsult, temper)
-			if temper >= 0.6 and random:NextNumber() < 0.35 + temper * 0.2 then
+			patienceDelta += patienceLoss(HaggleTuning.sellPatienceLossInsult, temper)
+			if askBand == "greedy" and temper >= 0.5 and random:NextNumber() < 0.2 + temper * 0.15 then
 				outcome = "walkaway"
 			end
 		end
@@ -598,9 +712,10 @@ function HaggleMath.evaluateSellAsk(buyer, trueValue: number, playerAsk: number,
 		counterOffer = nil
 	end
 
+	local currency = HaggleTuning.currencyName or "scraps"
 	local dialogueOverride = nil
-	if dealState.phase == "BuyerCounter" and dealState.buyerCounterOffer and playerAsk > dealState.buyerCounterOffer then
-		dialogueOverride = `I won't go above {dealState.buyerCounterOffer} scraps.`
+	if (outcome == "reject" or outcome == "walkaway") and playerAsk > buyerMaximum then
+		dialogueOverride = `I won't go above {buyerMaximum} {currency}.`
 	end
 
 	local salePrice = nil
@@ -611,7 +726,7 @@ function HaggleMath.evaluateSellAsk(buyer, trueValue: number, playerAsk: number,
 	return {
 		outcome = outcome,
 		patienceDelta = patienceDelta,
-		reactionText = dialogueOverride or HaggleMath.getBuyerReactionText(buyer, outcome, rng),
+		reactionText = dialogueOverride or HaggleMath.getBuyerReactionText(buyer, outcome, askBand, rng),
 		dialogueOverride = dialogueOverride,
 		buyerCounterOffer = counterOffer,
 		salePrice = salePrice,
