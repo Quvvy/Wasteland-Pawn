@@ -8,6 +8,7 @@ local itemList = {
 		category = "Scrap",
 		baseValue = 12,
 		flavorText = "Rust included free of charge.",
+		traits = { "Damaged", "Useful" },
 	},
 	{
 		id = "scrap_hubcap",
@@ -15,6 +16,7 @@ local itemList = {
 		category = "Scrap",
 		baseValue = 18,
 		flavorText = "Still roundish. Mostly.",
+		traits = { "Damaged", "Shiny" },
 	},
 	{
 		id = "scrap_wire_bundle",
@@ -22,6 +24,7 @@ local itemList = {
 		category = "Scrap",
 		baseValue = 28,
 		flavorText = "Someone already stripped half of it.",
+		traits = { "Useful", "Damaged" },
 	},
 	{
 		id = "scrap_rusted_gear",
@@ -29,6 +32,7 @@ local itemList = {
 		category = "Scrap",
 		baseValue = 22,
 		flavorText = "Teeth filed down for... reasons.",
+		traits = { "Damaged", "Weird" },
 	},
 	{
 		id = "scrap_empty_can_stack",
@@ -36,6 +40,7 @@ local itemList = {
 		category = "Scrap",
 		baseValue = 9,
 		flavorText = "Dead-era soup labels faded beyond reading.",
+		traits = { "Damaged", "Collectible" },
 	},
 	{
 		id = "scrap_broken_shovel",
@@ -43,6 +48,7 @@ local itemList = {
 		category = "Scrap",
 		baseValue = 15,
 		flavorText = "Handle snapped off. Handle probably worth more.",
+		traits = { "Damaged", "Useful", "Military" },
 	},
 
 	-- Old World Tech
@@ -52,6 +58,7 @@ local itemList = {
 		category = "Old World Tech",
 		baseValue = 55,
 		flavorText = "Picks up static and distant ads.",
+		traits = { "Useful", "Collectible" },
 	},
 	{
 		id = "tech_solar_cell",
@@ -59,6 +66,7 @@ local itemList = {
 		category = "Old World Tech",
 		baseValue = 70,
 		flavorText = "Works on sunny days. Today is not sunny.",
+		traits = { "Damaged", "Useful", "Shiny" },
 	},
 	{
 		id = "tech_flashlight",
@@ -66,6 +74,7 @@ local itemList = {
 		category = "Old World Tech",
 		baseValue = 42,
 		flavorText = "Heavy. Reliable. Battery not included.",
+		traits = { "Military", "Useful" },
 	},
 	{
 		id = "tech_gps_unit",
@@ -73,6 +82,7 @@ local itemList = {
 		category = "Old World Tech",
 		baseValue = 88,
 		flavorText = "Screen shows one blinking pixel.",
+		traits = { "Damaged", "Useful", "Collectible" },
 	},
 	{
 		id = "tech_med_scanner",
@@ -80,6 +90,7 @@ local itemList = {
 		category = "Old World Tech",
 		baseValue = 120,
 		flavorText = "Beeps ominously near rads.",
+		traits = { "Useful", "Military", "Weird" },
 	},
 	{
 		id = "tech_drone_wing",
@@ -87,6 +98,7 @@ local itemList = {
 		category = "Old World Tech",
 		baseValue = 95,
 		flavorText = "Corporate logo half melted off.",
+		traits = { "Damaged", "Collectible", "Useful" },
 	},
 
 	-- Alien Tech
@@ -96,6 +108,7 @@ local itemList = {
 		category = "Alien Tech",
 		baseValue = 140,
 		flavorText = "Warm. Hums in C-sharp.",
+		traits = { "Alien", "Shiny", "Weird" },
 	},
 	{
 		id = "alien_memory_crystal",
@@ -103,6 +116,7 @@ local itemList = {
 		category = "Alien Tech",
 		baseValue = 165,
 		flavorText = "Shows flickers of someone else's dream.",
+		traits = { "Alien", "Collectible", "Weird" },
 	},
 	{
 		id = "alien_translation_chip",
@@ -110,6 +124,7 @@ local itemList = {
 		category = "Alien Tech",
 		baseValue = 110,
 		flavorText = "Occasionally whispers compliments.",
+		traits = { "Alien", "Useful", "Weird" },
 	},
 	{
 		id = "alien_gravity_disk",
@@ -117,6 +132,7 @@ local itemList = {
 		category = "Alien Tech",
 		baseValue = 200,
 		flavorText = "Makes small objects float. Including coins.",
+		traits = { "Alien", "Shiny", "Useful" },
 	},
 	{
 		id = "alien_bio_gel",
@@ -124,6 +140,7 @@ local itemList = {
 		category = "Alien Tech",
 		baseValue = 130,
 		flavorText = "Smells like rain on metal.",
+		traits = { "Alien", "Useful" },
 	},
 	{
 		id = "alien_signal_beacon",
@@ -131,6 +148,7 @@ local itemList = {
 		category = "Alien Tech",
 		baseValue = 175,
 		flavorText = "Still pinging something very far away.",
+		traits = { "Alien", "Damaged", "Weird" },
 	},
 
 	-- Cursed Junk
@@ -140,6 +158,7 @@ local itemList = {
 		category = "Cursed Junk",
 		baseValue = 35,
 		flavorText = "Plays a lullaby when nobody is listening.",
+		traits = { "Cursed", "Collectible", "Weird" },
 	},
 	{
 		id = "cursed_mirror_shard",
@@ -147,6 +166,7 @@ local itemList = {
 		category = "Cursed Junk",
 		baseValue = 48,
 		flavorText = "Reflection lags by half a second.",
+		traits = { "Cursed", "Shiny", "Damaged" },
 	},
 	{
 		id = "cursed_doll_head",
@@ -154,6 +174,7 @@ local itemList = {
 		category = "Cursed Junk",
 		baseValue = 40,
 		flavorText = "Eyes follow inventory counts.",
+		traits = { "Cursed", "Collectible", "Weird" },
 	},
 	{
 		id = "cursed_ashtray",
@@ -161,6 +182,7 @@ local itemList = {
 		category = "Cursed Junk",
 		baseValue = 30,
 		flavorText = "Ash reappears every morning.",
+		traits = { "Cursed", "Useful", "Weird" },
 	},
 	{
 		id = "cursed_pocket_watch",
@@ -168,6 +190,7 @@ local itemList = {
 		category = "Cursed Junk",
 		baseValue = 62,
 		flavorText = "Hands twitch at midnight.",
+		traits = { "Cursed", "Collectible", "Shiny" },
 	},
 	{
 		id = "cursed_lucky_coin",
@@ -175,6 +198,7 @@ local itemList = {
 		category = "Cursed Junk",
 		baseValue = 25,
 		flavorText = "Luck is subjective. Mostly bad.",
+		traits = { "Cursed", "Shiny", "Fake" },
 	},
 
 	-- Collectibles
@@ -184,6 +208,7 @@ local itemList = {
 		category = "Collectibles",
 		baseValue = 80,
 		flavorText = "Nodding approval not guaranteed.",
+		traits = { "Collectible", "Shiny" },
 	},
 	{
 		id = "collect_holo_poster",
@@ -191,6 +216,7 @@ local itemList = {
 		category = "Collectibles",
 		baseValue = 90,
 		flavorText = "Advertises a city that no longer exists.",
+		traits = { "Collectible", "Shiny", "Fake" },
 	},
 	{
 		id = "collect_stamp_book",
@@ -198,6 +224,7 @@ local itemList = {
 		category = "Collectibles",
 		baseValue = 75,
 		flavorText = "One stamp depicts a rocket. It is missing.",
+		traits = { "Collectible", "Damaged" },
 	},
 	{
 		id = "collect_gold_lighter",
@@ -205,6 +232,7 @@ local itemList = {
 		category = "Collectibles",
 		baseValue = 110,
 		flavorText = "Engraved initials: J.R.",
+		traits = { "Collectible", "Shiny", "Useful" },
 	},
 	{
 		id = "collect_model_car",
@@ -212,6 +240,7 @@ local itemList = {
 		category = "Collectibles",
 		baseValue = 65,
 		flavorText = "Paint chipped. Nostalgia intact.",
+		traits = { "Collectible", "Damaged", "Shiny" },
 	},
 	{
 		id = "collect_signed_ball",
@@ -219,6 +248,7 @@ local itemList = {
 		category = "Collectibles",
 		baseValue = 50,
 		flavorText = "Signature faded to a smudge.",
+		traits = { "Collectible", "Fake", "Weird" },
 	},
 }
 

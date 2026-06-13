@@ -101,4 +101,62 @@ function NpcTells.inspectBonusTell(customer, rarityId: string, inflated: boolean
 	return nil
 end
 
+function NpcTells.getCustomerReadHint(customer): string
+	if customer.id == "desperate_survivor" then
+		return "Read: pressure or a careful lowball may work."
+	elseif customer.id == "shady_scammer" then
+		return "Read: inspect or point out flaws."
+	elseif customer.id == "rich_collector" then
+		return "Read: play fair. Avoid lowball pressure."
+	elseif customer.id == "robot_trader" then
+		return "Read: facts beat emotion."
+	elseif customer.id == "mutant_drifter" then
+		return "Read: move fast. Pressure can work, but heat rises quickly."
+	elseif customer.id == "nervous_rookie" then
+		return "Read: easy to shake, easy to scare off."
+	elseif customer.id == "soldier" then
+		return "Read: split fairly. Do not pressure."
+	elseif customer.id == "junk_dealer" then
+		return "Read: knows junk. Use facts, not intimidation."
+	elseif customer.id == "alien_tourist" then
+		return "Read: unpredictable. Weird logic may work."
+	elseif customer.id == "silent_stranger" then
+		return "Read: hard to move. Keep it clean."
+	end
+
+	if (customer.scamBias or 0) >= 0.4 then
+		return "Read: point out flaws may work."
+	elseif (customer.desperation or 0) >= 0.7 then
+		return "Read: emotional leverage may work."
+	elseif (customer.knowledge or 0) >= 0.7 then
+		return "Read: avoid risky nonsense."
+	end
+
+	return "Read: start safe, then decide."
+end
+
+function NpcTells.getBuyerReadHint(buyer, itemCategory: string?): string
+	if buyer.id == "cheap_scavenger" then
+		return "Read: small bumps only. Bluff likely fails."
+	elseif buyer.id == "rich_collector" then
+		if itemCategory == "Collectibles" or itemCategory == "Cursed Junk" then
+			return "Read: pitch value, then hold firm."
+		end
+		return "Read: likes a good pitch, hates obvious bluffs."
+	elseif buyer.id == "desperate_mechanic" then
+		if itemCategory == "Scrap" or itemCategory == "Old World Tech" then
+			return "Read: pitch the practical value."
+		end
+		return "Read: urgency helps, but category still matters."
+	elseif buyer.id == "alien_tourist" then
+		return "Read: pitch or bluff can work on strange items."
+	elseif buyer.id == "robot_appraiser" then
+		return "Read: numbers only. Bluff likely fails."
+	elseif buyer.id == "black_market_dealer" then
+		return "Read: test them, then hold firm."
+	end
+
+	return "Read: match the pitch to the buyer."
+end
+
 return NpcTells

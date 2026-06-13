@@ -8,8 +8,8 @@ local HaggleTuning = {
 	autoNextDelayResult = 2.5,
 	autoNextDelayPass = 1.5,
 
-	passPenaltyCaps = 5,
-	buyerRerollCost = 10,
+	passPenaltyCaps = 0,
+	buyerRerollCost = 0,
 	walkawayPenaltyCaps = 0,
 	dealCooldownSeconds = 0,
 
@@ -17,6 +17,9 @@ local HaggleTuning = {
 	heatMax = 100,
 	heatWarningThreshold = 60,
 	heatWalkThreshold = 100,
+	finalOfferHeatThreshold = 78,
+	leverageMax = 100,
+	confidenceMax = 100,
 
 	-- Seller init
 	askingMarkupBase = 1.14,

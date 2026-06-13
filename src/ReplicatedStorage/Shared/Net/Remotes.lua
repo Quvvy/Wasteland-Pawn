@@ -7,6 +7,9 @@ local FOLDER_NAME = "WastelandPawnRemotes"
 
 local REMOTE_DEFINITIONS = {
 	DealStateUpdate = "RemoteEvent",
+	ShiftStateUpdate = "RemoteEvent",
+	StartShift = "RemoteFunction",
+	GetShiftOptions = "RemoteFunction",
 	UseBuyTactic = "RemoteFunction",
 	UseSellTactic = "RemoteFunction",
 	InspectItem = "RemoteFunction",

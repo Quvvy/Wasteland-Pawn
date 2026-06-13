@@ -97,6 +97,14 @@ function DealController:_bindUi()
 	UIController:onNext(function()
 		invokeRemote("StartDeal")
 	end)
+
+	UIController:onStartShift(function(shiftId: string)
+		local ok, result = invokeRemote("StartShift", shiftId)
+		if ok and result and result.ok then
+			UIController:updateShiftSnapshot(result.snapshot)
+			invokeRemote("StartDeal")
+		end
+	end)
 end
 
 function DealController:Start()
@@ -105,8 +113,16 @@ function DealController:Start()
 		UIController:updateSnapshot(snapshot)
 	end)
 
+	local shiftUpdate = Remotes.get("ShiftStateUpdate") :: RemoteEvent
+	shiftUpdate.OnClientEvent:Connect(function(snapshot)
+		UIController:updateShiftSnapshot(snapshot)
+	end)
+
 	task.defer(function()
-		invokeRemote("StartDeal")
+		local ok, result = invokeRemote("GetShiftOptions")
+		if ok and result and result.ok then
+			UIController:updateShiftSnapshot({ active = false, ended = false })
+		end
 	end)
 end
 

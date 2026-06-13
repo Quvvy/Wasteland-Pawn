@@ -15,6 +15,7 @@ local DataService = require(script.Parent.DataService)
 local InventoryService = require(script.Parent.InventoryService)
 local CustomerService = require(script.Parent.CustomerService)
 local BuyerService = require(script.Parent.BuyerService)
+local ShiftService = require(script.Parent.ShiftService)
 
 local DealService = {}
 
@@ -44,6 +45,21 @@ local playerLastActionAt: { [Player]: number } = {}
 
 local function currencyWord(): string
 	return HaggleTuning.currencyName or "scraps"
+end
+
+local function traitsText(traits): string
+	if type(traits) ~= "table" or #traits == 0 then
+		return "None"
+	end
+	return table.concat(traits, ", ")
+end
+
+local function formatSignedAmount(amount: number?): string
+	local value = amount or 0
+	if value > 0 then
+		return `+{value}`
+	end
+	return tostring(value)
 end
 
 local function buyerInterestFor(buyer, category: string?): string?
@@ -187,13 +203,49 @@ function DealService:_pushState(player: Player)
 	(Remotes.get("DealStateUpdate") :: RemoteEvent):FireClient(player, self:_buildSnapshot(player, deal))
 end
 
-function DealService:_recordTactic(deal, tacticId: string, result: any)
+function DealService:_recordTactic(deal, tacticId: string, result: any, side: string)
 	deal.lastTactic = tacticId
 	deal.lastTacticResult = result.outcome
 	if not deal.tacticsUsed then
 		deal.tacticsUsed = {}
 	end
 	table.insert(deal.tacticsUsed, tacticId)
+
+	local usedTactics = if side == "buy" then deal.usedBuyTactics else deal.usedSellTactics
+	usedTactics[tacticId] = (usedTactics[tacticId] or 0) + 1
+end
+
+function DealService:_applyBuyResult(deal, result)
+	deal.currentSellerPrice = result.newPrice
+	deal.askingPrice = result.newPrice
+	deal.sellerHeat = result.newHeat
+	deal.sellerLeverage = result.newLeverage or deal.sellerLeverage
+	deal.sellerConfidence = result.newConfidence or deal.sellerConfidence
+	deal.sellerState = result.newState or deal.sellerState
+	deal.sellerFinalOffer = result.finalOffer or deal.sellerFinalOffer
+	deal.heatWarning = result.warning
+end
+
+function DealService:_applySellResult(deal, result)
+	deal.currentBuyerOffer = result.newPrice
+	deal.buyerOffer = result.newPrice
+	deal.buyerHeat = result.newHeat
+	deal.buyerLeverage = result.newLeverage or deal.buyerLeverage
+	deal.buyerConfidence = result.newConfidence or deal.buyerConfidence
+	deal.buyerState = result.newState or deal.buyerState
+	deal.buyerFinalOffer = result.finalOffer or deal.buyerFinalOffer
+	deal.heatWarning = result.warning
+end
+
+function DealService:_logTacticDebug(player: Player, side: string, tacticId: string, deal, result)
+	if not RunService:IsStudio() then
+		return
+	end
+
+	local npc = if side == "buy" then deal.customer else deal.buyer
+	print(
+		`[WastelandPawn] TACTIC {side} | player={player.Name} npc={npc and npc.id or "?"} tactic={tacticId} fit={string.format("%.2f", result.fit or 0)} repeat={result.repeatCount or 0} leverage={result.oldLeverage or 0}->{result.newLeverage or "?"} confidence={result.oldConfidence or 0}->{result.newConfidence or "?"} heat={result.oldHeat or 0}->{result.newHeat or "?"} state={result.oldState or "?"}->{result.newState or "?"} priceDelta={result.priceDelta or 0} final={result.finalOffer or false} walk={result.walkedAway or false} reason={result.finalReason or "-"}`
+	)
 end
 
 function DealService:_initDealState(customer, item, hiddenOutcome, askingPrice, minimumAccept, estimatedLow, estimatedHigh, rng)
@@ -216,11 +268,19 @@ function DealService:_initDealState(customer, item, hiddenOutcome, askingPrice, 
 		inspectHint = nil,
 		sellerHeat = 0,
 		sellerHeatMax = HaggleTuning.heatMax,
+		sellerLeverage = 0,
+		sellerConfidence = TacticHaggleMath.getStartingSellerConfidence(customer),
+		sellerState = "Open",
+		sellerFinalOffer = false,
 		sellerTell = NpcTells.forCustomer(customer, rng),
+		sellerReadHint = NpcTells.getCustomerReadHint(customer),
 		buyerTell = nil,
+		buyerReadHint = nil,
 		heatWarning = nil,
 		buyRoundCount = 0,
 		sellRoundCount = 0,
+		usedBuyTactics = {},
+		usedSellTactics = {},
 		tacticsUsed = {},
 		lastTactic = nil,
 		lastTacticResult = nil,
@@ -233,6 +293,10 @@ function DealService:_initDealState(customer, item, hiddenOutcome, askingPrice, 
 		buyerOpeningOffer = nil,
 		buyerMaximum = nil,
 		buyerInterest = nil,
+		buyerLeverage = 0,
+		buyerConfidence = 0,
+		buyerState = "Open",
+		buyerFinalOffer = false,
 		buyerHeat = 0,
 		buyerHeatMax = HaggleTuning.heatMax,
 		dealSummary = nil,
@@ -256,6 +320,7 @@ function DealService:_buildSnapshot(player: Player, deal)
 		itemId = deal.item.id,
 		itemName = deal.item.displayName,
 		category = deal.item.category,
+		traits = deal.item.traits or {},
 		flavorText = deal.item.flavorText,
 		askingPrice = deal.currentSellerPrice,
 		currentSellerPrice = deal.currentSellerPrice,
@@ -268,10 +333,20 @@ function DealService:_buildSnapshot(player: Player, deal)
 		playerCash = DataService:getCash(player),
 		sellerHeat = deal.sellerHeat,
 		sellerHeatMax = deal.sellerHeatMax,
+		sellerLeverage = deal.sellerLeverage,
+		sellerConfidence = deal.sellerConfidence,
+		sellerState = deal.sellerState,
+		sellerFinalOffer = deal.sellerFinalOffer,
 		buyerHeat = deal.buyerHeat,
 		buyerHeatMax = deal.buyerHeatMax,
+		buyerLeverage = deal.buyerLeverage,
+		buyerConfidence = deal.buyerConfidence,
+		buyerState = deal.buyerState,
+		buyerFinalOffer = deal.buyerFinalOffer,
 		sellerTell = deal.sellerTell,
+		sellerReadHint = deal.sellerReadHint,
 		buyerTell = deal.buyerTell,
+		buyerReadHint = deal.buyerReadHint,
 		heatWarning = deal.heatWarning,
 		inspected = deal.inspected,
 		inspectHint = deal.inspectHint,
@@ -356,6 +431,11 @@ function DealService:useBuyTactic(player: Player, tacticId: any)
 		estimateInflated = deal.estimateInflated,
 		rarityId = deal.hiddenOutcome.rarityId,
 		lastTactic = deal.lastTactic,
+		usedTactics = deal.usedBuyTactics,
+		leverage = deal.sellerLeverage,
+		confidence = deal.sellerConfidence,
+		state = deal.sellerState,
+		finalOffer = deal.sellerFinalOffer,
 		rng = self:_getRng(player),
 	}
 
@@ -364,7 +444,9 @@ function DealService:useBuyTactic(player: Player, tacticId: any)
 		return result
 	end
 
-	self:_recordTactic(deal, tacticId, result)
+	self:_recordTactic(deal, tacticId, result, "buy")
+	self:_applyBuyResult(deal, result)
+	self:_logTacticDebug(player, "buy", tacticId, deal, result)
 
 	if result.walkedAway then
 		return self:_handleBuyWalkaway(player, deal, result)
@@ -379,10 +461,6 @@ function DealService:useBuyTactic(player: Player, tacticId: any)
 		deal.inspectHint = "They slipped - estimate tightened."
 	end
 
-	deal.currentSellerPrice = result.newPrice
-	deal.askingPrice = result.newPrice
-	deal.sellerHeat = result.newHeat
-	deal.heatWarning = result.warning
 	deal.dialogue = result.dialogue
 	if result.warning then
 		deal.dialogue ..= ` {result.warning}`
@@ -459,6 +537,7 @@ function DealService:_completePurchase(player: Player, price: number, deal)
 		itemId = deal.item.id,
 		displayName = deal.item.displayName,
 		category = deal.item.category,
+		traits = deal.item.traits or {},
 		rarityId = deal.hiddenOutcome.rarityId,
 		trueValue = deal.hiddenOutcome.trueValue,
 		purchasePrice = price,
@@ -517,7 +596,13 @@ function DealService:_beginBuyerNegotiation(deal, buyer, rng: Random)
 	deal.buyerMaximum = maximum
 	deal.buyerHeat = 0
 	deal.buyerHeatMax = HaggleTuning.heatMax
+	deal.buyerLeverage = 0
+	deal.buyerConfidence = TacticHaggleMath.getStartingBuyerConfidence(buyer)
+	deal.buyerState = "Open"
+	deal.buyerFinalOffer = false
+	deal.usedSellTactics = {}
 	deal.buyerTell = NpcTells.forBuyer(buyer, category, rng)
+	deal.buyerReadHint = NpcTells.getBuyerReadHint(buyer, category)
 	deal.buyerInterest = buyerInterestFor(buyer, category)
 	deal.phase = "Selling"
 	deal.heatWarning = nil
@@ -552,7 +637,13 @@ function DealService:useSellTactic(player: Player, tacticId: any)
 		buyerHeat = deal.buyerHeat,
 		buyerHeatMax = deal.buyerHeatMax,
 		inspected = deal.inspected,
+		rarityId = deal.hiddenOutcome.rarityId,
 		lastTactic = deal.lastTactic,
+		usedTactics = deal.usedSellTactics,
+		leverage = deal.buyerLeverage,
+		confidence = deal.buyerConfidence,
+		state = deal.buyerState,
+		finalOffer = deal.buyerFinalOffer,
 		rng = self:_getRng(player),
 	}
 
@@ -561,24 +652,29 @@ function DealService:useSellTactic(player: Player, tacticId: any)
 		return result
 	end
 
-	self:_recordTactic(deal, tacticId, result)
+	self:_recordTactic(deal, tacticId, result, "sell")
+	self:_applySellResult(deal, result)
+	self:_logTacticDebug(player, "sell", tacticId, deal, result)
 
 	if result.walkedAway then
 		deal.phase = "Purchased"
 		deal.buyer = nil
 		deal.currentBuyerOffer = nil
 		deal.buyerOffer = nil
+		deal.buyerInterest = nil
+		deal.buyerTell = nil
+		deal.buyerReadHint = nil
 		deal.buyerHeat = 0
+		deal.buyerLeverage = 0
+		deal.buyerConfidence = 0
+		deal.buyerState = "Open"
+		deal.buyerFinalOffer = false
 		deal.dialogue = `{result.dialogue} Find another buyer?`
 		deal.heatWarning = nil
 		self:_pushState(player)
 		return { ok = true, snapshot = self:_buildSnapshot(player, deal), tacticResult = result }
 	end
 
-	deal.currentBuyerOffer = result.newPrice
-	deal.buyerOffer = result.newPrice
-	deal.buyerHeat = result.newHeat
-	deal.heatWarning = result.warning
 	deal.dialogue = result.dialogue
 	if result.warning then
 		deal.dialogue ..= ` {result.warning}`
@@ -598,7 +694,7 @@ function DealService:_completeSale(player: Player, deal, salePrice: number)
 	end
 
 	deal.salePrice = salePrice
-	local profit = salePrice - (deal.purchasePrice or 0)
+	local baseProfit = salePrice - (deal.purchasePrice or 0)
 	local rarity = Rarities[deal.hiddenOutcome.rarityId]
 
 	deal.dealSummary = {
@@ -609,6 +705,7 @@ function DealService:_completeSale(player: Player, deal, salePrice: number)
 		buyerId = deal.buyer and deal.buyer.id,
 		buyerTell = deal.buyerTell,
 		itemName = deal.item.displayName,
+		traits = deal.item.traits or {},
 		rarityId = deal.hiddenOutcome.rarityId,
 		rarityName = rarity and rarity.displayName,
 		trueValue = deal.hiddenOutcome.trueValue,
@@ -618,7 +715,10 @@ function DealService:_completeSale(player: Player, deal, salePrice: number)
 		buyerOpeningOffer = deal.buyerOpeningOffer,
 		buyerMaximum = deal.buyerMaximum,
 		salePrice = salePrice,
-		profit = profit,
+		baseProfit = baseProfit,
+		bonuses = {},
+		totalProfit = baseProfit,
+		profit = baseProfit,
 		buyRounds = deal.buyRoundCount,
 		sellRounds = deal.sellRoundCount,
 		inspected = deal.inspected,
@@ -652,6 +752,7 @@ function DealService:passDeal(player: Player)
 	local _, costMessage = self:_spendFrictionCost(player, HaggleTuning.passPenaltyCaps or 0, "for passing", false)
 	deal.phase = "WalkedAway"
 	deal.dialogue = if costMessage then `You let them walk. {costMessage}` else "You let them walk."
+	deal.dealSummary = self:_buildNoProfitSummary(deal, "Passed on seller")
 	self:_pushState(player)
 	self:_scheduleNextDeal(player, HaggleTuning.autoNextDelayPass, deal)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
@@ -660,6 +761,7 @@ end
 function DealService:_handleBuyWalkaway(player: Player, deal, result)
 	deal.phase = "WalkedAway"
 	deal.dialogue = result.dialogue
+	deal.dealSummary = self:_buildNoProfitSummary(deal, "Seller walked away")
 	self:_pushState(player)
 	self:_scheduleNextDeal(player, HaggleTuning.autoNextDelayWalkedAway, deal)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
@@ -686,16 +788,27 @@ function DealService:keepItem(player: Player, instanceId: any)
 		sellerTell = deal.sellerTell,
 		buyerName = deal.buyer and deal.buyer.displayName or "none",
 		buyerId = deal.buyer and deal.buyer.id,
+		buyerTell = deal.buyerTell,
 		itemName = deal.item.displayName,
+		traits = deal.item.traits or entry.traits or {},
 		rarityName = rarity and rarity.displayName,
 		trueValue = deal.hiddenOutcome.trueValue,
+		sellerAsk = deal.originalAskingPrice,
+		sellerMinimum = deal.minimumAccept,
 		purchasePrice = deal.purchasePrice,
+		buyerOpeningOffer = deal.buyerOpeningOffer,
+		buyerMaximum = deal.buyerMaximum,
 		salePrice = nil,
+		baseProfit = paperProfit,
+		bonuses = {},
+		totalProfit = paperProfit,
 		profit = paperProfit,
 		buyRounds = deal.buyRoundCount,
 		sellRounds = deal.sellRoundCount,
 		inspected = deal.inspected,
 		tacticsUsed = table.concat(deal.tacticsUsed or {}, ", "),
+		finalSellerHeat = deal.sellerHeat,
+		finalBuyerHeat = deal.buyerHeat,
 	}
 	deal.dealSummary.resultText = self:_formatDealSummaryText(deal.dealSummary)
 	self:_logDealSummary(player, deal)
@@ -708,6 +821,16 @@ function DealService:keepItem(player: Player, instanceId: any)
 end
 
 function DealService:_scheduleNextDeal(player: Player, delay: number, deal)
+	local shift = ShiftService:getShift(player)
+	if shift and not shift.ended then
+		ShiftService:recordDealResult(player, deal.dealSummary)
+	end
+
+	if not ShiftService:shouldContinueShift(player) then
+		playerNextDealAt[player] = nil
+		return
+	end
+
 	self:_setDealCooldown(player)
 	task.delay(delay, function()
 		if player.Parent and activeDeals[player] == deal then
@@ -717,17 +840,65 @@ function DealService:_scheduleNextDeal(player: Player, delay: number, deal)
 	end)
 end
 
+function DealService:_buildNoProfitSummary(deal, reason: string)
+	local rarity = Rarities[deal.hiddenOutcome.rarityId]
+	return {
+		sellerName = deal.customer.displayName,
+		sellerId = deal.customer.id,
+		sellerTell = deal.sellerTell,
+		buyerName = "none",
+		buyerId = nil,
+		buyerTell = nil,
+		itemName = deal.item.displayName,
+		traits = deal.item.traits or {},
+		rarityId = deal.hiddenOutcome.rarityId,
+		rarityName = rarity and rarity.displayName,
+		trueValue = deal.hiddenOutcome.trueValue,
+		sellerAsk = deal.originalAskingPrice,
+		sellerMinimum = deal.minimumAccept,
+		purchasePrice = nil,
+		buyerOpeningOffer = nil,
+		buyerMaximum = nil,
+		salePrice = nil,
+		baseProfit = 0,
+		bonuses = {},
+		totalProfit = 0,
+		profit = 0,
+		buyRounds = deal.buyRoundCount,
+		sellRounds = deal.sellRoundCount,
+		inspected = deal.inspected,
+		tacticsUsed = table.concat(deal.tacticsUsed or {}, ", "),
+		finalSellerHeat = deal.sellerHeat,
+		finalBuyerHeat = deal.buyerHeat,
+		resultReason = reason,
+		resultText = `{reason}. Profit: {formatSignedAmount(0)} {currencyWord()}`,
+	}
+end
+
 function DealService:_formatDealSummaryText(summary)
 	local cur = currencyWord()
 	local lines = {}
 	if summary.salePrice then
-		table.insert(lines, `Sold for {summary.salePrice} {cur}. Profit: {summary.profit} {cur}`)
+		table.insert(lines, `Bought for: {summary.purchasePrice or 0} {cur}`)
+		table.insert(lines, `Sold for: {summary.salePrice} {cur}`)
 	else
-		table.insert(lines, `Kept item. Paper profit: {summary.profit} {cur}`)
+		table.insert(lines, `Bought for: {summary.purchasePrice or 0} {cur}`)
+		table.insert(
+			lines,
+			`Kept item. Paper value profit: {formatSignedAmount(summary.baseProfit or summary.profit or 0)} {cur}`
+		)
 	end
-	table.insert(lines, `{summary.itemName} ({summary.rarityName}) | True: {summary.trueValue}`)
+	table.insert(lines, `Base Profit: {formatSignedAmount(summary.baseProfit or summary.profit or 0)} {cur}`)
+	-- Future relic/shift modifiers can add bonus lines here.
+	local bonuses = summary.bonuses or {}
+	for _, bonus in bonuses do
+		table.insert(lines, `{bonus.label or "Bonus"}: {formatSignedAmount(bonus.amount or 0)} {cur}`)
+	end
+	table.insert(lines, `Total Profit: {formatSignedAmount(summary.totalProfit or summary.profit or 0)} {cur}`)
+	table.insert(lines, `{summary.itemName} ({summary.rarityName}) | Traits: {traitsText(summary.traits)}`)
+	table.insert(lines, `True Value: {summary.trueValue} {cur}`)
 	table.insert(lines, `Seller: {summary.sellerName} | Buyer: {summary.buyerName or "none"}`)
-	table.insert(lines, `Paid: {summary.purchasePrice} | Ask was: {summary.sellerAsk} (min {summary.sellerMinimum})`)
+	table.insert(lines, `Ask was: {summary.sellerAsk} (min {summary.sellerMinimum})`)
 	if summary.buyerOpeningOffer then
 		table.insert(lines, `Buyer opened {summary.buyerOpeningOffer} (max {summary.buyerMaximum})`)
 	end
@@ -750,7 +921,7 @@ function DealService:_logDealSummary(player: Player, deal)
 	end
 	local s = deal.dealSummary
 	print(
-		`[WastelandPawn] DEAL DONE | true={s.trueValue} ask={s.sellerAsk} min={s.sellerMinimum} bought={s.purchasePrice} buyer={s.buyerId} open={s.buyerOpeningOffer} max={s.buyerMaximum} sold={s.salePrice or "kept"} profit={s.profit} inspected={s.inspected} tactics={s.tacticsUsed} sellerTell="{deal.sellerTell}" buyerTell="{deal.buyerTell or ""}" heat={deal.sellerHeat}/{deal.buyerHeat}`
+		`[WastelandPawn] DEAL DONE | true={s.trueValue} ask={s.sellerAsk} min={s.sellerMinimum} bought={s.purchasePrice} buyer={s.buyerId} open={s.buyerOpeningOffer} max={s.buyerMaximum} sold={s.salePrice or "kept"} profit={s.totalProfit or s.profit} inspected={s.inspected} tactics={s.tacticsUsed} sellerTell="{deal.sellerTell}" buyerTell="{deal.buyerTell or ""}" heat={deal.sellerHeat}/{deal.buyerHeat}`
 	)
 end
 

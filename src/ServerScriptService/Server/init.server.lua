@@ -4,6 +4,7 @@ local serviceModules = {
 	Services:WaitForChild("DataService"),
 	Services:WaitForChild("InventoryService"),
 	Services:WaitForChild("CustomerService"),
+	Services:WaitForChild("ShiftService"),
 	Services:WaitForChild("DealService"),
 	Services:WaitForChild("ShopService"),
 }

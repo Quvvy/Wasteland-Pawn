@@ -16,6 +16,7 @@ local heatBarBg: Frame
 local heatBarFill: Frame
 
 local currentSnapshot: any = nil
+local currentShiftSnapshot: any = nil
 local tacticButtonsEnabled = true
 
 local TACTIC_RESULT_DISPLAY = {
@@ -26,10 +27,29 @@ local TACTIC_RESULT_DISPLAY = {
 	crack = "Intel gained",
 	big_win = "Big win!",
 	accept = "Accepted",
+	no_movement = "No movement",
 }
 
 local function currencyLabel(snapshot: any?): string
 	return (snapshot and snapshot.currencyName) or HaggleTuning.currencyName or "scraps"
+end
+
+local function formatSignedAmount(amount: number?): string
+	local value = amount or 0
+	if value > 0 then
+		return `+{value}`
+	end
+	return tostring(value)
+end
+
+local function statBand(value: number?): string
+	local amount = value or 0
+	if amount >= 67 then
+		return "High"
+	elseif amount >= 34 then
+		return "Med"
+	end
+	return "Low"
 end
 
 local function createLabel(parent: Instance, name: string, text: string, position: UDim2, size: UDim2): TextLabel
@@ -76,30 +96,34 @@ function UIController:Init()
 	root.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
 	root.BorderSizePixel = 0
 	root.Position = UDim2.fromOffset(20, 20)
-	root.Size = UDim2.fromOffset(440, 620)
+	root.Size = UDim2.fromOffset(440, 700)
 	root.Parent = screenGui
 
 	labels.title = createLabel(root, "Title", "Wasteland Pawn - Tactics", UDim2.fromOffset(12, 8), UDim2.fromOffset(416, 26))
 	labels.title.TextSize = 17
 	labels.title.Font = Enum.Font.GothamBold
 
-	labels.customer = createLabel(root, "Customer", "Trader: -", UDim2.fromOffset(12, 38), UDim2.fromOffset(416, 22))
-	labels.tell = createLabel(root, "Tell", "Tell: -", UDim2.fromOffset(12, 62), UDim2.fromOffset(416, 36))
+	labels.shift = createLabel(root, "Shift", "Choose a shift to begin.", UDim2.fromOffset(12, 38), UDim2.fromOffset(416, 48))
+	labels.shift.Font = Enum.Font.GothamBold
+	labels.shift.TextColor3 = Color3.fromRGB(255, 235, 175)
+
+	labels.customer = createLabel(root, "Customer", "Trader: -", UDim2.fromOffset(12, 92), UDim2.fromOffset(416, 22))
+	labels.tell = createLabel(root, "Tell", "Tell: -", UDim2.fromOffset(12, 116), UDim2.fromOffset(416, 46))
 	labels.tell.TextColor3 = Color3.fromRGB(180, 220, 255)
 
-	labels.dialogue = createLabel(root, "Dialogue", "...", UDim2.fromOffset(12, 100), UDim2.fromOffset(416, 48))
-	labels.item = createLabel(root, "Item", "Item: -", UDim2.fromOffset(12, 150), UDim2.fromOffset(416, 44))
-	labels.prices = createLabel(root, "Prices", "", UDim2.fromOffset(12, 196), UDim2.fromOffset(416, 52))
-	labels.cash = createLabel(root, "Cash", "Your scraps: -", UDim2.fromOffset(12, 250), UDim2.fromOffset(416, 22))
+	labels.dialogue = createLabel(root, "Dialogue", "...", UDim2.fromOffset(12, 166), UDim2.fromOffset(416, 44))
+	labels.item = createLabel(root, "Item", "Item: -", UDim2.fromOffset(12, 212), UDim2.fromOffset(416, 58))
+	labels.prices = createLabel(root, "Prices", "", UDim2.fromOffset(12, 272), UDim2.fromOffset(416, 64))
+	labels.cash = createLabel(root, "Cash", "Your scraps: -", UDim2.fromOffset(12, 338), UDim2.fromOffset(416, 22))
 
-	labels.outcome = createLabel(root, "Outcome", "", UDim2.fromOffset(12, 274), UDim2.fromOffset(416, 20))
+	labels.outcome = createLabel(root, "Outcome", "", UDim2.fromOffset(12, 362), UDim2.fromOffset(416, 20))
 	labels.outcome.Font = Enum.Font.GothamBold
 
 	heatBarBg = Instance.new("Frame")
 	heatBarBg.Name = "HeatBarBg"
 	heatBarBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 	heatBarBg.BorderSizePixel = 0
-	heatBarBg.Position = UDim2.fromOffset(12, 298)
+	heatBarBg.Position = UDim2.fromOffset(12, 386)
 	heatBarBg.Size = UDim2.fromOffset(416, 16)
 	heatBarBg.Parent = root
 
@@ -110,50 +134,48 @@ function UIController:Init()
 	heatBarFill.Size = UDim2.new(0, 0, 1, 0)
 	heatBarFill.Parent = heatBarBg
 
-	labels.heat = createLabel(root, "Heat", "Heat: 0", UDim2.fromOffset(12, 318), UDim2.fromOffset(416, 22))
+	labels.heat = createLabel(root, "Heat", "Heat: 0", UDim2.fromOffset(12, 406), UDim2.fromOffset(416, 34))
 	labels.heat.BackgroundTransparency = 1
 
-	labels.inspect = createLabel(root, "Inspect", "", UDim2.fromOffset(12, 342), UDim2.fromOffset(416, 32))
-	labels.result = createLabel(root, "Result", "", UDim2.fromOffset(12, 376), UDim2.fromOffset(416, 80))
+	labels.inspect = createLabel(root, "Inspect", "", UDim2.fromOffset(12, 442), UDim2.fromOffset(416, 30))
+	labels.result = createLabel(root, "Result", "", UDim2.fromOffset(12, 474), UDim2.fromOffset(416, 86))
 	labels.result.Visible = false
 
+	labels.shiftResult = createLabel(root, "ShiftResult", "", UDim2.fromOffset(12, 562), UDim2.fromOffset(416, 68))
+	labels.shiftResult.Font = Enum.Font.GothamBold
+	labels.shiftResult.Visible = false
+
 	-- Buy tactics
-	buttons.lowball = createButton(root, "Lowball", "Lowball", UDim2.fromOffset(12, 464), UDim2.fromOffset(98, 30))
-	buttons.split = createButton(root, "Split", "Split Diff", UDim2.fromOffset(116, 464), UDim2.fromOffset(98, 30))
-	buttons.flaw = createButton(root, "Flaw", "Point Flaw", UDim2.fromOffset(220, 464), UDim2.fromOffset(98, 30))
-	buttons.pressure = createButton(root, "Pressure", "Pressure", UDim2.fromOffset(324, 464), UDim2.fromOffset(104, 30))
-	buttons.acceptBuy = createButton(root, "AcceptBuy", "Accept Price", UDim2.fromOffset(12, 500), UDim2.fromOffset(130, 30))
-	buttons.pass = createButton(
-		root,
-		"Pass",
-		`Pass (-{HaggleTuning.passPenaltyCaps})`,
-		UDim2.fromOffset(148, 500),
-		UDim2.fromOffset(80, 30)
-	)
+	buttons.lowball = createButton(root, "Lowball", "Lowball", UDim2.fromOffset(12, 634), UDim2.fromOffset(98, 30))
+	buttons.split = createButton(root, "Split", "Split Diff", UDim2.fromOffset(116, 634), UDim2.fromOffset(98, 30))
+	buttons.flaw = createButton(root, "Flaw", "Point Flaw", UDim2.fromOffset(220, 634), UDim2.fromOffset(98, 30))
+	buttons.pressure = createButton(root, "Pressure", "Pressure", UDim2.fromOffset(324, 634), UDim2.fromOffset(104, 30))
+	buttons.acceptBuy = createButton(root, "AcceptBuy", "Accept Price", UDim2.fromOffset(12, 668), UDim2.fromOffset(130, 26))
+	buttons.pass = createButton(root, "Pass", "Pass", UDim2.fromOffset(148, 668), UDim2.fromOffset(80, 26))
 	buttons.inspectBtn = createButton(
 		root,
 		"InspectBtn",
 		`Inspect ({HaggleTuning.inspectCost})`,
-		UDim2.fromOffset(234, 500),
-		UDim2.fromOffset(100, 30)
+		UDim2.fromOffset(234, 668),
+		UDim2.fromOffset(100, 26)
 	)
 
 	-- Sell tactics
-	buttons.smallBump = createButton(root, "SmallBump", "Small Bump", UDim2.fromOffset(12, 464), UDim2.fromOffset(98, 30))
-	buttons.pitch = createButton(root, "Pitch", "Pitch Value", UDim2.fromOffset(116, 464), UDim2.fromOffset(98, 30))
-	buttons.holdFirm = createButton(root, "HoldFirm", "Hold Firm", UDim2.fromOffset(220, 464), UDim2.fromOffset(98, 30))
-	buttons.bluff = createButton(root, "Bluff", "Bluff", UDim2.fromOffset(324, 464), UDim2.fromOffset(104, 30))
-	buttons.acceptSell = createButton(root, "AcceptSell", "Accept Offer", UDim2.fromOffset(12, 500), UDim2.fromOffset(130, 30))
-	buttons.findBuyer = createButton(root, "FindBuyer", "Find Buyer", UDim2.fromOffset(12, 500), UDim2.fromOffset(120, 30))
-	buttons.findAnother = createButton(
-		root,
-		"FindAnother",
-		`New Buyer (-{HaggleTuning.buyerRerollCost})`,
-		UDim2.fromOffset(148, 500),
-		UDim2.fromOffset(120, 30)
-	)
-	buttons.keep = createButton(root, "Keep", "Keep Item", UDim2.fromOffset(276, 500), UDim2.fromOffset(100, 30))
-	buttons.next = createButton(root, "Next", "Next Customer", UDim2.fromOffset(276, 500), UDim2.fromOffset(152, 30))
+	buttons.smallBump = createButton(root, "SmallBump", "Small Bump", UDim2.fromOffset(12, 634), UDim2.fromOffset(98, 30))
+	buttons.pitch = createButton(root, "Pitch", "Pitch Value", UDim2.fromOffset(116, 634), UDim2.fromOffset(98, 30))
+	buttons.holdFirm = createButton(root, "HoldFirm", "Hold Firm", UDim2.fromOffset(220, 634), UDim2.fromOffset(98, 30))
+	buttons.bluff = createButton(root, "Bluff", "Bluff", UDim2.fromOffset(324, 634), UDim2.fromOffset(104, 30))
+	buttons.acceptSell = createButton(root, "AcceptSell", "Accept Offer", UDim2.fromOffset(12, 668), UDim2.fromOffset(130, 26))
+	buttons.findBuyer = createButton(root, "FindBuyer", "Find Buyer", UDim2.fromOffset(12, 668), UDim2.fromOffset(120, 26))
+	buttons.findAnother = createButton(root, "FindAnother", "New Buyer", UDim2.fromOffset(148, 668), UDim2.fromOffset(120, 26))
+	buttons.keep = createButton(root, "Keep", "Keep Item", UDim2.fromOffset(276, 668), UDim2.fromOffset(100, 26))
+	buttons.next = createButton(root, "Next", "Next Customer", UDim2.fromOffset(276, 668), UDim2.fromOffset(152, 26))
+
+	buttons.shiftScrapRush = createButton(root, "ShiftScrapRush", "Scrap Rush", UDim2.fromOffset(12, 634), UDim2.fromOffset(130, 30))
+	buttons.shiftCollector = createButton(root, "ShiftCollector", "Collector Convention", UDim2.fromOffset(148, 634), UDim2.fromOffset(150, 30))
+	buttons.shiftBlackMarket = createButton(root, "ShiftBlackMarket", "Black Market Night", UDim2.fromOffset(304, 634), UDim2.fromOffset(124, 30))
+	buttons.shiftCollector.TextSize = 11
+	buttons.shiftBlackMarket.TextSize = 11
 
 	local sellOnly = {
 		"smallBump",
@@ -167,6 +189,7 @@ function UIController:Init()
 		buttons[name].Visible = false
 	end
 	buttons.next.Visible = false
+	self:updateShiftSnapshot({ active = false, ended = false })
 end
 
 function UIController:getSnapshot()
@@ -196,26 +219,31 @@ local function updateHeatBar(heat: number, maxHeat: number)
 end
 
 function UIController:setPhaseControls(phase: string)
+	local hasShift = currentShiftSnapshot and currentShiftSnapshot.active
+	local showDeal = hasShift or (currentShiftSnapshot and currentShiftSnapshot.ended and currentSnapshot ~= nil)
 	local buy = phase == "Haggling"
 	local purchased = phase == "Purchased"
 	local sell = phase == "Selling"
 	local terminal = phase == "WalkedAway" or phase == "Result"
 
 	for _, name in { "lowball", "split", "flaw", "pressure", "acceptBuy", "pass", "inspectBtn" } do
-		buttons[name].Visible = buy
+		buttons[name].Visible = hasShift and buy
 	end
 	for _, name in { "smallBump", "pitch", "holdFirm", "bluff", "acceptSell", "findAnother" } do
-		buttons[name].Visible = sell
+		buttons[name].Visible = hasShift and sell
 	end
-	buttons.findBuyer.Visible = purchased
-	buttons.keep.Visible = purchased or sell
-	buttons.next.Visible = terminal
+	buttons.findBuyer.Visible = hasShift and purchased
+	buttons.keep.Visible = hasShift and (purchased or sell)
+	buttons.next.Visible = hasShift and terminal and ((currentShiftSnapshot and currentShiftSnapshot.dealsRemaining or 0) > 0)
 
-	heatBarBg.Visible = buy or sell
-	labels.heat.Visible = buy or sell
-	labels.tell.Visible = buy or sell or purchased
-	labels.inspect.Visible = buy
-	labels.result.Visible = purchased or sell or terminal
+	for _, name in { "customer", "dialogue", "item", "prices", "cash", "outcome" } do
+		labels[name].Visible = showDeal
+	end
+	heatBarBg.Visible = showDeal and (buy or sell)
+	labels.heat.Visible = showDeal and (buy or sell)
+	labels.tell.Visible = showDeal and (buy or sell or purchased)
+	labels.inspect.Visible = showDeal and buy
+	labels.result.Visible = showDeal and (purchased or sell or terminal)
 end
 
 function UIController:updateSnapshot(snapshot)
@@ -232,9 +260,14 @@ function UIController:updateSnapshot(snapshot)
 	labels.customer.Text = if isSell
 		then `Buyer: {snapshot.buyerName or "?"}`
 		else `Seller: {snapshot.customerName or "?"}`
+	local readHint = if isSell then snapshot.buyerReadHint else snapshot.sellerReadHint
 	labels.tell.Text = `Tell: {if isSell then snapshot.buyerTell or "?" else snapshot.sellerTell or "?"}`
+	if readHint then
+		labels.tell.Text ..= `\n{readHint}`
+	end
 	labels.dialogue.Text = snapshot.dialogue or "..."
-	labels.item.Text = `{snapshot.itemName or "?"} ({snapshot.category or "?"})\n{snapshot.flavorText or ""}`
+	local traits = if snapshot.traits and #snapshot.traits > 0 then table.concat(snapshot.traits, ", ") else "None"
+	labels.item.Text = `{snapshot.itemName or "?"} ({snapshot.category or "?"})\nTraits: {traits}\n{snapshot.flavorText or ""}`
 
 	local lines = {}
 	if phase == "Haggling" or phase == "Purchased" then
@@ -269,8 +302,12 @@ function UIController:updateSnapshot(snapshot)
 
 	local heat = if isSell then snapshot.buyerHeat or 0 else snapshot.sellerHeat or 0
 	local heatMax = if isSell then snapshot.buyerHeatMax or 100 else snapshot.sellerHeatMax or 100
+	local leverage = if isSell then snapshot.buyerLeverage else snapshot.sellerLeverage
+	local confidence = if isSell then snapshot.buyerConfidence else snapshot.sellerConfidence
+	local state = if isSell then snapshot.buyerState or "Open" else snapshot.sellerState or "Open"
 	updateHeatBar(heat, heatMax)
-	labels.heat.Text = `{if isSell then "Buyer" else "Seller"} heat: {heat}/{heatMax}`
+	labels.heat.Text =
+		`{if isSell then "Buyer" else "Seller"} heat: {heat}/{heatMax} | Lev: {statBand(leverage)} | Conf: {statBand(confidence)} | {state}`
 	if snapshot.heatWarning then
 		labels.heat.Text ..= ` - {snapshot.heatWarning}`
 	end
@@ -295,6 +332,38 @@ function UIController:updateSnapshot(snapshot)
 	elseif phase == "Haggling" then
 		labels.inspect.Text = `Inspect ({HaggleTuning.inspectCost} {cur}) helps Point Out Flaw.`
 	end
+end
+
+function UIController:updateShiftSnapshot(snapshot)
+	currentShiftSnapshot = snapshot or { active = false, ended = false }
+	local cur = currencyLabel(currentSnapshot)
+
+	for _, name in { "shiftScrapRush", "shiftCollector", "shiftBlackMarket" } do
+		buttons[name].Visible = not currentShiftSnapshot.active
+	end
+
+	if currentShiftSnapshot.active then
+		labels.shift.Text =
+			`Shift: {currentShiftSnapshot.displayName or "?"}\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Deals: {currentShiftSnapshot.dealsCompleted or 0} / {currentShiftSnapshot.dealCount or 0}`
+		labels.shiftResult.Visible = false
+	elseif currentShiftSnapshot.ended then
+		local grade = currentShiftSnapshot.grade or (if currentShiftSnapshot.success then "Success" else "Bust")
+		local resultTitle = currentShiftSnapshot.resultTitle
+			or (if currentShiftSnapshot.success then "Shift Complete" else "Shift Failed")
+		labels.shift.Text =
+			`Shift: {currentShiftSnapshot.displayName or "?"}\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Deals: {currentShiftSnapshot.dealsCompleted or 0} / {currentShiftSnapshot.dealCount or 0}`
+		labels.shiftResult.Text =
+			`{resultTitle}\nTarget: {currentShiftSnapshot.targetProfit or 0} {cur} | Profit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} {cur}\nGrade: {grade}`
+		labels.shiftResult.TextColor3 = if currentShiftSnapshot.success or grade == "Close"
+			then Color3.fromRGB(145, 235, 160)
+			else Color3.fromRGB(255, 170, 140)
+		labels.shiftResult.Visible = true
+	else
+		labels.shift.Text = "Choose a shift to begin."
+		labels.shiftResult.Visible = false
+	end
+
+	self:setPhaseControls(currentSnapshot and currentSnapshot.phase or "")
 end
 
 local function connectTactic(name: string, callback: () -> ())
@@ -362,6 +431,18 @@ end
 
 function UIController:onNext(callback: () -> ())
 	buttons.next.MouseButton1Click:Connect(callback)
+end
+
+function UIController:onStartShift(callback: (string) -> ())
+	buttons.shiftScrapRush.MouseButton1Click:Connect(function()
+		callback("scrap_rush")
+	end)
+	buttons.shiftCollector.MouseButton1Click:Connect(function()
+		callback("collector_convention")
+	end)
+	buttons.shiftBlackMarket.MouseButton1Click:Connect(function()
+		callback("black_market_night")
+	end)
 end
 
 function UIController:Start() end
