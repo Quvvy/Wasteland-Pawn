@@ -6,6 +6,7 @@ local Shifts = require(Shared.Config.Shifts)
 local Remotes = require(Shared.Net.Remotes)
 
 local DataService = require(script.Parent.DataService)
+local InventoryService = require(script.Parent.InventoryService)
 
 local ShiftService = {}
 
@@ -42,6 +43,8 @@ local function copyShiftOption(shift)
 		displayName = shift.displayName,
 		dealCount = shift.dealCount,
 		targetProfit = shift.targetProfit,
+		inventorySlots = shift.inventorySlots,
+		buyerVisitEvery = shift.buyerVisitEvery,
 		description = shift.description,
 		modifierText = shift.modifierText,
 	}
@@ -84,12 +87,17 @@ function ShiftService:startShift(player: Player, shiftId: string?)
 		return { ok = false, error = "Unknown shift" }
 	end
 
+	local inventorySlots = shift.inventorySlots or 3
+	local buyerVisitEvery = shift.buyerVisitEvery or 2
+	InventoryService:startShiftInventory(player, inventorySlots)
+
 	playerShifts[player] = {
 		active = true,
 		shiftId = shift.id,
 		displayName = shift.displayName,
 		dealCount = shift.dealCount,
 		dealsCompleted = 0,
+		sellerVisitsResolved = 0,
 		targetProfit = shift.targetProfit,
 		shiftProfit = 0,
 		startingCash = DataService:getCash(player),
@@ -97,6 +105,9 @@ function ShiftService:startShift(player: Player, shiftId: string?)
 		success = false,
 		grade = "Bust",
 		resultTitle = nil,
+		inventoryMaxSlots = inventorySlots,
+		buyerVisitEvery = buyerVisitEvery,
+		pendingBuyerVisit = false,
 		description = shift.description,
 		modifierText = shift.modifierText,
 		lastDealProfit = nil,
@@ -111,9 +122,30 @@ function ShiftService:getShift(player: Player)
 	return playerShifts[player]
 end
 
-function ShiftService:recordDealResult(player: Player, dealSummary)
+function ShiftService:recordSellerVisitResolved(player: Player, forceBuyerVisit: boolean?)
 	local shift = playerShifts[player]
 	if not shift or not shift.active or shift.ended then
+		return nil
+	end
+
+	shift.sellerVisitsResolved = math.min((shift.sellerVisitsResolved or shift.dealsCompleted or 0) + 1, shift.dealCount)
+	shift.dealsCompleted = shift.sellerVisitsResolved
+
+	if forceBuyerVisit or (shift.buyerVisitEvery > 0 and shift.sellerVisitsResolved % shift.buyerVisitEvery == 0) then
+		shift.pendingBuyerVisit = true
+	end
+
+	if shift.sellerVisitsResolved >= shift.dealCount and not shift.pendingBuyerVisit then
+		return self:endShift(player)
+	end
+
+	self:_pushState(player)
+	return self:buildSnapshot(player)
+end
+
+function ShiftService:recordDealResult(player: Player, dealSummary)
+	local shift = playerShifts[player]
+	if not shift or shift.ended then
 		return nil
 	end
 
@@ -122,11 +154,35 @@ function ShiftService:recordDealResult(player: Player, dealSummary)
 		profit = dealSummary.totalProfit or dealSummary.profit or 0
 	end
 
-	shift.dealsCompleted = math.min(shift.dealsCompleted + 1, shift.dealCount)
 	shift.shiftProfit += profit
 	shift.lastDealProfit = profit
 
-	if shift.dealsCompleted >= shift.dealCount then
+	self:_pushState(player)
+	return self:buildSnapshot(player)
+end
+
+function ShiftService:shouldTriggerBuyerVisit(player: Player): boolean
+	local shift = playerShifts[player]
+	return shift ~= nil and shift.active and not shift.ended and shift.pendingBuyerVisit == true
+end
+
+function ShiftService:beginBuyerVisit(player: Player)
+	local shift = playerShifts[player]
+	if not shift or not shift.active or shift.ended or not shift.pendingBuyerVisit then
+		return nil
+	end
+	self:_pushState(player)
+	return self:buildSnapshot(player)
+end
+
+function ShiftService:completeBuyerVisit(player: Player)
+	local shift = playerShifts[player]
+	if not shift or shift.ended then
+		return nil
+	end
+
+	shift.pendingBuyerVisit = false
+	if shift.sellerVisitsResolved >= shift.dealCount then
 		return self:endShift(player)
 	end
 
@@ -136,7 +192,11 @@ end
 
 function ShiftService:shouldContinueShift(player: Player): boolean
 	local shift = playerShifts[player]
-	return shift ~= nil and shift.active and not shift.ended and shift.dealsCompleted < shift.dealCount
+	return shift ~= nil
+		and shift.active
+		and not shift.ended
+		and not shift.pendingBuyerVisit
+		and (shift.sellerVisitsResolved or shift.dealsCompleted or 0) < shift.dealCount
 end
 
 function ShiftService:endShift(player: Player)
@@ -169,11 +229,15 @@ function ShiftService:buildSnapshot(player: Player)
 		shiftId = shift.shiftId,
 		displayName = shift.displayName,
 		dealCount = shift.dealCount,
-		dealsCompleted = shift.dealsCompleted,
-		dealsRemaining = math.max(shift.dealCount - shift.dealsCompleted, 0),
+		dealsCompleted = shift.sellerVisitsResolved or shift.dealsCompleted,
+		sellerVisitsResolved = shift.sellerVisitsResolved or shift.dealsCompleted,
+		dealsRemaining = math.max(shift.dealCount - (shift.sellerVisitsResolved or shift.dealsCompleted), 0),
 		targetProfit = shift.targetProfit,
 		shiftProfit = shift.shiftProfit,
 		startingCash = shift.startingCash,
+		inventoryMaxSlots = shift.inventoryMaxSlots,
+		buyerVisitEvery = shift.buyerVisitEvery,
+		pendingBuyerVisit = shift.pendingBuyerVisit,
 		ended = shift.ended,
 		success = shift.success,
 		grade = shift.grade or getGrade(shift),

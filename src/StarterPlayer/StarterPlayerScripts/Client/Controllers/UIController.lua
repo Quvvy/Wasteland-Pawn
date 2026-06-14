@@ -17,6 +17,7 @@ local heatBarFill: Frame
 
 local currentSnapshot: any = nil
 local currentShiftSnapshot: any = nil
+local currentInventorySnapshot: any = nil
 local tacticButtonsEnabled = true
 
 local TACTIC_RESULT_DISPLAY = {
@@ -50,6 +51,44 @@ local function statBand(value: number?): string
 		return "Med"
 	end
 	return "Low"
+end
+
+local function formatTraits(traits): string
+	return if traits and #traits > 0 then table.concat(traits, ", ") else "None"
+end
+
+local function formatInventorySummary(inventory): string
+	if not inventory then
+		return "Inventory: 0/3"
+	end
+
+	local lines = {
+		`Inventory: {inventory.usedSlots or 0}/{inventory.maxSlots or 3}`,
+	}
+	for index = 1, inventory.maxSlots or 3 do
+		local item = inventory.items and inventory.items[index]
+		if item then
+			table.insert(lines, `{index}. {item.displayName} ({item.category}) - paid {item.purchasePrice}`)
+		else
+			table.insert(lines, `{index}. Empty`)
+		end
+	end
+	return table.concat(lines, "\n")
+end
+
+local function formatInventoryMatches(matches): string
+	if not matches or #matches == 0 then
+		return "No inventory to offer."
+	end
+
+	local lines = {}
+	for index, item in matches do
+		table.insert(
+			lines,
+			`{index}. {item.displayName} ({item.category}) - {item.matchLabel or "Curious"} | Paid {item.purchasePrice or 0}`
+		)
+	end
+	return table.concat(lines, "\n")
 end
 
 local function createLabel(parent: Instance, name: string, text: string, position: UDim2, size: UDim2): TextLabel
@@ -141,6 +180,10 @@ function UIController:Init()
 	labels.result = createLabel(root, "Result", "", UDim2.fromOffset(12, 474), UDim2.fromOffset(416, 86))
 	labels.result.Visible = false
 
+	labels.inventory = createLabel(root, "Inventory", "Inventory: 0/3", UDim2.fromOffset(12, 562), UDim2.fromOffset(416, 68))
+	labels.inventory.TextColor3 = Color3.fromRGB(210, 240, 210)
+	labels.inventory.Visible = false
+
 	labels.shiftResult = createLabel(root, "ShiftResult", "", UDim2.fromOffset(12, 562), UDim2.fromOffset(416, 68))
 	labels.shiftResult.Font = Enum.Font.GothamBold
 	labels.shiftResult.Visible = false
@@ -167,9 +210,19 @@ function UIController:Init()
 	buttons.bluff = createButton(root, "Bluff", "Bluff", UDim2.fromOffset(324, 634), UDim2.fromOffset(104, 30))
 	buttons.acceptSell = createButton(root, "AcceptSell", "Accept Offer", UDim2.fromOffset(12, 668), UDim2.fromOffset(130, 26))
 	buttons.findBuyer = createButton(root, "FindBuyer", "Find Buyer", UDim2.fromOffset(12, 668), UDim2.fromOffset(120, 26))
-	buttons.findAnother = createButton(root, "FindAnother", "New Buyer", UDim2.fromOffset(148, 668), UDim2.fromOffset(120, 26))
+	buttons.findAnother = createButton(root, "FindAnother", "Skip Buyer", UDim2.fromOffset(148, 668), UDim2.fromOffset(120, 26))
 	buttons.keep = createButton(root, "Keep", "Keep Item", UDim2.fromOffset(276, 668), UDim2.fromOffset(100, 26))
 	buttons.next = createButton(root, "Next", "Next Customer", UDim2.fromOffset(276, 668), UDim2.fromOffset(152, 26))
+
+	buttons.offerSlot1 = createButton(root, "OfferSlot1", "Offer 1", UDim2.fromOffset(12, 634), UDim2.fromOffset(132, 30))
+	buttons.offerSlot2 = createButton(root, "OfferSlot2", "Offer 2", UDim2.fromOffset(150, 634), UDim2.fromOffset(132, 30))
+	buttons.offerSlot3 = createButton(root, "OfferSlot3", "Offer 3", UDim2.fromOffset(288, 634), UDim2.fromOffset(140, 30))
+	buttons.offerSlot1.TextSize = 12
+	buttons.offerSlot2.TextSize = 12
+	buttons.offerSlot3.TextSize = 12
+	buttons.offerSlot1.TextWrapped = true
+	buttons.offerSlot2.TextWrapped = true
+	buttons.offerSlot3.TextWrapped = true
 
 	buttons.shiftScrapRush = createButton(root, "ShiftScrapRush", "Scrap Rush", UDim2.fromOffset(12, 634), UDim2.fromOffset(130, 30))
 	buttons.shiftCollector = createButton(root, "ShiftCollector", "Collector Convention", UDim2.fromOffset(148, 634), UDim2.fromOffset(150, 30))
@@ -184,6 +237,9 @@ function UIController:Init()
 		"bluff",
 		"acceptSell",
 		"findAnother",
+		"offerSlot1",
+		"offerSlot2",
+		"offerSlot3",
 	}
 	for _, name in sellOnly do
 		buttons[name].Visible = false
@@ -222,18 +278,23 @@ function UIController:setPhaseControls(phase: string)
 	local hasShift = currentShiftSnapshot and currentShiftSnapshot.active
 	local showDeal = hasShift or (currentShiftSnapshot and currentShiftSnapshot.ended and currentSnapshot ~= nil)
 	local buy = phase == "Haggling"
-	local purchased = phase == "Purchased"
+	local buyerVisit = phase == "BuyerVisit"
 	local sell = phase == "Selling"
-	local terminal = phase == "WalkedAway" or phase == "Result"
+	local terminal = phase == "WalkedAway" or phase == "Result" or phase == "Stored" or phase == "BuyerSkipped"
 
 	for _, name in { "lowball", "split", "flaw", "pressure", "acceptBuy", "pass", "inspectBtn" } do
 		buttons[name].Visible = hasShift and buy
 	end
-	for _, name in { "smallBump", "pitch", "holdFirm", "bluff", "acceptSell", "findAnother" } do
+	for _, name in { "smallBump", "pitch", "holdFirm", "bluff", "acceptSell" } do
 		buttons[name].Visible = hasShift and sell
 	end
-	buttons.findBuyer.Visible = hasShift and purchased
-	buttons.keep.Visible = hasShift and (purchased or sell)
+	buttons.findAnother.Visible = false
+	for _, name in { "offerSlot1", "offerSlot2", "offerSlot3" } do
+		buttons[name].Visible = hasShift and buyerVisit
+	end
+	buttons.findBuyer.Visible = false
+	buttons.keep.Visible = hasShift and (buyerVisit or sell)
+	buttons.keep.Text = if buyerVisit then "Skip Buyer" else "Keep Item"
 	buttons.next.Visible = hasShift and terminal and ((currentShiftSnapshot and currentShiftSnapshot.dealsRemaining or 0) > 0)
 
 	for _, name in { "customer", "dialogue", "item", "prices", "cash", "outcome" } do
@@ -241,9 +302,10 @@ function UIController:setPhaseControls(phase: string)
 	end
 	heatBarBg.Visible = showDeal and (buy or sell)
 	labels.heat.Visible = showDeal and (buy or sell)
-	labels.tell.Visible = showDeal and (buy or sell or purchased)
+	labels.tell.Visible = showDeal and (buy or sell or buyerVisit or phase == "Stored")
 	labels.inspect.Visible = showDeal and buy
-	labels.result.Visible = showDeal and (purchased or sell or terminal)
+	labels.result.Visible = showDeal and (buyerVisit or sell or terminal)
+	labels.inventory.Visible = hasShift and not (currentShiftSnapshot and currentShiftSnapshot.ended)
 end
 
 function UIController:updateSnapshot(snapshot)
@@ -254,23 +316,31 @@ function UIController:updateSnapshot(snapshot)
 
 	local phase = snapshot.phase or "Haggling"
 	local cur = currencyLabel(snapshot)
+	if snapshot.inventory then
+		currentInventorySnapshot = snapshot.inventory
+	end
 	self:setPhaseControls(phase)
 
 	local isSell = phase == "Selling"
-	labels.customer.Text = if isSell
+	local isBuyerVisit = phase == "BuyerVisit"
+	labels.customer.Text = if isSell or isBuyerVisit
 		then `Buyer: {snapshot.buyerName or "?"}`
 		else `Seller: {snapshot.customerName or "?"}`
-	local readHint = if isSell then snapshot.buyerReadHint else snapshot.sellerReadHint
-	labels.tell.Text = `Tell: {if isSell then snapshot.buyerTell or "?" else snapshot.sellerTell or "?"}`
+	local readHint = if isSell or isBuyerVisit then snapshot.buyerReadHint or snapshot.buyerWants else snapshot.sellerReadHint
+	labels.tell.Text = `Tell: {if isSell or isBuyerVisit then snapshot.buyerTell or "?" else snapshot.sellerTell or "?"}`
 	if readHint then
 		labels.tell.Text ..= `\n{readHint}`
 	end
 	labels.dialogue.Text = snapshot.dialogue or "..."
-	local traits = if snapshot.traits and #snapshot.traits > 0 then table.concat(snapshot.traits, ", ") else "None"
-	labels.item.Text = `{snapshot.itemName or "?"} ({snapshot.category or "?"})\nTraits: {traits}\n{snapshot.flavorText or ""}`
+	if isBuyerVisit then
+		labels.item.Text = "Buyer Visit\nChoose one inventory item to offer.\nA bad match can be worth skipping."
+	else
+		local traits = formatTraits(snapshot.traits)
+		labels.item.Text = `{snapshot.itemName or "?"} ({snapshot.category or "?"})\nTraits: {traits}\n{snapshot.flavorText or ""}`
+	end
 
 	local lines = {}
-	if phase == "Haggling" or phase == "Purchased" then
+	if phase == "Haggling" or phase == "Stored" then
 		if snapshot.currentSellerPrice then
 			table.insert(lines, `Seller price: {snapshot.currentSellerPrice} {cur}`)
 		end
@@ -283,6 +353,15 @@ function UIController:updateSnapshot(snapshot)
 		if snapshot.buyerInterest then
 			table.insert(lines, `Buyer interest: {snapshot.buyerInterest}`)
 		end
+		if snapshot.buyerWants then
+			table.insert(lines, snapshot.buyerWants)
+		end
+	end
+	if isBuyerVisit then
+		if snapshot.buyerWants then
+			table.insert(lines, snapshot.buyerWants)
+		end
+		table.insert(lines, formatInventoryMatches(snapshot.inventoryMatches))
 	end
 	if snapshot.estimatedLow and snapshot.estimatedHigh and phase ~= "Result" then
 		table.insert(lines, `Estimate: {snapshot.estimatedLow}-{snapshot.estimatedHigh} {cur}`)
@@ -299,6 +378,7 @@ function UIController:updateSnapshot(snapshot)
 	labels.prices.Text = if #lines > 0 then table.concat(lines, "\n") else "-"
 
 	labels.cash.Text = `Your {cur}: {snapshot.playerCash or 0}`
+	labels.inventory.Text = formatInventorySummary(currentInventorySnapshot)
 
 	local heat = if isSell then snapshot.buyerHeat or 0 else snapshot.sellerHeat or 0
 	local heatMax = if isSell then snapshot.buyerHeatMax or 100 else snapshot.sellerHeatMax or 100
@@ -321,10 +401,28 @@ function UIController:updateSnapshot(snapshot)
 
 	if snapshot.dealSummary then
 		labels.result.Text = snapshot.dealSummary.resultText or ""
-	elseif phase == "Purchased" then
-		labels.result.Text = "Find a buyer to reveal the real margin."
+	elseif isBuyerVisit then
+		labels.result.Text = formatInventoryMatches(snapshot.inventoryMatches)
+	elseif phase == "Stored" then
+		labels.result.Text = "Stored on your shelf. Wait for the right buyer."
 	else
 		labels.result.Text = ""
+	end
+
+	for index, name in { "offerSlot1", "offerSlot2", "offerSlot3" } do
+		local button = buttons[name]
+		local item = snapshot.inventoryMatches and snapshot.inventoryMatches[index]
+		if item then
+			button.Text = `{index}. {item.displayName}\n{item.matchLabel or "Curious"}`
+			button.Active = tacticButtonsEnabled
+			button.AutoButtonColor = tacticButtonsEnabled
+			button.BackgroundTransparency = if tacticButtonsEnabled then 0 else 0.45
+		else
+			button.Text = `{index}. Empty`
+			button.Active = false
+			button.AutoButtonColor = false
+			button.BackgroundTransparency = 0.45
+		end
 	end
 
 	if snapshot.inspected and snapshot.inspectHint then
@@ -343,8 +441,9 @@ function UIController:updateShiftSnapshot(snapshot)
 	end
 
 	if currentShiftSnapshot.active then
+		local buyerText = if currentShiftSnapshot.pendingBuyerVisit then " | Buyer waiting" else ""
 		labels.shift.Text =
-			`Shift: {currentShiftSnapshot.displayName or "?"}\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Deals: {currentShiftSnapshot.dealsCompleted or 0} / {currentShiftSnapshot.dealCount or 0}`
+			`Shift: {currentShiftSnapshot.displayName or "?"}\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Sellers: {currentShiftSnapshot.dealsCompleted or 0} / {currentShiftSnapshot.dealCount or 0}{buyerText}`
 		labels.shiftResult.Visible = false
 	elseif currentShiftSnapshot.ended then
 		local grade = currentShiftSnapshot.grade or (if currentShiftSnapshot.success then "Success" else "Bust")
@@ -363,6 +462,12 @@ function UIController:updateShiftSnapshot(snapshot)
 		labels.shiftResult.Visible = false
 	end
 
+	self:setPhaseControls(currentSnapshot and currentSnapshot.phase or "")
+end
+
+function UIController:updateInventorySnapshot(snapshot)
+	currentInventorySnapshot = snapshot
+	labels.inventory.Text = formatInventorySummary(currentInventorySnapshot)
 	self:setPhaseControls(currentSnapshot and currentSnapshot.phase or "")
 end
 
@@ -423,6 +528,19 @@ end
 
 function UIController:onFindBuyer(callback: () -> ())
 	buttons.findBuyer.MouseButton1Click:Connect(callback)
+end
+
+function UIController:onOfferInventoryItem(callback: (string) -> ())
+	for index, name in { "offerSlot1", "offerSlot2", "offerSlot3" } do
+		connectTactic(name, function()
+			local item = currentSnapshot
+				and currentSnapshot.inventoryMatches
+				and currentSnapshot.inventoryMatches[index]
+			if item and item.instanceId then
+				callback(item.instanceId)
+			end
+		end)
+	end
 end
 
 function UIController:onKeep(callback: () -> ())

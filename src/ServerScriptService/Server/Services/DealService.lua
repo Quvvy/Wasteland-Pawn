@@ -9,6 +9,7 @@ local Rarities = require(Shared.Config.Rarities)
 local TacticHaggleMath = require(Shared.Economy.TacticHaggleMath)
 local NpcTells = require(Shared.Economy.NpcTells)
 local ItemValuation = require(Shared.Economy.ItemValuation)
+local BuyerMatch = require(Shared.Economy.BuyerMatch)
 local Remotes = require(Shared.Net.Remotes)
 
 local DataService = require(script.Parent.DataService)
@@ -62,11 +63,24 @@ local function formatSignedAmount(amount: number?): string
 	return tostring(value)
 end
 
-local function buyerInterestFor(buyer, category: string?): string?
-	if not buyer or not category then
-		return nil
+local function copyList(list)
+	local copy = {}
+	for _, value in list or {} do
+		table.insert(copy, value)
 	end
-	return TacticHaggleMath.getBuyerInterestLabel(buyer, category)
+	return copy
+end
+
+local function clampAmount(value: number): number
+	return math.clamp(math.floor(value + 0.5), 1, 999999)
+end
+
+local function sumBonusLines(bonuses): number
+	local total = 0
+	for _, bonus in bonuses or {} do
+		total += bonus.amount or 0
+	end
+	return total
 end
 
 function DealService:Init()
@@ -101,6 +115,9 @@ function DealService:Start()
 	end)
 	bind("StartSelling", function(player, instanceId)
 		return self:startSelling(player, instanceId)
+	end)
+	bind("SelectInventoryItemForBuyer", function(player, instanceId)
+		return self:selectInventoryItemForBuyer(player, instanceId)
 	end)
 	bind("KeepItem", function(player, instanceId)
 		return self:keepItem(player, instanceId)
@@ -293,6 +310,9 @@ function DealService:_initDealState(customer, item, hiddenOutcome, askingPrice, 
 		buyerOpeningOffer = nil,
 		buyerMaximum = nil,
 		buyerInterest = nil,
+		buyerWants = nil,
+		buyerMatch = nil,
+		inventoryMatches = nil,
 		buyerLeverage = 0,
 		buyerConfidence = 0,
 		buyerState = "Open",
@@ -305,29 +325,37 @@ function DealService:_initDealState(customer, item, hiddenOutcome, askingPrice, 
 end
 
 function DealService:_buildSnapshot(player: Player, deal)
-	local rarity = Rarities[deal.hiddenOutcome.rarityId]
+	local rarity = if deal.hiddenOutcome then Rarities[deal.hiddenOutcome.rarityId] else nil
 	local cur = currencyWord()
 	local phase = deal.phase
+	local item = deal.item
+	local customer = deal.customer
+	local buyer = deal.buyer
 
 	local snapshot = {
 		phase = phase,
 		currencyName = cur,
-		customerId = deal.customer.id,
-		customerName = deal.customer.displayName,
-		buyerId = deal.buyer and deal.buyer.id or nil,
-		buyerName = deal.buyer and deal.buyer.displayName or nil,
+		customerId = customer and customer.id or deal.sellerId,
+		customerName = customer and customer.displayName or deal.sellerName,
+		buyerId = buyer and buyer.id or nil,
+		buyerName = buyer and buyer.displayName or nil,
 		dialogue = deal.dialogue,
-		itemId = deal.item.id,
-		itemName = deal.item.displayName,
-		category = deal.item.category,
-		traits = deal.item.traits or {},
-		flavorText = deal.item.flavorText,
+		itemId = item and item.id or nil,
+		itemName = item and item.displayName or nil,
+		category = item and item.category or nil,
+		traits = item and item.traits or {},
+		flavorText = item and item.flavorText or nil,
 		askingPrice = deal.currentSellerPrice,
 		currentSellerPrice = deal.currentSellerPrice,
 		originalAskingPrice = deal.originalAskingPrice,
 		buyerOffer = deal.currentBuyerOffer,
 		currentBuyerOffer = deal.currentBuyerOffer,
 		buyerInterest = deal.buyerInterest,
+		buyerWants = deal.buyerWants,
+		buyerMatch = deal.buyerMatch,
+		buyerMatchLabel = deal.buyerMatch and deal.buyerMatch.label or nil,
+		inventory = InventoryService:getSnapshot(player),
+		inventoryMatches = deal.inventoryMatches,
 		estimatedLow = deal.estimatedLow,
 		estimatedHigh = deal.estimatedHigh,
 		playerCash = DataService:getCash(player),
@@ -362,7 +390,7 @@ function DealService:_buildSnapshot(player: Player, deal)
 	}
 
 	if deal.hiddenOutcome then
-		if phase == "Result" then
+		if phase == "Result" and deal.revealTrueValue ~= false then
 			snapshot.trueValue = deal.hiddenOutcome.trueValue
 			snapshot.rarityName = rarity and rarity.displayName or deal.hiddenOutcome.rarityId
 			snapshot.buyerMaximum = deal.buyerMaximum
@@ -376,6 +404,16 @@ end
 function DealService:startDeal(player: Player, customerId: string?, itemId: string?)
 	if not player.Parent then
 		return { ok = false, error = "Player left" }
+	end
+	local activeDeal = activeDeals[player]
+	if activeDeal and (activeDeal.phase == "BuyerVisit" or activeDeal.phase == "Selling") then
+		return { ok = true, snapshot = self:_buildSnapshot(player, activeDeal) }
+	end
+	if ShiftService:shouldTriggerBuyerVisit(player) then
+		return self:startBuyerVisit(player)
+	end
+	if not ShiftService:shouldContinueShift(player) then
+		return { ok = false, error = "No active seller visits" }
 	end
 	local canStart, err = self:_canStartDeal(player)
 	if not canStart then
@@ -531,6 +569,14 @@ function DealService:_completePurchase(player: Player, price: number, deal)
 		self:_pushState(player)
 		return { ok = false, error = "Not enough cash" }
 	end
+	if not InventoryService:canAdd(player) then
+		deal.phase = "WalkedAway"
+		deal.dialogue = "Inventory full. You let this seller go and call in a buyer to clear shelf space."
+		deal.dealSummary = self:_buildNoProfitSummary(deal, "Inventory full")
+		self:_pushState(player)
+		self:_scheduleAfterSellerResolution(player, HaggleTuning.autoNextDelayPass, deal, true)
+		return { ok = false, error = "Inventory full - buyer visit next", snapshot = self:_buildSnapshot(player, deal) }
+	end
 
 	DataService:spend(player, price)
 	local instanceId = InventoryService:addPurchasedItem(player, {
@@ -538,55 +584,224 @@ function DealService:_completePurchase(player: Player, price: number, deal)
 		displayName = deal.item.displayName,
 		category = deal.item.category,
 		traits = deal.item.traits or {},
+		flavorText = deal.item.flavorText,
 		rarityId = deal.hiddenOutcome.rarityId,
 		trueValue = deal.hiddenOutcome.trueValue,
 		purchasePrice = price,
-		kept = false,
+		estimatedLow = deal.estimatedLow,
+		estimatedHigh = deal.estimatedHigh,
+		sellerId = deal.customer.id,
+		sellerName = deal.customer.displayName,
+		sellerTell = deal.sellerTell,
+		sellerAsk = deal.originalAskingPrice,
+		sellerMinimum = deal.minimumAccept,
+		inspected = deal.inspected,
+		buyRoundCount = deal.buyRoundCount,
+		tacticsUsed = copyList(deal.tacticsUsed),
 	})
+	if not instanceId then
+		deal.phase = "WalkedAway"
+		deal.dialogue = "Inventory full. You let this seller go and call in a buyer to clear shelf space."
+		deal.dealSummary = self:_buildNoProfitSummary(deal, "Inventory full")
+		self:_pushState(player)
+		self:_scheduleAfterSellerResolution(player, HaggleTuning.autoNextDelayPass, deal, true)
+		return { ok = false, error = "Inventory full - buyer visit next", snapshot = self:_buildSnapshot(player, deal) }
+	end
 
 	deal.pendingInstanceId = instanceId
 	deal.purchasePrice = price
-	deal.phase = "Purchased"
-	deal.dialogue = `Bought for {price} {currencyWord()}. Find a buyer to reveal the real margin.`
+	deal.phase = "Stored"
+	local inventory = InventoryService:getSnapshot(player)
+	deal.dialogue =
+		`Bought for {price} {currencyWord()} and stored. Inventory: {inventory.usedSlots}/{inventory.maxSlots}.`
+	deal.dealSummary = {
+		resultText = deal.dialogue,
+	}
 	self:_pushState(player)
+	self:_scheduleAfterSellerResolution(player, HaggleTuning.autoNextDelayResult, deal)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end
 
 function DealService:startSelling(player: Player, instanceId: any?)
 	local deal = activeDeals[player]
-	if not deal or deal.phase ~= "Purchased" then
-		if deal and deal.phase == "Selling" then
-			return self:_rerollBuyer(player, deal)
-		end
-		return { ok = false, error = "Buy the item first" }
+	if deal and deal.phase == "BuyerVisit" then
+		return self:selectInventoryItemForBuyer(player, instanceId)
 	end
-	if instanceId and (type(instanceId) ~= "string" or instanceId ~= deal.pendingInstanceId) then
-		return { ok = false, error = "Invalid item" }
+	if deal and deal.phase == "Selling" then
+		return { ok = false, error = "Already selling" }
 	end
-	self:_beginBuyerNegotiation(deal, BuyerService:rollBuyer(self:_getRng(player)), self:_getRng(player))
+	return { ok = false, error = "Wait for a buyer visit" }
+end
+
+function DealService:_buildInventoryMatches(player: Player, buyer)
+	local matches = {}
+	for _, entry in InventoryService:getActiveItems(player) do
+		local match = BuyerMatch.score(entry, buyer)
+		table.insert(matches, {
+			instanceId = entry.instanceId,
+			displayName = entry.displayName,
+			category = entry.category,
+			traits = entry.traits or {},
+			purchasePrice = entry.purchasePrice,
+			estimatedLow = entry.estimatedLow,
+			estimatedHigh = entry.estimatedHigh,
+			matchLabel = match.label,
+			matchScore = match.score,
+			matchedCategories = match.matchedCategories,
+			matchedTraits = match.matchedTraits,
+		})
+	end
+	return matches
+end
+
+function DealService:startBuyerVisit(player: Player)
+	if not ShiftService:shouldTriggerBuyerVisit(player) then
+		return { ok = false, error = "No buyer visit ready" }
+	end
+	local activeDeal = activeDeals[player]
+	if activeDeal and (activeDeal.phase == "BuyerVisit" or activeDeal.phase == "Selling") then
+		return { ok = true, snapshot = self:_buildSnapshot(player, activeDeal) }
+	end
+
+	local rng = self:_getRng(player)
+	local buyer = BuyerService:rollBuyer(rng)
+	if not buyer then
+		return { ok = false, error = "No buyers configured" }
+	end
+
+	ShiftService:beginBuyerVisit(player)
+	if InventoryService:getCount(player) <= 0 then
+		local deal = {
+			phase = "BuyerSkipped",
+			buyer = buyer,
+			buyerTell = NpcTells.forBuyer(buyer, nil, rng),
+			buyerReadHint = BuyerMatch.describeBuyer(buyer),
+			buyerWants = BuyerMatch.describeBuyer(buyer),
+			dialogue = `{buyer.displayName} came looking, but your shelves are empty.`,
+			dealSummary = {
+				resultText = "Buyer visit skipped. No inventory to offer.",
+			},
+		}
+		activeDeals[player] = deal
+		self:_pushState(player)
+		self:_scheduleAfterBuyerResolution(player, HaggleTuning.autoNextDelayPass, deal, nil)
+		return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
+	end
+
+	local deal = {
+		phase = "BuyerVisit",
+		buyer = buyer,
+		buyerTell = NpcTells.forBuyer(buyer, nil, rng),
+		buyerReadHint = BuyerMatch.describeBuyer(buyer),
+		buyerWants = BuyerMatch.describeBuyer(buyer),
+		inventoryMatches = nil,
+		dialogue = `{buyer.openingLine} Choose an item from your shelves.`,
+	}
+	deal.inventoryMatches = self:_buildInventoryMatches(player, buyer)
+	activeDeals[player] = deal
 	self:_pushState(player)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end
 
-function DealService:_rerollBuyer(player: Player, deal)
-	local paid, costMessage = self:_spendFrictionCost(player, HaggleTuning.buyerRerollCost or 0, "to find another buyer", true)
-	if not paid then
-		deal.dialogue = costMessage
-		self:_pushState(player)
-		return { ok = false, error = costMessage }
+function DealService:selectInventoryItemForBuyer(player: Player, instanceId: any)
+	local visitDeal = activeDeals[player]
+	if not visitDeal or visitDeal.phase ~= "BuyerVisit" then
+		return { ok = false, error = "No buyer visit" }
+	end
+	if type(instanceId) ~= "string" then
+		return { ok = false, error = "Invalid item" }
 	end
 
-	self:_beginBuyerNegotiation(deal, BuyerService:rollBuyer(self:_getRng(player)), self:_getRng(player))
-	deal.dialogue = `{if costMessage then costMessage .. " " else ""}New buyer: {deal.buyer.displayName}. Offer: {deal.currentBuyerOffer} {currencyWord()}.`
+	local entry = InventoryService:getOwnedItem(player, instanceId)
+	if not entry then
+		return { ok = false, error = "Item not found" }
+	end
+
+	local deal = self:_buildSaleDealFromInventory(entry, visitDeal)
+	activeDeals[player] = deal
+	self:_beginBuyerNegotiation(deal, visitDeal.buyer, self:_getRng(player))
 	self:_pushState(player)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
+end
+
+function DealService:_buildSaleDealFromInventory(entry, visitDeal)
+	return {
+		customer = nil,
+		sellerId = entry.sellerId,
+		sellerName = entry.sellerName or "Unknown Seller",
+		item = {
+			id = entry.itemId,
+			displayName = entry.displayName,
+			category = entry.category,
+			traits = entry.traits or {},
+			flavorText = entry.flavorText,
+		},
+		hiddenOutcome = {
+			rarityId = entry.rarityId,
+			trueValue = entry.trueValue,
+		},
+		phase = "BuyerVisit",
+		originalAskingPrice = entry.sellerAsk or entry.purchasePrice,
+		askingPrice = nil,
+		currentSellerPrice = nil,
+		minimumAccept = entry.sellerMinimum or entry.purchasePrice,
+		estimatedLow = entry.estimatedLow,
+		estimatedHigh = entry.estimatedHigh,
+		estimateInflated = false,
+		inspected = entry.inspected,
+		inspectHint = nil,
+		sellerHeat = 0,
+		sellerHeatMax = HaggleTuning.heatMax,
+		sellerLeverage = 0,
+		sellerConfidence = 0,
+		sellerState = "Closed",
+		sellerFinalOffer = false,
+		sellerTell = entry.sellerTell,
+		sellerReadHint = nil,
+		buyerTell = visitDeal.buyerTell,
+		buyerReadHint = visitDeal.buyerReadHint,
+		heatWarning = nil,
+		buyRoundCount = entry.buyRoundCount or 0,
+		sellRoundCount = 0,
+		usedBuyTactics = {},
+		usedSellTactics = {},
+		tacticsUsed = copyList(entry.tacticsUsed),
+		lastTactic = nil,
+		lastTacticResult = nil,
+		pendingInstanceId = entry.instanceId,
+		purchasePrice = entry.purchasePrice,
+		salePrice = nil,
+		buyer = nil,
+		currentBuyerOffer = nil,
+		buyerOffer = nil,
+		buyerOpeningOffer = nil,
+		buyerMaximum = nil,
+		buyerInterest = nil,
+		buyerWants = visitDeal.buyerWants,
+		buyerMatch = nil,
+		inventoryMatches = nil,
+		buyerLeverage = 0,
+		buyerConfidence = 0,
+		buyerState = "Open",
+		buyerFinalOffer = false,
+		buyerHeat = 0,
+		buyerHeatMax = HaggleTuning.heatMax,
+		dealSummary = nil,
+		dialogue = "",
+	}
 end
 
 function DealService:_beginBuyerNegotiation(deal, buyer, rng: Random)
 	local trueValue = deal.hiddenOutcome.trueValue
 	local category = deal.item.category
-	local offer = TacticHaggleMath.calculateBuyerOpeningOffer(buyer, trueValue, category, rng)
-	local maximum = TacticHaggleMath.calculateBuyerMaximum(buyer, trueValue, category)
+	local match = BuyerMatch.score({
+		category = deal.item.category,
+		traits = deal.item.traits or {},
+		trueValue = trueValue,
+	}, buyer)
+	local offer = clampAmount(TacticHaggleMath.calculateBuyerOpeningOffer(buyer, trueValue, category, rng) * match.offerMultiplier)
+	local maximum = clampAmount(TacticHaggleMath.calculateBuyerMaximum(buyer, trueValue, category) * match.offerMultiplier)
+	maximum = math.max(maximum, offer)
 	local cur = currencyWord()
 
 	deal.buyer = buyer
@@ -603,10 +818,12 @@ function DealService:_beginBuyerNegotiation(deal, buyer, rng: Random)
 	deal.usedSellTactics = {}
 	deal.buyerTell = NpcTells.forBuyer(buyer, category, rng)
 	deal.buyerReadHint = NpcTells.getBuyerReadHint(buyer, category)
-	deal.buyerInterest = buyerInterestFor(buyer, category)
+	deal.buyerWants = BuyerMatch.describeBuyer(buyer)
+	deal.buyerMatch = match
+	deal.buyerInterest = match.label
 	deal.phase = "Selling"
 	deal.heatWarning = nil
-	deal.dialogue = `{buyer.openingLine} Offer: {offer} {cur}.`
+	deal.dialogue = `{buyer.openingLine} {match.label}. Offer: {offer} {cur}.`
 end
 
 function DealService:useSellTactic(player: Player, tacticId: any)
@@ -617,7 +834,7 @@ function DealService:useSellTactic(player: Player, tacticId: any)
 
 	tacticId = if type(tacticId) == "string" then tacticId else ""
 	if tacticId == HaggleTactics.Sell.FindAnotherBuyer then
-		return self:_rerollBuyer(player, deal)
+		return self:keepItem(player, deal.pendingInstanceId)
 	end
 	if tacticId == HaggleTactics.Sell.AcceptOffer then
 		return self:_completeSale(player, deal, deal.currentBuyerOffer)
@@ -657,21 +874,14 @@ function DealService:useSellTactic(player: Player, tacticId: any)
 	self:_logTacticDebug(player, "sell", tacticId, deal, result)
 
 	if result.walkedAway then
-		deal.phase = "Purchased"
-		deal.buyer = nil
-		deal.currentBuyerOffer = nil
-		deal.buyerOffer = nil
-		deal.buyerInterest = nil
-		deal.buyerTell = nil
-		deal.buyerReadHint = nil
-		deal.buyerHeat = 0
-		deal.buyerLeverage = 0
-		deal.buyerConfidence = 0
-		deal.buyerState = "Open"
-		deal.buyerFinalOffer = false
-		deal.dialogue = `{result.dialogue} Find another buyer?`
+		deal.phase = "Result"
+		deal.revealTrueValue = false
+		deal.dialogue = `{result.dialogue} You keep the item for a better buyer.`
+		deal.dealSummary = self:_buildHeldItemSummary(deal, "Buyer walked away")
+		deal.dealSummary.resultText = self:_formatDealSummaryText(deal.dealSummary)
 		deal.heatWarning = nil
 		self:_pushState(player)
+		self:_scheduleAfterBuyerResolution(player, HaggleTuning.autoNextDelayWalkedAway, deal, nil)
 		return { ok = true, snapshot = self:_buildSnapshot(player, deal), tacticResult = result }
 	end
 
@@ -688,23 +898,29 @@ function DealService:useSellTactic(player: Player, tacticId: any)
 end
 
 function DealService:_completeSale(player: Player, deal, salePrice: number)
-	DataService:addCash(player, salePrice)
+	deal.salePrice = salePrice
+	deal.revealTrueValue = true
+	local baseProfit = salePrice - (deal.purchasePrice or 0)
+	local rarity = Rarities[deal.hiddenOutcome.rarityId]
+	local bonuses = deal.buyerMatch and copyList(deal.buyerMatch.bonusLines) or {}
+	local bonusTotal = sumBonusLines(bonuses)
+	local totalProfit = baseProfit + bonusTotal
+	local totalCashReceived = salePrice + bonusTotal
+
+	DataService:addCash(player, totalCashReceived)
 	if deal.pendingInstanceId then
 		InventoryService:markDisposed(player, deal.pendingInstanceId)
 	end
 
-	deal.salePrice = salePrice
-	local baseProfit = salePrice - (deal.purchasePrice or 0)
-	local rarity = Rarities[deal.hiddenOutcome.rarityId]
-
 	deal.dealSummary = {
-		sellerName = deal.customer.displayName,
-		sellerId = deal.customer.id,
+		sellerName = deal.customer and deal.customer.displayName or deal.sellerName,
+		sellerId = deal.customer and deal.customer.id or deal.sellerId,
 		sellerTell = deal.sellerTell,
 		buyerName = deal.buyer and deal.buyer.displayName,
 		buyerId = deal.buyer and deal.buyer.id,
 		buyerTell = deal.buyerTell,
 		itemName = deal.item.displayName,
+		category = deal.item.category,
 		traits = deal.item.traits or {},
 		rarityId = deal.hiddenOutcome.rarityId,
 		rarityName = rarity and rarity.displayName,
@@ -715,10 +931,15 @@ function DealService:_completeSale(player: Player, deal, salePrice: number)
 		buyerOpeningOffer = deal.buyerOpeningOffer,
 		buyerMaximum = deal.buyerMaximum,
 		salePrice = salePrice,
+		cashBonus = bonusTotal,
+		totalCashReceived = totalCashReceived,
 		baseProfit = baseProfit,
-		bonuses = {},
-		totalProfit = baseProfit,
-		profit = baseProfit,
+		bonuses = bonuses,
+		totalProfit = totalProfit,
+		profit = totalProfit,
+		buyerMatchLabel = deal.buyerMatch and deal.buyerMatch.label or deal.buyerInterest,
+		matchedCategories = deal.buyerMatch and deal.buyerMatch.matchedCategories or {},
+		matchedTraits = deal.buyerMatch and deal.buyerMatch.matchedTraits or {},
 		buyRounds = deal.buyRoundCount,
 		sellRounds = deal.sellRoundCount,
 		inspected = deal.inspected,
@@ -733,7 +954,7 @@ function DealService:_completeSale(player: Player, deal, salePrice: number)
 	deal.dialogue = deal.dealSummary.resultText
 	deal.pendingInstanceId = nil
 	self:_pushState(player)
-	self:_scheduleNextDeal(player, HaggleTuning.autoNextDelayResult, deal)
+	self:_scheduleAfterBuyerResolution(player, HaggleTuning.autoNextDelayResult, deal, deal.dealSummary)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end
 
@@ -742,11 +963,14 @@ function DealService:passDeal(player: Player)
 	if not deal then
 		return { ok = false, error = "No deal" }
 	end
-	if deal.phase == "Purchased" or deal.phase == "Selling" then
+	if deal.phase == "BuyerVisit" or deal.phase == "Selling" then
 		return self:keepItem(player, deal.pendingInstanceId)
 	end
-	if deal.phase == "Result" or deal.phase == "WalkedAway" then
+	if deal.phase == "Result" or deal.phase == "WalkedAway" or deal.phase == "Stored" or deal.phase == "BuyerSkipped" then
 		playerNextDealAt[player] = nil
+		if ShiftService:shouldTriggerBuyerVisit(player) then
+			return self:startBuyerVisit(player)
+		end
 		return self:startDeal(player)
 	end
 	local _, costMessage = self:_spendFrictionCost(player, HaggleTuning.passPenaltyCaps or 0, "for passing", false)
@@ -754,7 +978,7 @@ function DealService:passDeal(player: Player)
 	deal.dialogue = if costMessage then `You let them walk. {costMessage}` else "You let them walk."
 	deal.dealSummary = self:_buildNoProfitSummary(deal, "Passed on seller")
 	self:_pushState(player)
-	self:_scheduleNextDeal(player, HaggleTuning.autoNextDelayPass, deal)
+	self:_scheduleAfterSellerResolution(player, HaggleTuning.autoNextDelayPass, deal)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end
 
@@ -763,74 +987,34 @@ function DealService:_handleBuyWalkaway(player: Player, deal, result)
 	deal.dialogue = result.dialogue
 	deal.dealSummary = self:_buildNoProfitSummary(deal, "Seller walked away")
 	self:_pushState(player)
-	self:_scheduleNextDeal(player, HaggleTuning.autoNextDelayWalkedAway, deal)
+	self:_scheduleAfterSellerResolution(player, HaggleTuning.autoNextDelayWalkedAway, deal)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end
 
 function DealService:keepItem(player: Player, instanceId: any)
 	local deal = activeDeals[player]
-	if not deal or (deal.phase ~= "Purchased" and deal.phase ~= "Selling") then
-		return { ok = false, error = "Nothing to keep" }
+	if not deal then
+		return { ok = false, error = "No deal" }
 	end
-	if type(instanceId) ~= "string" or instanceId ~= deal.pendingInstanceId then
+	if deal.phase ~= "BuyerVisit" and deal.phase ~= "Selling" then
+		return { ok = false, error = "No buyer to skip" }
+	end
+	if deal.phase == "Selling" and (type(instanceId) ~= "string" or instanceId ~= deal.pendingInstanceId) then
 		return { ok = false, error = "Invalid item" }
 	end
-	local entry = InventoryService:getOwnedItem(player, instanceId)
-	if not entry then
-		return { ok = false, error = "Item not found" }
-	end
-	entry.kept = true
-	local paperProfit = entry.trueValue - entry.purchasePrice
-	local rarity = Rarities[deal.hiddenOutcome.rarityId]
-	deal.dealSummary = {
-		sellerName = deal.customer.displayName,
-		sellerId = deal.customer.id,
-		sellerTell = deal.sellerTell,
-		buyerName = deal.buyer and deal.buyer.displayName or "none",
-		buyerId = deal.buyer and deal.buyer.id,
-		buyerTell = deal.buyerTell,
-		itemName = deal.item.displayName,
-		traits = deal.item.traits or entry.traits or {},
-		rarityName = rarity and rarity.displayName,
-		trueValue = deal.hiddenOutcome.trueValue,
-		sellerAsk = deal.originalAskingPrice,
-		sellerMinimum = deal.minimumAccept,
-		purchasePrice = deal.purchasePrice,
-		buyerOpeningOffer = deal.buyerOpeningOffer,
-		buyerMaximum = deal.buyerMaximum,
-		salePrice = nil,
-		baseProfit = paperProfit,
-		bonuses = {},
-		totalProfit = paperProfit,
-		profit = paperProfit,
-		buyRounds = deal.buyRoundCount,
-		sellRounds = deal.sellRoundCount,
-		inspected = deal.inspected,
-		tacticsUsed = table.concat(deal.tacticsUsed or {}, ", "),
-		finalSellerHeat = deal.sellerHeat,
-		finalBuyerHeat = deal.buyerHeat,
-	}
+
+	deal.dealSummary = self:_buildHeldItemSummary(deal, "Held for a better buyer")
 	deal.dealSummary.resultText = self:_formatDealSummaryText(deal.dealSummary)
 	self:_logDealSummary(player, deal)
 	deal.phase = "Result"
+	deal.revealTrueValue = false
 	deal.dialogue = deal.dealSummary.resultText
-	deal.pendingInstanceId = nil
 	self:_pushState(player)
-	self:_scheduleNextDeal(player, HaggleTuning.autoNextDelayResult, deal)
+	self:_scheduleAfterBuyerResolution(player, HaggleTuning.autoNextDelayResult, deal, nil)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end
 
-function DealService:_scheduleNextDeal(player: Player, delay: number, deal)
-	local shift = ShiftService:getShift(player)
-	if shift and not shift.ended then
-		ShiftService:recordDealResult(player, deal.dealSummary)
-	end
-
-	if not ShiftService:shouldContinueShift(player) then
-		playerNextDealAt[player] = nil
-		return
-	end
-
+function DealService:_scheduleStartDeal(player: Player, delay: number, deal)
 	self:_setDealCooldown(player)
 	task.delay(delay, function()
 		if player.Parent and activeDeals[player] == deal then
@@ -838,6 +1022,51 @@ function DealService:_scheduleNextDeal(player: Player, delay: number, deal)
 			self:startDeal(player)
 		end
 	end)
+end
+
+function DealService:_scheduleBuyerVisit(player: Player, delay: number, deal)
+	self:_setDealCooldown(player)
+	task.delay(delay, function()
+		if player.Parent and activeDeals[player] == deal then
+			playerNextDealAt[player] = nil
+			self:startBuyerVisit(player)
+		end
+	end)
+end
+
+function DealService:_scheduleAfterSellerResolution(player: Player, delay: number, deal, forceBuyerVisit: boolean?)
+	local shift = ShiftService:getShift(player)
+	if shift and not shift.ended then
+		ShiftService:recordSellerVisitResolved(player, forceBuyerVisit)
+	end
+
+	if ShiftService:shouldTriggerBuyerVisit(player) then
+		self:_scheduleBuyerVisit(player, delay, deal)
+		return
+	end
+	if not ShiftService:shouldContinueShift(player) then
+		playerNextDealAt[player] = nil
+		return
+	end
+
+	self:_scheduleStartDeal(player, delay, deal)
+end
+
+function DealService:_scheduleAfterBuyerResolution(player: Player, delay: number, deal, dealSummary)
+	local shift = ShiftService:getShift(player)
+	if shift and not shift.ended then
+		if dealSummary then
+			ShiftService:recordDealResult(player, dealSummary)
+		end
+		ShiftService:completeBuyerVisit(player)
+	end
+
+	if not ShiftService:shouldContinueShift(player) then
+		playerNextDealAt[player] = nil
+		return
+	end
+
+	self:_scheduleStartDeal(player, delay, deal)
 end
 
 function DealService:_buildNoProfitSummary(deal, reason: string)
@@ -875,30 +1104,76 @@ function DealService:_buildNoProfitSummary(deal, reason: string)
 	}
 end
 
+function DealService:_buildHeldItemSummary(deal, reason: string)
+	local hasItem = deal.item ~= nil
+	return {
+		sellerName = deal.customer and deal.customer.displayName or deal.sellerName or "none",
+		sellerId = deal.customer and deal.customer.id or deal.sellerId,
+		sellerTell = deal.sellerTell,
+		buyerName = deal.buyer and deal.buyer.displayName or "none",
+		buyerId = deal.buyer and deal.buyer.id,
+		buyerTell = deal.buyerTell,
+		itemName = if hasItem then deal.item.displayName else "No item offered",
+		category = if hasItem then deal.item.category else nil,
+		traits = if hasItem then deal.item.traits or {} else {},
+		rarityId = nil,
+		rarityName = "?",
+		trueValue = nil,
+		sellerAsk = deal.originalAskingPrice,
+		sellerMinimum = deal.minimumAccept,
+		purchasePrice = deal.purchasePrice,
+		buyerOpeningOffer = deal.buyerOpeningOffer,
+		buyerMaximum = deal.buyerMaximum,
+		salePrice = nil,
+		baseProfit = 0,
+		bonuses = {},
+		totalProfit = 0,
+		profit = 0,
+		buyerMatchLabel = deal.buyerMatch and deal.buyerMatch.label or deal.buyerInterest,
+		buyRounds = deal.buyRoundCount,
+		sellRounds = deal.sellRoundCount,
+		inspected = deal.inspected,
+		tacticsUsed = table.concat(deal.tacticsUsed or {}, ", "),
+		finalSellerHeat = deal.sellerHeat,
+		finalBuyerHeat = deal.buyerHeat,
+		resultReason = reason,
+		resultText = `{reason}. No sale. Profit: {formatSignedAmount(0)} {currencyWord()}`,
+	}
+end
+
 function DealService:_formatDealSummaryText(summary)
 	local cur = currencyWord()
 	local lines = {}
 	if summary.salePrice then
 		table.insert(lines, `Bought for: {summary.purchasePrice or 0} {cur}`)
 		table.insert(lines, `Sold for: {summary.salePrice} {cur}`)
+		if (summary.cashBonus or 0) > 0 then
+			table.insert(lines, `Cash Bonuses Paid: {formatSignedAmount(summary.cashBonus)} {cur}`)
+			table.insert(lines, `Cash Received: {summary.totalCashReceived or summary.salePrice} {cur}`)
+		end
 	else
-		table.insert(lines, `Bought for: {summary.purchasePrice or 0} {cur}`)
-		table.insert(
-			lines,
-			`Kept item. Paper value profit: {formatSignedAmount(summary.baseProfit or summary.profit or 0)} {cur}`
-		)
+		if summary.purchasePrice then
+			table.insert(lines, `Bought for: {summary.purchasePrice} {cur}`)
+		end
+		table.insert(lines, `{summary.resultReason or "No sale"}. Realized profit: {formatSignedAmount(0)} {cur}`)
 	end
 	table.insert(lines, `Base Profit: {formatSignedAmount(summary.baseProfit or summary.profit or 0)} {cur}`)
-	-- Future relic/shift modifiers can add bonus lines here.
 	local bonuses = summary.bonuses or {}
 	for _, bonus in bonuses do
 		table.insert(lines, `{bonus.label or "Bonus"}: {formatSignedAmount(bonus.amount or 0)} {cur}`)
 	end
 	table.insert(lines, `Total Profit: {formatSignedAmount(summary.totalProfit or summary.profit or 0)} {cur}`)
-	table.insert(lines, `{summary.itemName} ({summary.rarityName}) | Traits: {traitsText(summary.traits)}`)
-	table.insert(lines, `True Value: {summary.trueValue} {cur}`)
+	if summary.buyerMatchLabel then
+		table.insert(lines, `Buyer Match: {summary.buyerMatchLabel}`)
+	end
+	table.insert(lines, `{summary.itemName or "Item"} ({summary.rarityName or "?"}) | Traits: {traitsText(summary.traits)}`)
+	if summary.trueValue then
+		table.insert(lines, `True Value: {summary.trueValue} {cur}`)
+	end
 	table.insert(lines, `Seller: {summary.sellerName} | Buyer: {summary.buyerName or "none"}`)
-	table.insert(lines, `Ask was: {summary.sellerAsk} (min {summary.sellerMinimum})`)
+	if summary.sellerAsk then
+		table.insert(lines, `Ask was: {summary.sellerAsk} (min {summary.sellerMinimum})`)
+	end
 	if summary.buyerOpeningOffer then
 		table.insert(lines, `Buyer opened {summary.buyerOpeningOffer} (max {summary.buyerMaximum})`)
 	end
@@ -953,9 +1228,16 @@ function DealService:_handleDebugChat(player: Player, message: string)
 		end
 	elseif command == "buyer" and parts[2] then
 		local deal = activeDeals[player]
-		if deal and (deal.phase == "Purchased" or deal.phase == "Selling") then
-			local buyer = BuyerService:getBuyer(parts[2])
-			if buyer then
+		local buyer = BuyerService:getBuyer(parts[2])
+		if deal and buyer then
+			if deal.phase == "BuyerVisit" then
+				deal.buyer = buyer
+				deal.buyerTell = NpcTells.forBuyer(buyer, nil, self:_getRng(player))
+				deal.buyerReadHint = BuyerMatch.describeBuyer(buyer)
+				deal.buyerWants = BuyerMatch.describeBuyer(buyer)
+				deal.inventoryMatches = self:_buildInventoryMatches(player, buyer)
+				self:_pushState(player)
+			elseif deal.phase == "Selling" then
 				self:_beginBuyerNegotiation(deal, buyer, self:_getRng(player))
 				self:_pushState(player)
 			end

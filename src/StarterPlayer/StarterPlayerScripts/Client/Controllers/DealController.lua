@@ -87,9 +87,15 @@ function DealController:_bindUi()
 		end
 	end)
 
+	UIController:onOfferInventoryItem(function(instanceId: string)
+		invokeRemote("SelectInventoryItemForBuyer", instanceId)
+	end)
+
 	UIController:onKeep(function()
 		local snapshot = UIController:getSnapshot()
-		if snapshot and snapshot.instanceId then
+		if snapshot and snapshot.phase == "BuyerVisit" then
+			invokeRemote("KeepItem")
+		elseif snapshot and snapshot.instanceId then
 			invokeRemote("KeepItem", snapshot.instanceId)
 		end
 	end)
@@ -116,6 +122,11 @@ function DealController:Start()
 	local shiftUpdate = Remotes.get("ShiftStateUpdate") :: RemoteEvent
 	shiftUpdate.OnClientEvent:Connect(function(snapshot)
 		UIController:updateShiftSnapshot(snapshot)
+	end)
+
+	local inventoryUpdate = Remotes.get("InventoryStateUpdate") :: RemoteEvent
+	inventoryUpdate.OnClientEvent:Connect(function(snapshot)
+		UIController:updateInventorySnapshot(snapshot)
 	end)
 
 	task.defer(function()
