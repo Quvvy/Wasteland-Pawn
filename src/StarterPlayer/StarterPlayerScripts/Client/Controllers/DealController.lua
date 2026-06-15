@@ -100,6 +100,13 @@ function DealController:_bindUi()
 		end
 	end)
 
+	UIController:onCloseShift(function()
+		local ok, result = invokeRemote("CloseShift")
+		if ok and result and result.ok and result.shiftSnapshot then
+			UIController:updateShiftSnapshot(result.shiftSnapshot)
+		end
+	end)
+
 	UIController:onNext(function()
 		invokeRemote("StartDeal")
 	end)

@@ -91,6 +91,15 @@ local function formatInventoryMatches(matches): string
 	return table.concat(lines, "\n")
 end
 
+local function formatLiquidationSummary(summary, cur: string): string
+	if not summary or (summary.itemCount or 0) <= 0 then
+		return ""
+	end
+
+	local rate = math.floor((summary.rate or 0.35) * 100 + 0.5)
+	return `\nLiquidated {summary.itemCount} item(s) at {rate}% value.\nLiquidation cash: {summary.totalCash or 0} {cur} | Profit: {formatSignedAmount(summary.totalProfit)} {cur}`
+end
+
 local function createLabel(parent: Instance, name: string, text: string, position: UDim2, size: UDim2): TextLabel
 	local label = Instance.new("TextLabel")
 	label.Name = name
@@ -213,6 +222,7 @@ function UIController:Init()
 	buttons.findAnother = createButton(root, "FindAnother", "Skip Buyer", UDim2.fromOffset(148, 668), UDim2.fromOffset(120, 26))
 	buttons.keep = createButton(root, "Keep", "Keep Item", UDim2.fromOffset(276, 668), UDim2.fromOffset(100, 26))
 	buttons.next = createButton(root, "Next", "Next Customer", UDim2.fromOffset(276, 668), UDim2.fromOffset(152, 26))
+	buttons.closeShift = createButton(root, "CloseShift", "Close Shift", UDim2.fromOffset(148, 668), UDim2.fromOffset(120, 26))
 
 	buttons.offerSlot1 = createButton(root, "OfferSlot1", "Offer 1", UDim2.fromOffset(12, 634), UDim2.fromOffset(132, 30))
 	buttons.offerSlot2 = createButton(root, "OfferSlot2", "Offer 2", UDim2.fromOffset(150, 634), UDim2.fromOffset(132, 30))
@@ -237,6 +247,7 @@ function UIController:Init()
 		"bluff",
 		"acceptSell",
 		"findAnother",
+		"closeShift",
 		"offerSlot1",
 		"offerSlot2",
 		"offerSlot3",
@@ -281,6 +292,7 @@ function UIController:setPhaseControls(phase: string)
 	local buyerVisit = phase == "BuyerVisit"
 	local sell = phase == "Selling"
 	local terminal = phase == "WalkedAway" or phase == "Result" or phase == "Stored" or phase == "BuyerSkipped"
+	local closingRush = currentShiftSnapshot and currentShiftSnapshot.phase == "ClosingRush"
 
 	for _, name in { "lowball", "split", "flaw", "pressure", "acceptBuy", "pass", "inspectBtn" } do
 		buttons[name].Visible = hasShift and buy
@@ -295,6 +307,7 @@ function UIController:setPhaseControls(phase: string)
 	buttons.findBuyer.Visible = false
 	buttons.keep.Visible = hasShift and (buyerVisit or sell)
 	buttons.keep.Text = if buyerVisit then "Skip Buyer" else "Keep Item"
+	buttons.closeShift.Visible = hasShift and closingRush and not sell
 	buttons.next.Visible = hasShift and terminal and ((currentShiftSnapshot and currentShiftSnapshot.dealsRemaining or 0) > 0)
 
 	for _, name in { "customer", "dialogue", "item", "prices", "cash", "outcome" } do
@@ -441,18 +454,26 @@ function UIController:updateShiftSnapshot(snapshot)
 	end
 
 	if currentShiftSnapshot.active then
+		local phase = currentShiftSnapshot.phase or "Buying"
 		local buyerText = if currentShiftSnapshot.pendingBuyerVisit then " | Buyer waiting" else ""
-		labels.shift.Text =
-			`Shift: {currentShiftSnapshot.displayName or "?"}\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Sellers: {currentShiftSnapshot.dealsCompleted or 0} / {currentShiftSnapshot.dealCount or 0}{buyerText}`
+		if phase == "ClosingRush" then
+			local inventoryCount = currentInventorySnapshot and currentInventorySnapshot.usedSlots or 0
+			local inventoryMax = currentInventorySnapshot and currentInventorySnapshot.maxSlots or currentShiftSnapshot.inventoryMaxSlots or 3
+			labels.shift.Text =
+				`Shift: {currentShiftSnapshot.displayName or "?"} | Closing Rush\nNo more sellers. Cash out your shelves.\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Inventory: {inventoryCount}/{inventoryMax} | Buyers left: {currentShiftSnapshot.closingRushBuyersRemaining or 0}`
+		else
+			labels.shift.Text =
+				`Shift: {currentShiftSnapshot.displayName or "?"} | Buying\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Sellers: {currentShiftSnapshot.dealsCompleted or 0} / {currentShiftSnapshot.sellerVisitCount or currentShiftSnapshot.dealCount or 0}{buyerText}`
+		end
 		labels.shiftResult.Visible = false
 	elseif currentShiftSnapshot.ended then
 		local grade = currentShiftSnapshot.grade or (if currentShiftSnapshot.success then "Success" else "Bust")
 		local resultTitle = currentShiftSnapshot.resultTitle
 			or (if currentShiftSnapshot.success then "Shift Complete" else "Shift Failed")
 		labels.shift.Text =
-			`Shift: {currentShiftSnapshot.displayName or "?"}\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Deals: {currentShiftSnapshot.dealsCompleted or 0} / {currentShiftSnapshot.dealCount or 0}`
+			`Shift: {currentShiftSnapshot.displayName or "?"} | Ended\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Sellers: {currentShiftSnapshot.dealsCompleted or 0} / {currentShiftSnapshot.sellerVisitCount or currentShiftSnapshot.dealCount or 0}`
 		labels.shiftResult.Text =
-			`{resultTitle}\nTarget: {currentShiftSnapshot.targetProfit or 0} {cur} | Profit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} {cur}\nGrade: {grade}`
+			`{resultTitle}\nTarget: {currentShiftSnapshot.targetProfit or 0} {cur} | Profit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} {cur}\nGrade: {grade}{formatLiquidationSummary(currentShiftSnapshot.liquidationSummary, cur)}`
 		labels.shiftResult.TextColor3 = if currentShiftSnapshot.success or grade == "Close"
 			then Color3.fromRGB(145, 235, 160)
 			else Color3.fromRGB(255, 170, 140)
@@ -545,6 +566,10 @@ end
 
 function UIController:onKeep(callback: () -> ())
 	buttons.keep.MouseButton1Click:Connect(callback)
+end
+
+function UIController:onCloseShift(callback: () -> ())
+	buttons.closeShift.MouseButton1Click:Connect(callback)
 end
 
 function UIController:onNext(callback: () -> ())

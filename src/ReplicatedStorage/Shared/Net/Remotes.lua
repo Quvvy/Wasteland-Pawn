@@ -19,6 +19,7 @@ local REMOTE_DEFINITIONS = {
 	StartSelling = "RemoteFunction",
 	SelectInventoryItemForBuyer = "RemoteFunction",
 	KeepItem = "RemoteFunction",
+	CloseShift = "RemoteFunction",
 	-- Legacy (routed to tactics on server)
 	MakeOffer = "RemoteFunction",
 	AcceptCounter = "RemoteFunction",

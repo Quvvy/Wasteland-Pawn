@@ -122,6 +122,9 @@ function DealService:Start()
 	bind("KeepItem", function(player, instanceId)
 		return self:keepItem(player, instanceId)
 	end)
+	bind("CloseShift", function(player)
+		return self:closeShift(player)
+	end)
 
 	-- Legacy remotes route to tactics (debug / old client)
 	bind("MakeOffer", function(player, _, kind)
@@ -401,6 +404,28 @@ function DealService:_buildSnapshot(player: Player, deal)
 	return snapshot
 end
 
+function DealService:_formatLiquidationSummaryText(summary)
+	if not summary or (summary.itemCount or 0) <= 0 then
+		return "Closing Rush ended. No unsold inventory remained."
+	end
+
+	local rateText = `{math.floor((summary.rate or 0.35) * 100 + 0.5)}%`
+	local lines = {
+		`Liquidated after close at {rateText} value.`,
+		`This is a bad cashout compared to finding a real buyer.`,
+		`Items liquidated: {summary.itemCount}`,
+		`Cash received: {summary.totalCash or 0} {currencyWord()}`,
+		`Shift profit: {formatSignedAmount(summary.totalProfit or 0)} {currencyWord()}`,
+	}
+	for _, item in summary.items or {} do
+		table.insert(
+			lines,
+			`{item.itemName}: {item.liquidationValue} from true value {item.trueValue} | Profit {formatSignedAmount(item.profit)}`
+		)
+	end
+	return table.concat(lines, "\n")
+end
+
 function DealService:startDeal(player: Player, customerId: string?, itemId: string?)
 	if not player.Parent then
 		return { ok = false, error = "Player left" }
@@ -411,6 +436,9 @@ function DealService:startDeal(player: Player, customerId: string?, itemId: stri
 	end
 	if ShiftService:shouldTriggerBuyerVisit(player) then
 		return self:startBuyerVisit(player)
+	end
+	if ShiftService:isClosingRush(player) then
+		return { ok = false, error = "Closing Rush has no sellers" }
 	end
 	if not ShiftService:shouldContinueShift(player) then
 		return { ok = false, error = "No active seller visits" }
@@ -663,13 +691,28 @@ function DealService:startBuyerVisit(player: Player)
 		return { ok = true, snapshot = self:_buildSnapshot(player, activeDeal) }
 	end
 
+	local beginSnapshot = ShiftService:beginBuyerVisit(player)
+	local shift = ShiftService:getShift(player)
+	if not beginSnapshot or (shift and shift.ended) then
+		local liquidationText = self:_formatLiquidationSummaryText(shift and shift.liquidationSummary)
+		local deal = {
+			phase = "Result",
+			dialogue = liquidationText,
+			dealSummary = {
+				resultText = liquidationText,
+			},
+		}
+		activeDeals[player] = deal
+		self:_pushState(player)
+		return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
+	end
+
 	local rng = self:_getRng(player)
 	local buyer = BuyerService:rollBuyer(rng)
 	if not buyer then
 		return { ok = false, error = "No buyers configured" }
 	end
 
-	ShiftService:beginBuyerVisit(player)
 	if InventoryService:getCount(player) <= 0 then
 		local deal = {
 			phase = "BuyerSkipped",
@@ -701,6 +744,34 @@ function DealService:startBuyerVisit(player: Player)
 	activeDeals[player] = deal
 	self:_pushState(player)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
+end
+
+function DealService:closeShift(player: Player)
+	local deal = activeDeals[player]
+	if deal and deal.phase == "Selling" then
+		return { ok = false, error = "Finish or skip the active sale first" }
+	end
+
+	local result = ShiftService:closeShift(player, "Liquidated after close")
+	if not result.ok then
+		return result
+	end
+
+	local resultText = self:_formatLiquidationSummaryText(result.liquidationSummary)
+	local resultDeal = {
+		phase = "Result",
+		dialogue = resultText,
+		dealSummary = {
+			resultText = resultText,
+		},
+	}
+	activeDeals[player] = resultDeal
+	self:_pushState(player)
+	return {
+		ok = true,
+		snapshot = self:_buildSnapshot(player, resultDeal),
+		shiftSnapshot = result.snapshot,
+	}
 end
 
 function DealService:selectInventoryItemForBuyer(player: Player, instanceId: any)
@@ -1061,6 +1132,10 @@ function DealService:_scheduleAfterBuyerResolution(player: Player, delay: number
 		ShiftService:completeBuyerVisit(player)
 	end
 
+	if ShiftService:shouldTriggerBuyerVisit(player) then
+		self:_scheduleBuyerVisit(player, delay, deal)
+		return
+	end
 	if not ShiftService:shouldContinueShift(player) then
 		playerNextDealAt[player] = nil
 		return

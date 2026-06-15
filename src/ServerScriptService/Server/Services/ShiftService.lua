@@ -11,6 +11,10 @@ local InventoryService = require(script.Parent.InventoryService)
 local ShiftService = {}
 
 local playerShifts: { [Player]: any } = {}
+local PHASE_BUYING = "Buying"
+local PHASE_CLOSING_RUSH = "ClosingRush"
+local PHASE_ENDED = "Ended"
+local LIQUIDATION_RATE = 0.35
 
 local function getGrade(shift): string
 	local target = math.max(shift.targetProfit or 0, 1)
@@ -42,9 +46,11 @@ local function copyShiftOption(shift)
 		id = shift.id,
 		displayName = shift.displayName,
 		dealCount = shift.dealCount,
+		sellerVisitCount = shift.sellerVisitCount or shift.dealCount,
 		targetProfit = shift.targetProfit,
 		inventorySlots = shift.inventorySlots,
 		buyerVisitEvery = shift.buyerVisitEvery,
+		closingRushBuyerLimit = shift.closingRushBuyerLimit,
 		description = shift.description,
 		modifierText = shift.modifierText,
 	}
@@ -89,13 +95,17 @@ function ShiftService:startShift(player: Player, shiftId: string?)
 
 	local inventorySlots = shift.inventorySlots or 3
 	local buyerVisitEvery = shift.buyerVisitEvery or 2
+	local sellerVisitCount = shift.sellerVisitCount or shift.dealCount
+	local closingRushBuyerLimit = shift.closingRushBuyerLimit or (inventorySlots + 1)
 	InventoryService:startShiftInventory(player, inventorySlots)
 
 	playerShifts[player] = {
 		active = true,
+		phase = PHASE_BUYING,
 		shiftId = shift.id,
 		displayName = shift.displayName,
-		dealCount = shift.dealCount,
+		dealCount = sellerVisitCount,
+		sellerVisitCount = sellerVisitCount,
 		dealsCompleted = 0,
 		sellerVisitsResolved = 0,
 		targetProfit = shift.targetProfit,
@@ -108,6 +118,10 @@ function ShiftService:startShift(player: Player, shiftId: string?)
 		inventoryMaxSlots = inventorySlots,
 		buyerVisitEvery = buyerVisitEvery,
 		pendingBuyerVisit = false,
+		closingRushBuyerLimit = closingRushBuyerLimit,
+		closingRushBuyersRemaining = closingRushBuyerLimit,
+		closingRushBuyersSeen = 0,
+		liquidationSummary = nil,
 		description = shift.description,
 		modifierText = shift.modifierText,
 		lastDealProfit = nil,
@@ -122,20 +136,63 @@ function ShiftService:getShift(player: Player)
 	return playerShifts[player]
 end
 
-function ShiftService:recordSellerVisitResolved(player: Player, forceBuyerVisit: boolean?)
+function ShiftService:isBuying(player: Player): boolean
+	local shift = playerShifts[player]
+	return shift ~= nil and shift.active and not shift.ended and shift.phase == PHASE_BUYING
+end
+
+function ShiftService:isClosingRush(player: Player): boolean
+	local shift = playerShifts[player]
+	return shift ~= nil and shift.active and not shift.ended and shift.phase == PHASE_CLOSING_RUSH
+end
+
+function ShiftService:canRollClosingRushBuyer(player: Player): boolean
+	local shift = playerShifts[player]
+	return shift ~= nil
+		and shift.active
+		and not shift.ended
+		and shift.phase == PHASE_CLOSING_RUSH
+		and (shift.closingRushBuyersRemaining or 0) > 0
+end
+
+function ShiftService:enterClosingRush(player: Player)
 	local shift = playerShifts[player]
 	if not shift or not shift.active or shift.ended then
 		return nil
 	end
 
-	shift.sellerVisitsResolved = math.min((shift.sellerVisitsResolved or shift.dealsCompleted or 0) + 1, shift.dealCount)
+	if InventoryService:getCount(player) <= 0 then
+		return self:endShift(player)
+	end
+
+	shift.phase = PHASE_CLOSING_RUSH
+	shift.pendingBuyerVisit = true
+	if (shift.closingRushBuyersRemaining or 0) <= 0 then
+		self:liquidateRemainingInventory(player, "No Closing Rush buyers left")
+		return self:endShift(player)
+	end
+
+	self:_pushState(player)
+	return self:buildSnapshot(player)
+end
+
+function ShiftService:recordSellerVisitResolved(player: Player, forceBuyerVisit: boolean?)
+	local shift = playerShifts[player]
+	if not shift or not shift.active or shift.ended or shift.phase ~= PHASE_BUYING then
+		return nil
+	end
+
+	shift.sellerVisitsResolved = math.min((shift.sellerVisitsResolved or shift.dealsCompleted or 0) + 1, shift.sellerVisitCount)
 	shift.dealsCompleted = shift.sellerVisitsResolved
 
 	if forceBuyerVisit or (shift.buyerVisitEvery > 0 and shift.sellerVisitsResolved % shift.buyerVisitEvery == 0) then
 		shift.pendingBuyerVisit = true
 	end
 
-	if shift.sellerVisitsResolved >= shift.dealCount and not shift.pendingBuyerVisit then
+	if shift.sellerVisitsResolved >= shift.sellerVisitCount then
+		if InventoryService:getCount(player) > 0 then
+			return self:enterClosingRush(player)
+		end
 		return self:endShift(player)
 	end
 
@@ -171,6 +228,19 @@ function ShiftService:beginBuyerVisit(player: Player)
 	if not shift or not shift.active or shift.ended or not shift.pendingBuyerVisit then
 		return nil
 	end
+
+	if shift.phase == PHASE_CLOSING_RUSH then
+		if InventoryService:getCount(player) <= 0 then
+			return self:endShift(player)
+		end
+		if not self:canRollClosingRushBuyer(player) then
+			self:liquidateRemainingInventory(player, "Closing Rush buyers ran out")
+			return self:endShift(player)
+		end
+		shift.closingRushBuyersRemaining -= 1
+		shift.closingRushBuyersSeen = (shift.closingRushBuyersSeen or 0) + 1
+	end
+
 	self:_pushState(player)
 	return self:buildSnapshot(player)
 end
@@ -182,8 +252,23 @@ function ShiftService:completeBuyerVisit(player: Player)
 	end
 
 	shift.pendingBuyerVisit = false
-	if shift.sellerVisitsResolved >= shift.dealCount then
-		return self:endShift(player)
+	if shift.phase == PHASE_BUYING then
+		if shift.sellerVisitsResolved >= shift.sellerVisitCount then
+			if InventoryService:getCount(player) > 0 then
+				return self:enterClosingRush(player)
+			end
+			return self:endShift(player)
+		end
+	elseif shift.phase == PHASE_CLOSING_RUSH then
+		if InventoryService:getCount(player) <= 0 then
+			return self:endShift(player)
+		end
+		if self:canRollClosingRushBuyer(player) then
+			shift.pendingBuyerVisit = true
+		else
+			self:liquidateRemainingInventory(player, "Closing Rush buyers ran out")
+			return self:endShift(player)
+		end
 	end
 
 	self:_pushState(player)
@@ -195,8 +280,78 @@ function ShiftService:shouldContinueShift(player: Player): boolean
 	return shift ~= nil
 		and shift.active
 		and not shift.ended
+		and shift.phase == PHASE_BUYING
 		and not shift.pendingBuyerVisit
-		and (shift.sellerVisitsResolved or shift.dealsCompleted or 0) < shift.dealCount
+		and (shift.sellerVisitsResolved or shift.dealsCompleted or 0) < shift.sellerVisitCount
+end
+
+function ShiftService:liquidateRemainingInventory(player: Player, reason: string?)
+	local shift = playerShifts[player]
+	if not shift or shift.ended then
+		return nil
+	end
+
+	local items = {}
+	local totalCash = 0
+	local totalProfit = 0
+
+	for _, entry in InventoryService:getActiveItems(player) do
+		local trueValue = entry.trueValue or 0
+		local liquidationValue = math.max(0, math.floor(trueValue * LIQUIDATION_RATE + 0.5))
+		local profit = liquidationValue - (entry.purchasePrice or 0)
+		totalCash += liquidationValue
+		totalProfit += profit
+		table.insert(items, {
+			instanceId = entry.instanceId,
+			itemName = entry.displayName,
+			trueValue = trueValue,
+			purchasePrice = entry.purchasePrice or 0,
+			liquidationValue = liquidationValue,
+			profit = profit,
+		})
+	end
+
+	if totalCash > 0 then
+		DataService:addCash(player, totalCash)
+	end
+	for _, item in items do
+		InventoryService:markDisposed(player, item.instanceId)
+	end
+
+	shift.shiftProfit += totalProfit
+	shift.lastDealProfit = totalProfit
+	shift.liquidationSummary = {
+		reason = reason or "Liquidated after close",
+		rate = LIQUIDATION_RATE,
+		itemCount = #items,
+		items = items,
+		totalCash = totalCash,
+		totalProfit = totalProfit,
+	}
+
+	self:_pushState(player)
+	return shift.liquidationSummary
+end
+
+function ShiftService:closeShift(player: Player, reason: string?)
+	local shift = playerShifts[player]
+	if not shift or shift.ended then
+		return { ok = false, error = "No active shift" }
+	end
+	if shift.phase ~= PHASE_CLOSING_RUSH then
+		return { ok = false, error = "Can only close during Closing Rush" }
+	end
+
+	if InventoryService:getCount(player) > 0 then
+		self:liquidateRemainingInventory(player, reason or "Liquidated after close")
+	end
+
+	local snapshot = self:endShift(player)
+	return {
+		ok = true,
+		snapshot = snapshot,
+		liquidationSummary = shift.liquidationSummary,
+	}
 end
 
 function ShiftService:endShift(player: Player)
@@ -207,6 +362,8 @@ function ShiftService:endShift(player: Player)
 
 	shift.active = false
 	shift.ended = true
+	shift.phase = PHASE_ENDED
+	shift.pendingBuyerVisit = false
 	shift.success = shift.shiftProfit >= shift.targetProfit
 	shift.grade = getGrade(shift)
 	shift.resultTitle = getResultTitle(shift)
@@ -226,18 +383,24 @@ function ShiftService:buildSnapshot(player: Player)
 
 	return {
 		active = shift.active,
+		phase = shift.phase,
 		shiftId = shift.shiftId,
 		displayName = shift.displayName,
-		dealCount = shift.dealCount,
+		dealCount = shift.sellerVisitCount or shift.dealCount,
+		sellerVisitCount = shift.sellerVisitCount or shift.dealCount,
 		dealsCompleted = shift.sellerVisitsResolved or shift.dealsCompleted,
 		sellerVisitsResolved = shift.sellerVisitsResolved or shift.dealsCompleted,
-		dealsRemaining = math.max(shift.dealCount - (shift.sellerVisitsResolved or shift.dealsCompleted), 0),
+		dealsRemaining = math.max((shift.sellerVisitCount or shift.dealCount) - (shift.sellerVisitsResolved or shift.dealsCompleted), 0),
 		targetProfit = shift.targetProfit,
 		shiftProfit = shift.shiftProfit,
 		startingCash = shift.startingCash,
 		inventoryMaxSlots = shift.inventoryMaxSlots,
 		buyerVisitEvery = shift.buyerVisitEvery,
 		pendingBuyerVisit = shift.pendingBuyerVisit,
+		closingRushBuyerLimit = shift.closingRushBuyerLimit,
+		closingRushBuyersRemaining = shift.closingRushBuyersRemaining,
+		closingRushBuyersSeen = shift.closingRushBuyersSeen,
+		liquidationSummary = shift.liquidationSummary,
 		ended = shift.ended,
 		success = shift.success,
 		grade = shift.grade or getGrade(shift),
