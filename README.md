@@ -10,9 +10,10 @@ Buy strange junk, spot hidden value, hold items in limited shift inventory, matc
 
 | Document | Description |
 |----------|-------------|
-| [docs/GDD.md](docs/GDD.md) | Living game design document (markdown) |
-| [docs/Wasteland Pawn GDD.docx](docs/Wasteland%20Pawn%20GDD.docx) | Original GDD source (Word) |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Milestones, current focus, and what not to build yet |
+| [docs/GDD.md](docs/GDD.md) | Source-of-truth design document |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Current priorities and milestone order |
+
+Edit **GDD.md** in the repo — not the Word export. A `docs/Wasteland Pawn GDD.docx` may exist as a human-readable export only.
 
 ## Tech stack
 
@@ -62,4 +63,4 @@ docs/                           GDD, roadmap, design reference
 
 ## Contributing / AI agents
 
-Read [docs/GDD.md](docs/GDD.md) and [docs/ROADMAP.md](docs/ROADMAP.md) before adding features. Use the [feature filter](docs/GDD.md#26-feature-filter): if it does not improve weird items, buy/pass decisions, inventory pressure, buyer matching, big payouts, or shift stories — it probably waits.
+Read [docs/GDD.md](docs/GDD.md) and [docs/ROADMAP.md](docs/ROADMAP.md) before adding features. Use the [feature filter](docs/GDD.md#feature-filter): if it does not improve weird items, buy/pass decisions, inventory pressure, buyer matching, big payouts, or shift stories — it probably waits.

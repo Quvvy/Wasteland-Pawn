@@ -76,6 +76,8 @@ Deliverables:
 - Hook generation so shifts have rhythm (safe flip + scam + hold opportunity + match moment)
 - Stop relying on pure random seller/item rolls
 
+**MVP only:** weighted seller / item / value setup at generation time. No cutscenes, no quest chains, no big director system yet. Archetypes affect *what spawns*, not a cinematic layer.
+
 ---
 
 ## Then — Shift Identity v1

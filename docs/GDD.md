@@ -12,30 +12,39 @@ See also: [ROADMAP.md](ROADMAP.md) for milestone tracking.
 
 ## Table of contents
 
-1. [One sentence vision](#1-one-sentence-vision)
-2. [High concept](#2-high-concept)
-3. [Core player fantasy](#3-core-player-fantasy)
-4. [Platform & audience](#4-target-platform-and-audience)
-5. [Genre](#5-genre)
-6. [Design pillars](#6-design-pillars)
-7. [What the game is not](#7-what-the-game-is-not)
-8. [Core gameplay loop](#8-core-gameplay-loop)
-9. [Current implemented systems](#10-current-implemented-systems)
-10. [Shift structure](#11-shift-structure)
-11. [Deal archetypes](#14-deal-archetypes)
-12. [Items, buyers, sellers](#15-items)
-13. [Haggling philosophy](#18-haggling-philosophy)
-14. [Payout screen](#19-payout-screen)
-15. [Art & UI direction](#21-art-direction)
-16. [Long-term progression](#23-long-term-progression)
-17. [Development stage & roadmap](#27-current-development-stage)
-18. [Success criteria](#29-success-criteria)
-19. [Dev principles](#30-development-principles-for-codex-and-cursor)
-20. [Glossary](#31-glossary)
+- [One sentence vision](#one-sentence-vision)
+- [High concept](#high-concept)
+- [Core player fantasy](#core-player-fantasy)
+- [Target platform and audience](#target-platform-and-audience)
+- [Genre](#genre)
+- [Design pillars](#design-pillars)
+- [What the game is not](#what-the-game-is-not)
+- [Core gameplay loop](#core-gameplay-loop)
+- [Current implemented systems](#current-implemented-systems)
+- [Shift structure](#shift-structure)
+- [Deal archetypes](#deal-archetypes)
+- [Items](#items)
+- [Buyers](#buyers)
+- [Sellers](#sellers)
+- [Haggling philosophy](#haggling-philosophy)
+- [Payout screen](#payout-screen)
+- [Holy crap moments](#holy-crap-moments)
+- [Art direction](#art-direction)
+- [UI direction](#ui-direction)
+- [Long-term progression](#long-term-progression)
+- [Relics / counter items](#relics--counter-items)
+- [Future shop system](#future-shop-system)
+- [Feature filter](#feature-filter)
+- [Current development stage](#current-development-stage)
+- [Immediate to-do](#immediate-to-do)
+- [Success criteria](#success-criteria)
+- [Development principles](#development-principles-codex--cursor)
+- [Glossary](#glossary)
+- [North star](#north-star)
 
 ---
 
-## 1. One sentence vision
+## One sentence vision
 
 **Wasteland Pawn** is a shift-based weird-item flipping game where players buy strange junk, identify hidden value, match items to the right buyers, and cash out for absurd profit.
 
@@ -47,7 +56,7 @@ It is about finding value in garbage, making smart flips, and creating stories l
 
 ---
 
-## 2. High concept
+## High concept
 
 The player runs a sketchy pawn shop in a wasteland.
 
@@ -58,7 +67,7 @@ The player runs a sketchy pawn shop in a wasteland.
 
 ---
 
-## 3. Core player fantasy
+## Core player fantasy
 
 The player is not just a negotiator. They are:
 
@@ -76,7 +85,7 @@ Core fantasy line:
 
 ---
 
-## 4. Target platform and audience
+## Target platform and audience
 
 **Platform:** Roblox
 
@@ -97,7 +106,7 @@ Core fantasy line:
 
 ---
 
-## 5. Genre
+## Genre
 
 | Primary | Secondary influences |
 |---------|------------------------|
@@ -111,7 +120,7 @@ Core fantasy line:
 
 ---
 
-## 6. Design pillars
+## Design pillars
 
 ### Pillar 1: Weird items are the star
 
@@ -153,7 +162,7 @@ Good shifts have highs, lows, risks, and payoff — not six disconnected transac
 
 ---
 
-## 7. What the game is not
+## What the game is not
 
 | Not this | Why |
 |----------|-----|
@@ -166,7 +175,7 @@ Good shifts have highs, lows, risks, and payoff — not six disconnected transac
 
 ---
 
-## 8. Core gameplay loop
+## Core gameplay loop
 
 1. Start a shift.
 2. Seller arrives with a weird item.
@@ -203,7 +212,7 @@ Shift Result
 
 ---
 
-## 10. Current implemented systems
+## Current implemented systems
 
 *As of latest prototype direction.*
 
@@ -267,7 +276,7 @@ When seller visits end but inventory remains:
 
 ---
 
-## 11. Shift structure
+## Shift structure
 
 | Phase | What happens |
 |-------|----------------|
@@ -297,9 +306,11 @@ Include across the run:
 
 ---
 
-## 14. Deal archetypes
+## Deal archetypes
 
 *Planned / early hooks — makes deals feel authored.*
+
+**MVP scope:** weighted seller/item/value at generation time only. No cutscenes, quest chains, or director system.
 
 | Archetype | Purpose |
 |-----------|---------|
@@ -312,7 +323,7 @@ Include across the run:
 
 ---
 
-## 15. Items
+## Items
 
 Most important content. Each item should have:
 
@@ -332,7 +343,7 @@ Possessed Traffic Cone · Crying Toaster · Moon Casino Token · Suspicious Taxi
 
 ---
 
-## 16. Buyers
+## Buyers
 
 Readable archetypes — player infers wants from name/look/description.
 
@@ -347,7 +358,7 @@ Readable archetypes — player infers wants from name/look/description.
 
 ---
 
-## 17. Sellers
+## Sellers
 
 Affect asking price, minimum, tells, tactic weaknesses, scam chance, desperation, confidence.
 
@@ -355,7 +366,7 @@ Examples: Desperate Survivor · Shady Scammer · Rich Collector · Robot Trader 
 
 ---
 
-## 18. Haggling philosophy
+## Haggling philosophy
 
 **Should be:** readable, tense, short, tactic-based, profile-driven, heat/confidence, supportive of item game.
 
@@ -366,7 +377,7 @@ Examples: Desperate Survivor · Shady Scammer · Rich Collector · Robot Trader 
 
 ---
 
-## 19. Payout screen
+## Payout screen
 
 Messy pawn receipt — the dopamine moment.
 
@@ -392,7 +403,7 @@ Stamp:          PERFECT MATCH
 
 ---
 
-## 20. Holy crap moments
+## Holy crap moments
 
 - Jackpot junk discovered after buy
 - Perfect buyer for held item
@@ -406,7 +417,7 @@ Must be **visible, readable, shareable**.
 
 ---
 
-## 21. Art direction
+## Art direction
 
 **Style name:** *Neon Cursed Flea Market*
 
@@ -420,7 +431,7 @@ Avoid muddy brown apocalypse realism. Target: stylized roadside pawn shop — ne
 
 ---
 
-## 22. UI direction
+## UI direction
 
 Pawn receipt / price tag / scrap-paper ledger.
 
@@ -432,7 +443,7 @@ Key labels: Seller Ask · Inventory · Buyer Match · Closing Rush · Buyers Lef
 
 ---
 
-## 23. Long-term progression
+## Long-term progression
 
 *Not implemented.*
 
@@ -445,7 +456,7 @@ Key labels: Seller Ask · Inventory · Buyer Match · Closing Rush · Buyers Lef
 
 ---
 
-## 24. Relics / counter items
+## Relics / counter items
 
 *Future.* Must change **decisions**, not flat +10%.
 
@@ -458,7 +469,7 @@ Good examples:
 
 ---
 
-## 25. Future shop system
+## Future shop system
 
 Shop customization + display, **not** freeform building.
 
@@ -468,7 +479,7 @@ Supports visual progress and social showing — must not distract from flipping 
 
 ---
 
-## 26. Feature filter
+## Feature filter
 
 Before adding a feature, does it improve at least one of:
 
@@ -494,7 +505,7 @@ Before adding a feature, does it improve at least one of:
 
 ---
 
-## 27. Current development stage
+## Current development stage
 
 ### Completed / mostly working
 
@@ -518,7 +529,7 @@ Relics · more items · collection log · shop display/customization · saving/p
 
 ---
 
-## 28. Immediate to-do
+## Immediate to-do
 
 **Do now:**
 
@@ -534,7 +545,7 @@ Relics · more items · collection log · shop display/customization · saving/p
 
 ---
 
-## 29. Success criteria
+## Success criteria
 
 **Moving right if players say:**
 
@@ -558,7 +569,7 @@ Relics · more items · collection log · shop display/customization · saving/p
 
 ---
 
-## 30. Development principles (Codex & Cursor)
+## Development principles (Codex & Cursor)
 
 1. Protect the core loop — don't fight holding + matching.
 2. Small, testable milestones.
@@ -571,7 +582,7 @@ Relics · more items · collection log · shop display/customization · saving/p
 
 ---
 
-## 31. Glossary
+## Glossary
 
 | Term | Definition |
 |------|------------|
@@ -589,7 +600,7 @@ Relics · more items · collection log · shop display/customization · saving/p
 
 ---
 
-## 32. North star
+## North star
 
 > *"I bought a haunted traffic cone for 40 scraps, held it through two bad buyers, almost ran out of time, then sold it during Closing Rush to an alien tourist for a ridiculous profit."*
 
@@ -597,4 +608,4 @@ If a feature helps create stories like that, it probably belongs. If not, it can
 
 ---
 
-*Source: `Wasteland Pawn GDD.docx` (v0.2). Markdown version maintained in repo for agents and contributors.*
+*This file (`docs/GDD.md`) is the source of truth for design (v0.2). `docs/Wasteland Pawn GDD.docx` is an optional human export — edit the markdown, not the Word file.*
