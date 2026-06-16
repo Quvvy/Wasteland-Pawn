@@ -14,7 +14,6 @@ local playerShifts: { [Player]: any } = {}
 local PHASE_BUYING = "Buying"
 local PHASE_CLOSING_RUSH = "ClosingRush"
 local PHASE_ENDED = "Ended"
-local LIQUIDATION_RATE = 0.35
 
 local function getGrade(shift): string
 	local target = math.max(shift.targetProfit or 0, 1)
@@ -297,7 +296,7 @@ function ShiftService:liquidateRemainingInventory(player: Player, reason: string
 
 	for _, entry in InventoryService:getActiveItems(player) do
 		local trueValue = entry.trueValue or 0
-		local liquidationValue = math.max(0, math.floor(trueValue * LIQUIDATION_RATE + 0.5))
+		local liquidationValue = math.max(0, math.floor(trueValue * Shifts.LiquidationRate + 0.5))
 		local profit = liquidationValue - (entry.purchasePrice or 0)
 		totalCash += liquidationValue
 		totalProfit += profit
@@ -322,7 +321,7 @@ function ShiftService:liquidateRemainingInventory(player: Player, reason: string
 	shift.lastDealProfit = totalProfit
 	shift.liquidationSummary = {
 		reason = reason or "Liquidated after close",
-		rate = LIQUIDATION_RATE,
+		rate = Shifts.LiquidationRate,
 		itemCount = #items,
 		items = items,
 		totalCash = totalCash,

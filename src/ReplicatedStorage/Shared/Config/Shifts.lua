@@ -70,6 +70,7 @@ end
 local Shifts = {
 	List = shiftList,
 	ById = byId,
+	LiquidationRate = 0.35,
 }
 
 function Shifts.get(shiftId: string)

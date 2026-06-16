@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local HaggleTuning = require(Shared.Config.HaggleTuning)
+local Shifts = require(Shared.Config.Shifts)
 
 local UIController = {}
 
@@ -76,6 +77,22 @@ local function formatInventorySummary(inventory): string
 	return table.concat(lines, "\n")
 end
 
+local function liquidationRatePercent(rate: number?): number
+	return math.floor(((rate or Shifts.LiquidationRate) * 100) + 0.5)
+end
+
+local function formatClosingRushShiftText(snapshot, cur: string, inventoryCount: number, inventoryMax: number): string
+	return table.concat({
+		`Shift: {snapshot.displayName or "?"} | Closing Rush | Buyers left: {snapshot.closingRushBuyersRemaining or 0}`,
+		`Profit: {formatSignedAmount(snapshot.shiftProfit)} / {snapshot.targetProfit or 0} {cur} | Inventory: {inventoryCount}/{inventoryMax}`,
+		`Unsold items liquidate at {liquidationRatePercent()}% value.`,
+	}, "\n")
+end
+
+local function refreshInventoryLabel()
+	labels.inventory.Text = formatInventorySummary(currentInventorySnapshot)
+end
+
 local function formatInventoryMatches(matches): string
 	if not matches or #matches == 0 then
 		return "No inventory to offer."
@@ -96,7 +113,7 @@ local function formatLiquidationSummary(summary, cur: string): string
 		return ""
 	end
 
-	local rate = math.floor((summary.rate or 0.35) * 100 + 0.5)
+	local rate = liquidationRatePercent(summary.rate)
 	return `\nLiquidated {summary.itemCount} item(s) at {rate}% value.\nLiquidation cash: {summary.totalCash or 0} {cur} | Profit: {formatSignedAmount(summary.totalProfit)} {cur}`
 end
 
@@ -222,7 +239,8 @@ function UIController:Init()
 	buttons.findAnother = createButton(root, "FindAnother", "Skip Buyer", UDim2.fromOffset(148, 668), UDim2.fromOffset(120, 26))
 	buttons.keep = createButton(root, "Keep", "Keep Item", UDim2.fromOffset(276, 668), UDim2.fromOffset(100, 26))
 	buttons.next = createButton(root, "Next", "Next Customer", UDim2.fromOffset(276, 668), UDim2.fromOffset(152, 26))
-	buttons.closeShift = createButton(root, "CloseShift", "Close Shift", UDim2.fromOffset(148, 668), UDim2.fromOffset(120, 26))
+	buttons.closeShift = createButton(root, "CloseShift", "Liquidate & Close", UDim2.fromOffset(12, 668), UDim2.fromOffset(120, 26))
+	buttons.closeShift.TextSize = 12
 
 	buttons.offerSlot1 = createButton(root, "OfferSlot1", "Offer 1", UDim2.fromOffset(12, 634), UDim2.fromOffset(132, 30))
 	buttons.offerSlot2 = createButton(root, "OfferSlot2", "Offer 2", UDim2.fromOffset(150, 634), UDim2.fromOffset(132, 30))
@@ -332,6 +350,9 @@ function UIController:updateSnapshot(snapshot)
 	if snapshot.inventory then
 		currentInventorySnapshot = snapshot.inventory
 	end
+	if snapshot.shift then
+		currentShiftSnapshot = snapshot.shift
+	end
 	self:setPhaseControls(phase)
 
 	local isSell = phase == "Selling"
@@ -391,7 +412,7 @@ function UIController:updateSnapshot(snapshot)
 	labels.prices.Text = if #lines > 0 then table.concat(lines, "\n") else "-"
 
 	labels.cash.Text = `Your {cur}: {snapshot.playerCash or 0}`
-	labels.inventory.Text = formatInventorySummary(currentInventorySnapshot)
+	refreshInventoryLabel()
 
 	local heat = if isSell then snapshot.buyerHeat or 0 else snapshot.sellerHeat or 0
 	local heatMax = if isSell then snapshot.buyerHeatMax or 100 else snapshot.sellerHeatMax or 100
@@ -459,14 +480,21 @@ function UIController:updateShiftSnapshot(snapshot)
 		if phase == "ClosingRush" then
 			local inventoryCount = currentInventorySnapshot and currentInventorySnapshot.usedSlots or 0
 			local inventoryMax = currentInventorySnapshot and currentInventorySnapshot.maxSlots or currentShiftSnapshot.inventoryMaxSlots or 3
-			labels.shift.Text =
-				`Shift: {currentShiftSnapshot.displayName or "?"} | Closing Rush\nNo more sellers. Cash out your shelves.\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Inventory: {inventoryCount}/{inventoryMax} | Buyers left: {currentShiftSnapshot.closingRushBuyersRemaining or 0}`
+			labels.shift.Size = UDim2.fromOffset(416, 54)
+			labels.shift.Text = formatClosingRushShiftText(currentShiftSnapshot, cur, inventoryCount, inventoryMax)
 		else
+			local activeDealPhase = currentSnapshot and currentSnapshot.phase
+			local activityText = if activeDealPhase == "BuyerVisit" or activeDealPhase == "Selling"
+				then "Buyer Visit"
+				else "Buying"
+			labels.shift.Size = UDim2.fromOffset(416, 48)
 			labels.shift.Text =
-				`Shift: {currentShiftSnapshot.displayName or "?"} | Buying\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Sellers: {currentShiftSnapshot.dealsCompleted or 0} / {currentShiftSnapshot.sellerVisitCount or currentShiftSnapshot.dealCount or 0}{buyerText}`
+				`Shift: {currentShiftSnapshot.displayName or "?"} | Buying | {activityText}\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Sellers: {currentShiftSnapshot.dealsCompleted or 0} / {currentShiftSnapshot.sellerVisitCount or currentShiftSnapshot.dealCount or 0}{buyerText}`
 		end
+		refreshInventoryLabel()
 		labels.shiftResult.Visible = false
 	elseif currentShiftSnapshot.ended then
+		labels.shift.Size = UDim2.fromOffset(416, 48)
 		local grade = currentShiftSnapshot.grade or (if currentShiftSnapshot.success then "Success" else "Bust")
 		local resultTitle = currentShiftSnapshot.resultTitle
 			or (if currentShiftSnapshot.success then "Shift Complete" else "Shift Failed")
@@ -479,8 +507,10 @@ function UIController:updateShiftSnapshot(snapshot)
 			else Color3.fromRGB(255, 170, 140)
 		labels.shiftResult.Visible = true
 	else
+		labels.shift.Size = UDim2.fromOffset(416, 48)
 		labels.shift.Text = "Choose a shift to begin."
 		labels.shiftResult.Visible = false
+		refreshInventoryLabel()
 	end
 
 	self:setPhaseControls(currentSnapshot and currentSnapshot.phase or "")
@@ -488,7 +518,7 @@ end
 
 function UIController:updateInventorySnapshot(snapshot)
 	currentInventorySnapshot = snapshot
-	labels.inventory.Text = formatInventorySummary(currentInventorySnapshot)
+	refreshInventoryLabel()
 	self:setPhaseControls(currentSnapshot and currentSnapshot.phase or "")
 end
 
