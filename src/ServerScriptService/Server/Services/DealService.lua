@@ -358,6 +358,7 @@ function DealService:_buildSnapshot(player: Player, deal)
 		buyerMatch = deal.buyerMatch,
 		buyerMatchLabel = deal.buyerMatch and deal.buyerMatch.label or nil,
 		inventory = InventoryService:getSnapshot(player),
+		inventoryFull = not InventoryService:canAdd(player),
 		inventoryMatches = deal.inventoryMatches,
 		estimatedLow = deal.estimatedLow,
 		estimatedHigh = deal.estimatedHigh,
@@ -592,6 +593,14 @@ function DealService:inspectItem(player: Player)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end
 
+function DealService:_rejectPurchaseInventoryFull(player: Player, deal)
+	local inventory = InventoryService:getSnapshot(player)
+	deal.dialogue =
+		`Inventory full ({inventory.usedSlots}/{inventory.maxSlots}). Sell something before buying more.`
+	self:_pushState(player)
+	return { ok = false, error = "Inventory full", snapshot = self:_buildSnapshot(player, deal) }
+end
+
 function DealService:_completePurchase(player: Player, price: number, deal)
 	if not DataService:canAfford(player, price) then
 		deal.dialogue = `You don't have enough {currencyWord()}.`
@@ -599,15 +608,9 @@ function DealService:_completePurchase(player: Player, price: number, deal)
 		return { ok = false, error = "Not enough cash" }
 	end
 	if not InventoryService:canAdd(player) then
-		deal.phase = "WalkedAway"
-		deal.dialogue = "Inventory full. You let this seller go and call in a buyer to clear shelf space."
-		deal.dealSummary = self:_buildNoProfitSummary(deal, "Inventory full")
-		self:_pushState(player)
-		self:_scheduleAfterSellerResolution(player, HaggleTuning.autoNextDelayPass, deal, true)
-		return { ok = false, error = "Inventory full - buyer visit next", snapshot = self:_buildSnapshot(player, deal) }
+		return self:_rejectPurchaseInventoryFull(player, deal)
 	end
 
-	DataService:spend(player, price)
 	local instanceId = InventoryService:addPurchasedItem(player, {
 		itemId = deal.item.id,
 		displayName = deal.item.displayName,
@@ -629,12 +632,14 @@ function DealService:_completePurchase(player: Player, price: number, deal)
 		tacticsUsed = copyList(deal.tacticsUsed),
 	})
 	if not instanceId then
-		deal.phase = "WalkedAway"
-		deal.dialogue = "Inventory full. You let this seller go and call in a buyer to clear shelf space."
-		deal.dealSummary = self:_buildNoProfitSummary(deal, "Inventory full")
+		return self:_rejectPurchaseInventoryFull(player, deal)
+	end
+
+	if not DataService:spend(player, price) then
+		InventoryService:markDisposed(player, instanceId)
+		deal.dialogue = `You don't have enough {currencyWord()}.`
 		self:_pushState(player)
-		self:_scheduleAfterSellerResolution(player, HaggleTuning.autoNextDelayPass, deal, true)
-		return { ok = false, error = "Inventory full - buyer visit next", snapshot = self:_buildSnapshot(player, deal) }
+		return { ok = false, error = "Not enough cash" }
 	end
 
 	deal.pendingInstanceId = instanceId

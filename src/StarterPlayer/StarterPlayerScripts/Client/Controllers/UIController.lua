@@ -281,6 +281,21 @@ function UIController:getSnapshot()
 	return currentSnapshot
 end
 
+local function refreshAcceptBuyButton()
+	local snapshot = currentSnapshot
+	local phase = snapshot and snapshot.phase
+	local inventory = currentInventorySnapshot or (snapshot and snapshot.inventory)
+	local inventoryFull = phase == "Haggling"
+		and inventory
+		and (inventory.usedSlots or 0) >= (inventory.maxSlots or 3)
+	local canAccept = tacticButtonsEnabled and phase == "Haggling" and not inventoryFull
+
+	buttons.acceptBuy.Active = canAccept
+	buttons.acceptBuy.AutoButtonColor = canAccept
+	buttons.acceptBuy.BackgroundTransparency = if canAccept then 0 else 0.45
+	buttons.acceptBuy.Text = if inventoryFull then "Inventory Full" else "Accept Price"
+end
+
 function UIController:setTacticButtonsEnabled(enabled: boolean)
 	tacticButtonsEnabled = enabled
 	local alpha = if enabled then 0 else 0.45
@@ -289,6 +304,7 @@ function UIController:setTacticButtonsEnabled(enabled: boolean)
 		button.AutoButtonColor = enabled
 		button.BackgroundTransparency = alpha
 	end
+	refreshAcceptBuyButton()
 end
 
 local function updateHeatBar(heat: number, maxHeat: number)
@@ -464,6 +480,8 @@ function UIController:updateSnapshot(snapshot)
 	elseif phase == "Haggling" then
 		labels.inspect.Text = `Inspect ({HaggleTuning.inspectCost} {cur}) helps Point Out Flaw.`
 	end
+
+	refreshAcceptBuyButton()
 end
 
 function UIController:updateShiftSnapshot(snapshot)
@@ -520,6 +538,7 @@ function UIController:updateInventorySnapshot(snapshot)
 	currentInventorySnapshot = snapshot
 	refreshInventoryLabel()
 	self:setPhaseControls(currentSnapshot and currentSnapshot.phase or "")
+	refreshAcceptBuyButton()
 end
 
 local function connectTactic(name: string, callback: () -> ())
