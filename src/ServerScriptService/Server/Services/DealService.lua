@@ -101,6 +101,79 @@ local function rollDealArchetype(shift, rng: Random?)
 	return if archetypeId then DealArchetypes.get(archetypeId) else nil
 end
 
+local WEAK_CLUE_FALLBACKS = {
+	"Estimate range is wide.",
+	"The asking price sits above your estimate.",
+	"The seller's story is thin.",
+	"The item has obvious wear.",
+}
+
+local INSPECT_CLUE_FALLBACKS = {
+	"Markings do not match the material.",
+	"Wear goes deeper than the outer shell suggests.",
+	"Parts look older than the seller claimed.",
+	"Something about the construction feels off.",
+}
+
+local function pickRandomLine(pool, rng: Random?): string?
+	if type(pool) ~= "table" or #pool == 0 then
+		return nil
+	end
+	local random = rng or Random.new()
+	return pool[random:NextInteger(1, #pool)]
+end
+
+local function stripInspectionPrefix(text: string): string
+	return (text:gsub("^Inspection:%s*", ""))
+end
+
+local function isEstimateSpreadWide(estimatedLow: number?, estimatedHigh: number?, trueValue: number?): boolean
+	if not estimatedLow or not estimatedHigh or not trueValue or trueValue <= 0 then
+		return false
+	end
+	local spread = (estimatedHigh - estimatedLow) / trueValue
+	return spread >= 0.45
+end
+
+local function pickWeakClue(archetype, clueContext, rng: Random?): string
+	local fromArchetype = pickRandomLine(archetype and archetype.weakClues, rng)
+	if fromArchetype then
+		return fromArchetype
+	end
+
+	if clueContext.estimateInflated then
+		return "The asking price sits above your estimate."
+	end
+	if isEstimateSpreadWide(clueContext.estimatedLow, clueContext.estimatedHigh, clueContext.trueValue) then
+		return "Estimate range is wide."
+	end
+
+	return pickRandomLine(WEAK_CLUE_FALLBACKS, rng) or WEAK_CLUE_FALLBACKS[1]
+end
+
+local function pickInspectClue(deal, rng: Random?): string
+	local archetype = if deal.dealArchetypeId then DealArchetypes.get(deal.dealArchetypeId) else nil
+	local fromArchetype = pickRandomLine(archetype and archetype.inspectClues, rng)
+	if fromArchetype then
+		return fromArchetype
+	end
+
+	if deal.hiddenOutcome and deal.customer then
+		local hint = ItemValuation.getInspectHint(
+			deal.hiddenOutcome.rarityId,
+			deal.hiddenOutcome.trueValue,
+			deal.customer,
+			deal.estimatedLow,
+			deal.estimatedHigh
+		)
+		if hint then
+			return stripInspectionPrefix(hint)
+		end
+	end
+
+	return pickRandomLine(INSPECT_CLUE_FALLBACKS, rng) or INSPECT_CLUE_FALLBACKS[1]
+end
+
 local function sumBonusLines(bonuses): number
 	local total = 0
 	for _, bonus in bonuses or {} do
@@ -303,7 +376,8 @@ function DealService:_initDealState(
 	estimatedLow,
 	estimatedHigh,
 	rng,
-	archetype
+	archetype,
+	weakClue: string?
 )
 	local cur = currencyWord()
 	local inflated = ItemValuation.isEstimateInflated(estimatedLow, estimatedHigh, hiddenOutcome.trueValue)
@@ -313,6 +387,8 @@ function DealService:_initDealState(
 		item = item,
 		dealArchetypeId = archetype and archetype.id or nil,
 		dealArchetypeName = archetype and archetype.displayName or nil,
+		weakClue = weakClue,
+		inspectClue = nil,
 		hiddenOutcome = hiddenOutcome,
 		phase = "Haggling",
 		originalAskingPrice = askingPrice,
@@ -382,6 +458,8 @@ function DealService:_buildSnapshot(player: Player, deal)
 		buyerName = buyer and buyer.displayName or nil,
 		dealArchetypeId = deal.dealArchetypeId,
 		dealArchetypeName = deal.dealArchetypeName,
+		weakClue = deal.weakClue,
+		inspectClue = deal.inspectClue,
 		dialogue = deal.dialogue,
 		itemId = item and item.id or nil,
 		itemName = item and item.displayName or nil,
@@ -509,8 +587,14 @@ function DealService:startDeal(player: Player, customerId: string?, itemId: stri
 	local ask = TacticHaggleMath.calculateAskingPrice(customer, hidden.trueValue, rng)
 	ask = clampAmount(ask * getPositiveMultiplier(archetype, "askMultiplier"))
 	local minAccept = TacticHaggleMath.calculateMinimumAccept(customer, item, hidden.trueValue, ask)
+	local weakClue = pickWeakClue(archetype, {
+		estimatedLow = estLow,
+		estimatedHigh = estHigh,
+		trueValue = hidden.trueValue,
+		estimateInflated = ItemValuation.isEstimateInflated(estLow, estHigh, hidden.trueValue),
+	}, rng)
 
-	local deal = self:_initDealState(customer, item, hidden, ask, minAccept, estLow, estHigh, rng, archetype)
+	local deal = self:_initDealState(customer, item, hidden, ask, minAccept, estLow, estHigh, rng, archetype, weakClue)
 	activeDeals[player] = deal
 	self:_logDealStart(player, deal)
 	self:_pushState(player)
@@ -632,11 +716,12 @@ function DealService:inspectItem(player: Player)
 		deal.estimatedLow,
 		deal.estimatedHigh
 	)
+	deal.inspectClue = pickInspectClue(deal, self:_getRng(player))
 	local bonusTell = NpcTells.inspectBonusTell(deal.customer, deal.hiddenOutcome.rarityId, deal.estimateInflated)
 	if bonusTell then
 		deal.sellerTell = bonusTell
 	end
-	deal.dialogue = deal.inspectHint
+	deal.dialogue = `Inspection: {deal.inspectClue}`
 	self:_pushState(player)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end

@@ -7,6 +7,19 @@ local archetypeList = {
 			desperate_survivor = 3,
 			nervous_rookie = 3,
 			junk_dealer = 1,
+			shady_scammer = 1,
+		},
+		weakClues = {
+			"The asking price sits close to your estimate.",
+			"The item looks worn but usable.",
+			"The seller seems ready to move on.",
+			"Nothing flashy, but the parts look salvageable.",
+		},
+		inspectClues = {
+			"Wear is surface-level; core parts look intact.",
+			"Maker marks match the materials underneath.",
+			"Serial numbers line up with the casing age.",
+			"Practical scrap value seems real, not padded.",
 		},
 		itemCategoryWeights = {
 			Scrap = 3,
@@ -36,6 +49,20 @@ local archetypeList = {
 			shady_scammer = 4,
 			junk_dealer = 2,
 			silent_stranger = 1,
+			desperate_survivor = 1,
+			nervous_rookie = 1,
+		},
+		weakClues = {
+			"The item looks cleaner than the story suggests.",
+			"The asking price sits above your estimate.",
+			"Seller avoids saying where they found it.",
+			"Estimate range is wide.",
+		},
+		inspectClues = {
+			"Serial number looks recently scratched.",
+			"Paint is covering older damage.",
+			"The maker mark does not match the material.",
+			"Shine looks applied, not original.",
 		},
 		itemCategoryWeights = {
 			Scrap = 2,
@@ -67,6 +94,19 @@ local archetypeList = {
 			desperate_survivor = 4,
 			nervous_rookie = 3,
 			mutant_drifter = 2,
+			soldier = 1,
+		},
+		weakClues = {
+			"Seller keeps rushing the conversation.",
+			"Seller keeps checking your reaction.",
+			"The seller's story is thin.",
+			"The item has obvious wear.",
+		},
+		inspectClues = {
+			"Damage is real, but the useful parts remain.",
+			"Repairs look hasty, not fraudulent.",
+			"Wear matches a hard life, not a repaint job.",
+			"Parts still move; nothing critical is missing.",
 		},
 		itemCategoryWeights = {
 			Scrap = 2,
@@ -99,6 +139,20 @@ local archetypeList = {
 			rich_collector = 2,
 			alien_tourist = 2,
 			robot_trader = 1,
+			soldier = 1,
+			shady_scammer = 1,
+		},
+		weakClues = {
+			"Unusual markings catch the light.",
+			"The seller undersells how odd this looks.",
+			"Traits stand out more than the price suggests.",
+			"Collectors might notice details like these.",
+		},
+		inspectClues = {
+			"Collectors sometimes chase markings like this.",
+			"Hidden detail under the grime looks deliberate.",
+			"Material quality exceeds the outer wear.",
+			"Small quirks suggest niche buyer interest.",
 		},
 		itemCategoryWeights = {
 			Collectibles = 3,
@@ -134,6 +188,20 @@ local archetypeList = {
 			alien_tourist = 2,
 			silent_stranger = 2,
 			junk_dealer = 1,
+			shady_scammer = 1,
+			desperate_survivor = 1,
+		},
+		weakClues = {
+			"Looks like junk until you stare longer.",
+			"Estimate range is wide.",
+			"Seller seems unsure what they have.",
+			"Weird details do not match the low ask.",
+		},
+		inspectClues = {
+			"There is alien alloy under the rust.",
+			"The casing hums faintly when handled.",
+			"Odd residue glows under scrap dust.",
+			"Inner parts look far newer than the shell.",
 		},
 		itemCategoryWeights = {
 			["Cursed Junk"] = 3,
@@ -167,6 +235,20 @@ local archetypeList = {
 			robot_trader = 2,
 			junk_dealer = 2,
 			silent_stranger = 1,
+			desperate_survivor = 1,
+			nervous_rookie = 1,
+		},
+		weakClues = {
+			"The asking price sits above your estimate.",
+			"Estimate range is wide.",
+			"The seller's story is thin.",
+			"The item has obvious wear.",
+		},
+		inspectClues = {
+			"Critical parts look stripped or missing.",
+			"Repairs hide more problems underneath.",
+			"Value looks mostly in scrap weight.",
+			"Wear goes deeper than the seller admitted.",
 		},
 		itemCategoryWeights = {
 			Scrap = 3,

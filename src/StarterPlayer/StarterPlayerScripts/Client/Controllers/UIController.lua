@@ -202,7 +202,7 @@ function UIController:Init()
 	labels.heat = createLabel(root, "Heat", "Heat: 0", UDim2.fromOffset(12, 406), UDim2.fromOffset(416, 34))
 	labels.heat.BackgroundTransparency = 1
 
-	labels.inspect = createLabel(root, "Inspect", "", UDim2.fromOffset(12, 442), UDim2.fromOffset(416, 30))
+	labels.inspect = createLabel(root, "Inspect", "", UDim2.fromOffset(12, 442), UDim2.fromOffset(416, 42))
 	labels.result = createLabel(root, "Result", "", UDim2.fromOffset(12, 474), UDim2.fromOffset(416, 86))
 	labels.result.Visible = false
 
@@ -475,10 +475,21 @@ function UIController:updateSnapshot(snapshot)
 		end
 	end
 
-	if snapshot.inspected and snapshot.inspectHint then
-		labels.inspect.Text = snapshot.inspectHint
-	elseif phase == "Haggling" then
-		labels.inspect.Text = `Inspect ({HaggleTuning.inspectCost} {cur}) helps Point Out Flaw.`
+	if phase == "Haggling" then
+		local inspectCostLine = `Inspect ({HaggleTuning.inspectCost} {cur}) helps Point Out Flaw.`
+		if snapshot.inspected then
+			if snapshot.inspectClue then
+				labels.inspect.Text = `Inspection: {snapshot.inspectClue}`
+			elseif snapshot.inspectHint then
+				labels.inspect.Text = snapshot.inspectHint
+			else
+				labels.inspect.Text = inspectCostLine
+			end
+		elseif snapshot.weakClue then
+			labels.inspect.Text = `Clue: {snapshot.weakClue}\n{inspectCostLine}`
+		else
+			labels.inspect.Text = inspectCostLine
+		end
 	end
 
 	refreshAcceptBuyButton()
