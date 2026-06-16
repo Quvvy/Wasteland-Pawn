@@ -117,6 +117,7 @@ function ShiftService:startShift(player: Player, shiftId: string?)
 		inventoryMaxSlots = inventorySlots,
 		buyerVisitEvery = buyerVisitEvery,
 		pendingBuyerVisit = false,
+		dealArchetypeWeights = shift.dealArchetypeWeights,
 		closingRushBuyerLimit = closingRushBuyerLimit,
 		closingRushBuyersRemaining = closingRushBuyerLimit,
 		closingRushBuyersSeen = 0,

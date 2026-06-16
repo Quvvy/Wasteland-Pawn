@@ -126,6 +126,8 @@ function InventoryService:getSnapshot(player: Player)
 				instanceId = entry.instanceId,
 				itemId = entry.itemId,
 				displayName = entry.displayName,
+				dealArchetypeId = entry.dealArchetypeId,
+				dealArchetypeName = entry.dealArchetypeName,
 				category = entry.category,
 				traits = entry.traits or {},
 				flavorText = entry.flavorText,

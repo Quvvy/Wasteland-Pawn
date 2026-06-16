@@ -8,23 +8,48 @@ local function clamp(value: number, minValue: number, maxValue: number): number
 	return math.clamp(math.floor(value + 0.5), minValue, maxValue)
 end
 
-function ItemValuation.rollRarity(item, rng: Random?): string
+local function getMultiplier(bias, fieldName: string): number
+	local value = bias and bias[fieldName]
+	if type(value) == "number" and value > 0 then
+		return value
+	end
+	return 1
+end
+
+local function applyRarityBias(weights, bias)
+	local multipliers = bias and bias.rarityWeightMultipliers
+	if type(multipliers) ~= "table" then
+		return weights
+	end
+
+	for rarityId, multiplier in multipliers do
+		if weights[rarityId] and type(multiplier) == "number" and multiplier > 0 then
+			weights[rarityId] *= multiplier
+		end
+	end
+
+	return weights
+end
+
+function ItemValuation.rollRarity(item, rng: Random?, bias): string
 	local weights = Rarities.getRollWeights(item.category)
+	applyRarityBias(weights, bias)
 	local rarityId = TableUtil.pickWeighted(weights, rng)
 	return rarityId or "Common"
 end
 
-function ItemValuation.calculateTrueValue(item, rarityId: string, rng: Random?): number
+function ItemValuation.calculateTrueValue(item, rarityId: string, rng: Random?, bias): number
 	local rarity = Rarities[rarityId] or Rarities.Common
 	local random = rng or Random.new()
 	local jitter = random:NextNumber(0.92, 1.12)
-	return clamp(item.baseValue * rarity.valueMultiplier * jitter, 1, 999999)
+	local multiplier = getMultiplier(bias, "trueValueMultiplier")
+	return clamp(item.baseValue * rarity.valueMultiplier * jitter * multiplier, 1, 999999)
 end
 
-function ItemValuation.createHiddenOutcome(item, customer, rng: Random?)
+function ItemValuation.createHiddenOutcome(item, customer, rng: Random?, bias)
 	local random = rng or Random.new()
-	local rarityId = ItemValuation.rollRarity(item, random)
-	local trueValue = ItemValuation.calculateTrueValue(item, rarityId, random)
+	local rarityId = ItemValuation.rollRarity(item, random, bias)
+	local trueValue = ItemValuation.calculateTrueValue(item, rarityId, random, bias)
 
 	return {
 		rarityId = rarityId,
@@ -32,7 +57,7 @@ function ItemValuation.createHiddenOutcome(item, customer, rng: Random?)
 	}
 end
 
-function ItemValuation.generateEstimatedRange(item, customer, trueValue: number, rng: Random?)
+function ItemValuation.generateEstimatedRange(item, customer, trueValue: number, rng: Random?, bias)
 	local random = rng or Random.new()
 	local knowledge = customer.knowledge or 0
 	local scamBias = customer.scamBias or 0
@@ -41,9 +66,14 @@ function ItemValuation.generateEstimatedRange(item, customer, trueValue: number,
 		- knowledge * HaggleTuning.estimateSpreadKnowledge
 		+ scamBias * HaggleTuning.estimateSpreadScam
 	spread = math.clamp(spread, HaggleTuning.estimateSpreadMin, HaggleTuning.estimateSpreadMax)
+	spread = math.clamp(
+		spread * getMultiplier(bias, "estimateSpreadMultiplier"),
+		HaggleTuning.estimateSpreadMin,
+		HaggleTuning.estimateSpreadMax
+	)
 
 	local inflate = scamBias * random:NextNumber(HaggleTuning.scamInflateMin, HaggleTuning.scamInflateMax)
-	local center = trueValue * (1 + inflate)
+	local center = trueValue * (1 + inflate) * getMultiplier(bias, "estimateCenterMultiplier")
 	local low = clamp(center * (1 - spread), 1, 999999)
 	local high = clamp(center * (1 + spread), low, 999999)
 

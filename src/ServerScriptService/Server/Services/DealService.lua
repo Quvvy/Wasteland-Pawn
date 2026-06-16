@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local DealArchetypes = require(Shared.Config.DealArchetypes)
 local HaggleTuning = require(Shared.Config.HaggleTuning)
 local HaggleTactics = require(Shared.Economy.HaggleTactics)
 local Rarities = require(Shared.Config.Rarities)
@@ -11,6 +12,7 @@ local NpcTells = require(Shared.Economy.NpcTells)
 local ItemValuation = require(Shared.Economy.ItemValuation)
 local BuyerMatch = require(Shared.Economy.BuyerMatch)
 local Remotes = require(Shared.Net.Remotes)
+local TableUtil = require(Shared.Util.TableUtil)
 
 local DataService = require(script.Parent.DataService)
 local InventoryService = require(script.Parent.InventoryService)
@@ -73,6 +75,30 @@ end
 
 local function clampAmount(value: number): number
 	return math.clamp(math.floor(value + 0.5), 1, 999999)
+end
+
+local function getPositiveMultiplier(source, fieldName: string): number
+	local value = source and source[fieldName]
+	if type(value) == "number" and value > 0 then
+		return value
+	end
+	return 1
+end
+
+local function rollDealArchetype(shift, rng: Random?)
+	if not shift or type(shift.dealArchetypeWeights) ~= "table" then
+		return nil
+	end
+
+	local weights = {}
+	for archetypeId, weight in shift.dealArchetypeWeights do
+		if type(weight) == "number" and weight > 0 and DealArchetypes.get(archetypeId) then
+			weights[archetypeId] = weight
+		end
+	end
+
+	local archetypeId = TableUtil.pickWeighted(weights, rng)
+	return if archetypeId then DealArchetypes.get(archetypeId) else nil
 end
 
 local function sumBonusLines(bonuses): number
@@ -268,13 +294,25 @@ function DealService:_logTacticDebug(player: Player, side: string, tacticId: str
 	)
 end
 
-function DealService:_initDealState(customer, item, hiddenOutcome, askingPrice, minimumAccept, estimatedLow, estimatedHigh, rng)
+function DealService:_initDealState(
+	customer,
+	item,
+	hiddenOutcome,
+	askingPrice,
+	minimumAccept,
+	estimatedLow,
+	estimatedHigh,
+	rng,
+	archetype
+)
 	local cur = currencyWord()
 	local inflated = ItemValuation.isEstimateInflated(estimatedLow, estimatedHigh, hiddenOutcome.trueValue)
 
 	return {
 		customer = customer,
 		item = item,
+		dealArchetypeId = archetype and archetype.id or nil,
+		dealArchetypeName = archetype and archetype.displayName or nil,
 		hiddenOutcome = hiddenOutcome,
 		phase = "Haggling",
 		originalAskingPrice = askingPrice,
@@ -342,6 +380,8 @@ function DealService:_buildSnapshot(player: Player, deal)
 		customerName = customer and customer.displayName or deal.sellerName,
 		buyerId = buyer and buyer.id or nil,
 		buyerName = buyer and buyer.displayName or nil,
+		dealArchetypeId = deal.dealArchetypeId,
+		dealArchetypeName = deal.dealArchetypeName,
 		dialogue = deal.dialogue,
 		itemId = item and item.id or nil,
 		itemName = item and item.displayName or nil,
@@ -451,18 +491,26 @@ function DealService:startDeal(player: Player, customerId: string?, itemId: stri
 	end
 
 	local rng = self:_getRng(player)
-	local customer = if customerId then CustomerService:getCustomer(customerId) else CustomerService:rollCustomer(rng)
-	local item = if itemId then CustomerService:getItem(itemId) else CustomerService:rollItem(rng)
+	local forcedGeneration = customerId ~= nil or itemId ~= nil
+	local archetype = if forcedGeneration then nil else rollDealArchetype(ShiftService:getShift(player), rng)
+	local customer
+	if customerId then
+		customer = CustomerService:getCustomer(customerId)
+	else
+		customer = CustomerService:rollCustomer(rng, archetype and archetype.sellerWeights)
+	end
+	local item = if itemId then CustomerService:getItem(itemId) else CustomerService:rollItem(rng, archetype)
 	if not customer or not item then
 		return { ok = false, error = "Invalid customer or item id" }
 	end
 
-	local hidden = ItemValuation.createHiddenOutcome(item, customer, rng)
-	local estLow, estHigh = ItemValuation.generateEstimatedRange(item, customer, hidden.trueValue, rng)
+	local hidden = ItemValuation.createHiddenOutcome(item, customer, rng, archetype)
+	local estLow, estHigh = ItemValuation.generateEstimatedRange(item, customer, hidden.trueValue, rng, archetype)
 	local ask = TacticHaggleMath.calculateAskingPrice(customer, hidden.trueValue, rng)
+	ask = clampAmount(ask * getPositiveMultiplier(archetype, "askMultiplier"))
 	local minAccept = TacticHaggleMath.calculateMinimumAccept(customer, item, hidden.trueValue, ask)
 
-	local deal = self:_initDealState(customer, item, hidden, ask, minAccept, estLow, estHigh, rng)
+	local deal = self:_initDealState(customer, item, hidden, ask, minAccept, estLow, estHigh, rng, archetype)
 	activeDeals[player] = deal
 	self:_logDealStart(player, deal)
 	self:_pushState(player)
@@ -614,6 +662,8 @@ function DealService:_completePurchase(player: Player, price: number, deal)
 	local instanceId = InventoryService:addPurchasedItem(player, {
 		itemId = deal.item.id,
 		displayName = deal.item.displayName,
+		dealArchetypeId = deal.dealArchetypeId,
+		dealArchetypeName = deal.dealArchetypeName,
 		category = deal.item.category,
 		traits = deal.item.traits or {},
 		flavorText = deal.item.flavorText,
@@ -649,6 +699,8 @@ function DealService:_completePurchase(player: Player, price: number, deal)
 	deal.dialogue =
 		`Bought for {price} {currencyWord()} and stored. Inventory: {inventory.usedSlots}/{inventory.maxSlots}.`
 	deal.dealSummary = {
+		dealArchetypeId = deal.dealArchetypeId,
+		dealArchetypeName = deal.dealArchetypeName,
 		resultText = deal.dialogue,
 	}
 	self:_pushState(player)
@@ -806,6 +858,8 @@ function DealService:_buildSaleDealFromInventory(entry, visitDeal)
 		customer = nil,
 		sellerId = entry.sellerId,
 		sellerName = entry.sellerName or "Unknown Seller",
+		dealArchetypeId = entry.dealArchetypeId,
+		dealArchetypeName = entry.dealArchetypeName,
 		item = {
 			id = entry.itemId,
 			displayName = entry.displayName,
@@ -993,6 +1047,8 @@ function DealService:_completeSale(player: Player, deal, salePrice: number)
 		sellerName = deal.customer and deal.customer.displayName or deal.sellerName,
 		sellerId = deal.customer and deal.customer.id or deal.sellerId,
 		sellerTell = deal.sellerTell,
+		dealArchetypeId = deal.dealArchetypeId,
+		dealArchetypeName = deal.dealArchetypeName,
 		buyerName = deal.buyer and deal.buyer.displayName,
 		buyerId = deal.buyer and deal.buyer.id,
 		buyerTell = deal.buyerTell,
@@ -1156,6 +1212,8 @@ function DealService:_buildNoProfitSummary(deal, reason: string)
 		sellerName = deal.customer.displayName,
 		sellerId = deal.customer.id,
 		sellerTell = deal.sellerTell,
+		dealArchetypeId = deal.dealArchetypeId,
+		dealArchetypeName = deal.dealArchetypeName,
 		buyerName = "none",
 		buyerId = nil,
 		buyerTell = nil,
@@ -1191,6 +1249,8 @@ function DealService:_buildHeldItemSummary(deal, reason: string)
 		sellerName = deal.customer and deal.customer.displayName or deal.sellerName or "none",
 		sellerId = deal.customer and deal.customer.id or deal.sellerId,
 		sellerTell = deal.sellerTell,
+		dealArchetypeId = deal.dealArchetypeId,
+		dealArchetypeName = deal.dealArchetypeName,
 		buyerName = deal.buyer and deal.buyer.displayName or "none",
 		buyerId = deal.buyer and deal.buyer.id,
 		buyerTell = deal.buyerTell,
@@ -1267,7 +1327,7 @@ function DealService:_logDealStart(player: Player, deal)
 		return
 	end
 	print(
-		`[WastelandPawn] DEAL START | {deal.customer.displayName} | {deal.item.displayName} | ask={deal.currentSellerPrice} min={deal.minimumAccept} true={deal.hiddenOutcome.trueValue} tell="{deal.sellerTell}"`
+		`[WastelandPawn] DEAL START | archetype={deal.dealArchetypeId or "none"} | {deal.customer.displayName} | {deal.item.displayName} | ask={deal.currentSellerPrice} min={deal.minimumAccept} true={deal.hiddenOutcome.trueValue} tell="{deal.sellerTell}"`
 	)
 end
 
@@ -1277,7 +1337,7 @@ function DealService:_logDealSummary(player: Player, deal)
 	end
 	local s = deal.dealSummary
 	print(
-		`[WastelandPawn] DEAL DONE | true={s.trueValue} ask={s.sellerAsk} min={s.sellerMinimum} bought={s.purchasePrice} buyer={s.buyerId} open={s.buyerOpeningOffer} max={s.buyerMaximum} sold={s.salePrice or "kept"} profit={s.totalProfit or s.profit} inspected={s.inspected} tactics={s.tacticsUsed} sellerTell="{deal.sellerTell}" buyerTell="{deal.buyerTell or ""}" heat={deal.sellerHeat}/{deal.buyerHeat}`
+		`[WastelandPawn] DEAL DONE | archetype={s.dealArchetypeId or deal.dealArchetypeId or "none"} | true={s.trueValue} ask={s.sellerAsk} min={s.sellerMinimum} bought={s.purchasePrice} buyer={s.buyerId} open={s.buyerOpeningOffer} max={s.buyerMaximum} sold={s.salePrice or "kept"} profit={s.totalProfit or s.profit} inspected={s.inspected} tactics={s.tacticsUsed} sellerTell="{deal.sellerTell}" buyerTell="{deal.buyerTell or ""}" heat={deal.sellerHeat}/{deal.buyerHeat}`
 	)
 end
 
