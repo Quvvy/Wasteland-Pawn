@@ -47,6 +47,7 @@ src/ReplicatedStorage/Shared/   Shared configs, economy math, remotes
 src/ServerScriptService/Server/ Server services (Deal, Shift, Inventory, …)
 src/StarterPlayer/.../Client/   Client controllers and placeholder UI
 docs/                           GDD, roadmap, design reference
+AGENTS.md                       Agent brief for Cursor / Codex
 ```
 
 ## Current prototype (high level)
@@ -63,4 +64,6 @@ docs/                           GDD, roadmap, design reference
 
 ## Contributing / AI agents
 
-Read [docs/GDD.md](docs/GDD.md) and [docs/ROADMAP.md](docs/ROADMAP.md) before adding features. Use the [feature filter](docs/GDD.md#feature-filter): if it does not improve weird items, buy/pass decisions, inventory pressure, buyer matching, big payouts, or shift stories — it probably waits.
+Start with **[AGENTS.md](AGENTS.md)** — agent brief, implementation rules, and what not to build.
+
+Then read [docs/GDD.md](docs/GDD.md) and [docs/ROADMAP.md](docs/ROADMAP.md). Use the [feature filter](docs/GDD.md#feature-filter): if it does not improve weird items, buy/pass decisions, inventory pressure, buyer matching, big payouts, or shift stories — it probably waits.
