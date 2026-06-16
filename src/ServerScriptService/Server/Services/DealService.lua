@@ -390,6 +390,7 @@ function DealService:_buildSnapshot(player: Player, deal)
 		purchasePrice = deal.purchasePrice,
 		salePrice = deal.salePrice,
 		dealSummary = deal.dealSummary,
+		shift = ShiftService:buildSnapshot(player),
 	}
 
 	if deal.hiddenOutcome then
