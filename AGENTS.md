@@ -2,220 +2,176 @@
 
 You are working on **Wasteland Pawn**, a Roblox game built with Luau and Rojo.
 
-Wasteland Pawn is a **shift-based weird-item flipping game**.
+**Vision:** a weird wasteland **shopkeeping** game — acquire objects, learn value, decide sell / stash / display / hold, open the shop during the right traffic or event, sell to matching buyers.
 
-The player buys strange junk, spots hidden value, holds items in limited shift inventory, matches those items to the right buyers, and cashes out for absurd profit.
+**Current repo reality:** a **shift-based prototype** (sellers, shift inventory, buyers, Closing Rush) wrapped in a physical **shop hub**. That loop is playable DNA, not the final structure.
 
-Haggling is the resolution layer.
-
-**Item routing is the game.**
+Haggling is the **resolution layer**. **Object routing** (what to keep, who to sell to, when to open) is the bigger game.
 
 ---
 
 # Read First
 
-Before making changes, read these files:
+Before making changes, read:
 
-1. `AGENTS.md` (this file — quick rules and boundaries)
+1. `AGENTS.md` (this file)
 2. `README.md`
-3. `docs/GDD.md` (source of truth)
+3. `docs/GDD.md` (design source of truth, v0.3)
 4. `docs/ROADMAP.md`
 
-Use those documents as the project source of truth.
+If a request conflicts with GDD or Roadmap, call that out before implementing.
 
-If a requested change conflicts with the GDD or Roadmap, call that out before implementing.
+**Inspect code first.** Docs describe direction; code is ground truth for what actually ships.
+
+---
+
+# Implementation Status Labels
+
+Use these when discussing or documenting systems:
+
+| Label | Meaning |
+|-------|---------|
+| **Implemented** | In repo; real gameplay (server-authoritative where economy matters) |
+| **Prototype** | Works but incomplete; may change |
+| **Planned** | Next sensible milestone; not built |
+| **Future direction** | Intentional target; do not build without explicit milestone |
+| **Out of scope** | Do not build unless user explicitly asks |
 
 ---
 
 # Current Priority
 
-The current focus is:
-
-**Playtest and polish Closing Rush.**
+**Stabilize the shop hub + shift prototype** before calendar, persistence, relics, or unified object inventory.
 
 Do not add major new systems unless explicitly asked.
 
-Current priorities:
+Near-term focus:
 
-* make Closing Rush clear
-* make liquidation clear
-* make item holding feel viable
-* make buyer matching matter
-* make shift results understandable
-* keep the loop small and testable
+* ShiftBoard → shift select → deal flow works end-to-end
+* Closing Rush and liquidation are clear
+* Buyer matching matters across shift types
+* Scrap Rush feels like reliable “normal day” traffic
+* Hub pickup props stay **decorative** — not a second economy
+* Shift results and holding feel understandable
+
+See `docs/ROADMAP.md` for milestone order.
 
 ---
 
 # Core Game Rule
 
-The game is not about realistic pawn shop management.
+Not a realistic pawn sim or tycoon.
 
-The game is about this loop:
+**Prototype loop today:**
 
 ```text
-Buy weird item
-Hold it
-Match it to the right buyer
-Haggle the sale
-Cash out
-Tell a funny story afterward
+Start shift at ShiftBoard
+Buy weird items from sellers (haggle)
+Hold in limited shift inventory
+Match items to buyers (haggle)
+Closing Rush / liquidation
+Hit quota or fail
 ```
 
-A good feature should support at least one of these:
+**Target loop (future direction — not fully built):**
+
+```text
+Acquire object → learn value → sell / stash / display / hold
+→ watch calendar / demand → prepare shop → open at right time
+→ sell to right buyer → scraps / reputation / collection
+```
+
+A good feature should support at least one of:
 
 * weird item discovery
-* buy/pass decisions
-* inventory pressure
-* buyer matching
+* buy / pass / acquire decisions
+* inventory or storage pressure
+* buyer matching or demand timing
 * big payout moments
-* memorable shift stories
-* long-term collection
-* shop identity or social flex
+* memorable shop stories
+* long-term collection (**later**)
+* shop identity (**later**)
 
-If a feature does not support one of those, it probably should wait.
+If it does not → it probably waits.
 
 ---
 
-# Design Pillars
+# Critical Design Warnings
 
-## Weird Items Are The Star
+## Two economy problem
 
-Players should remember items by name.
+**Keep this prominent.** Scavenging and haggling must feed **one object / shop economy**, not compete as separate money loops.
 
-Good:
+If scavenging pays better → nobody haggles. If haggling pays better → nobody scavenges.
 
-```text
-Possessed Traffic Cone
-Cursed Lunchbox
-Alien Soda Tab
-Crying Toaster
-```
+## Hub pickup props — be honest
 
-Bad:
+`HubPickupController` + `HubPickups.lua` are **Prototype**, **client-only**, **session-only**, **decorative**:
 
-```text
-Item #37 with +12% value
-```
+* no scraps, money, progression, or save data
+* not shift inventory
+* not server-authoritative scavenging
+* do not document or extend them as real economy without explicit milestone
 
-## Smart Decisions Over Realism
+Haggled shift items are a **separate** server system.
 
-The game should reward judgment.
+## Do not imply these are built
 
-Important questions:
+Unless a milestone has actually merged:
 
-* Should I buy this?
-* Should I pass?
-* Should I inspect?
-* Is this seller lying?
-* Is this item worth a slot?
-* Should I sell now?
-* Should I wait for a better buyer?
-* Should I risk one more buyer?
-* Should I liquidate and close?
+* calendar / scheduled events
+* global synchronized events
+* unified object inventory (hub props + haggled items)
+* relics / shop modifiers
+* persistent stash or display for haggled items
+* meaningful shop decoration affecting demand
 
-## Haggling Is A Resolution Layer
+## Sellers still matter
 
-Do not treat haggling as the entire game.
-
-The main game is item routing.
-
-Haggling decides how well a buy or sell resolves.
-
-## Buyer Matching Creates Aha Moments
-
-The player should feel smart when they match the right item to the right buyer.
-
-Example:
-
-```text
-Rich Collector visits.
-Player has Cursed Lunchbox, Broken Toaster, and Alien Soda Tab.
-Player should immediately think: "Cursed Lunchbox is the play."
-```
-
-## Every Shift Should Tell A Story
-
-A good shift should create moments like:
-
-```text
-I bought a cursed item, held it through two bad buyers, then barely hit quota during Closing Rush.
-```
+Future direction makes **buyers / customer traffic** the main money engine. **Sellers stay important** as rarer, exciting acquisition moments — not removed.
 
 ---
 
 # What Not To Build Unless Explicitly Asked
 
-Do not add these systems unless the user specifically requests them:
-
-* full tycoon systems
-* employees
-* idle passive income
-* rebirth
+* full tycoon / idle passive income / rebirth
+* employees, auctions, quests as core loop
 * player-to-player trading
-* auctions
-* quests as the core loop
-* full building system
-* NPC pathfinding
-* large map systems
-* pet systems
-* monetization
-* DataStore progression
-* collection log
-* shop customization
-* relics
-* big UI rewrite
-* massive haggling rewrite
+* NPC pathfinding as core system
+* large map systems, pet systems, monetization
+* DataStore progression, collection log, shop customization
+* relics, calendar, global events (future — not current focus)
+* big UI rewrite, massive haggling rewrite
+* scavenging as a competing money loop
 
-Some of these may happen later.
-
-They are not the current focus.
+Some may ship later per Roadmap. They are not default scope.
 
 ---
 
 # Implementation Rules
 
-When asked to implement something:
-
-1. Inspect the existing code first.
-2. Identify the smallest safe change.
-3. Make a short plan before coding if the task is larger than a tiny fix.
-4. Keep the diff focused.
-5. Do not rewrite working systems without a clear reason.
-6. Do not change haggling math unless the task specifically asks for it.
-7. Do not add new framework dependencies.
-8. Keep server logic authoritative.
-9. Never trust client-provided money, prices, item values, inventory state, or deal results.
-10. Update docs if the design direction changes.
+1. **Inspect existing code first.**
+2. Identify the **smallest safe change**.
+3. Short plan before coding if larger than a tiny fix.
+4. **Keep diffs focused.**
+5. Do not rewrite working systems without clear reason.
+6. Do not change haggling math unless task asks.
+7. No new framework dependencies (no Knit, Roact, Fusion, etc.).
+8. **Server logic authoritative** for money, items, deals, inventory, shift state.
+9. **Never trust client** prices, money, item values, inventory, or deal outcomes.
+10. Update docs if design direction changes.
 
 ---
 
-# Code Style Direction
+# Code Style
 
-Keep code simple.
+Prefer plain Luau modules, clear services, small config tables, server-authoritative state, readable names.
 
-Prefer:
-
-* plain Luau modules
-* clear service boundaries
-* small config tables
-* server-authoritative state
-* readable names
-* simple UI hooks
-
-Avoid:
-
-* overengineering
-* large abstractions too early
-* framework rewrites
-* hidden magic
-* giant all-in-one systems
-* speculative future-proofing
+Avoid overengineering, large abstractions, speculative future-proofing, giant all-in-one systems.
 
 ---
 
-# Current Architecture
-
-Expected project structure:
+# Architecture
 
 ```text
 src/ReplicatedStorage/Shared/
@@ -232,175 +188,75 @@ src/StarterPlayer/StarterPlayerScripts/Client/Controllers/
 docs/
 ```
 
-Server services should own gameplay truth.
-
-Client controllers should request actions and display state.
+Server services own gameplay truth. Client controllers request actions and display state.
 
 ---
 
-# Current Important Systems
+# Important Systems (current repo)
 
-The project currently has or is moving toward:
+| System | Status |
+|--------|--------|
+| Seller / buyer haggling | **Prototype** |
+| Shift inventory (3 slots, shift-scoped) | **Prototype** |
+| Buyer visits + matching | **Prototype** |
+| Closing Rush + liquidation | **Prototype** |
+| Deal archetypes + shift `buyerWeights` | **Prototype** |
+| Shop hub (ShiftBoard, overlay, sign) | **Prototype** |
+| Hub pickup props | **Prototype** — client-only decorative |
+| Calendar, persistence, relics, unified objects | **Not started** |
 
-* seller haggling
-* buyer haggling
-* item traits
-* item categories
-* limited shift inventory
-* buyer visits
-* buyer matching
-* payout bonuses
-* shift targets
-* Closing Rush
-* shift result summaries
+Do not casually replace working prototype systems. Improve only when the task requires it.
 
-Do not casually replace these systems.
-
-Improve them only when the requested task requires it.
+Key configs: `Shifts.lua`, `DealArchetypes.lua`, `HubPickups.lua`. Hub binding: `HubWorld.lua`, `ShopHubController.lua`, `HubPickupController.lua`.
 
 ---
 
 # Closing Rush Rules
 
-Closing Rush is a final cashout phase.
-
-It exists because holding items should feel viable.
-
 When seller visits run out:
 
-* if inventory is empty, end the shift
-* if inventory has items, enter Closing Rush
-* no more sellers appear
-* final buyers appear
-* buyers are limited
-* unsold items liquidate at a bad rate
-* quota is checked after Closing Rush ends
+* empty inventory → end shift
+* items remain → Closing Rush
+* no more sellers; limited final buyers
+* unsold items liquidate (~35%)
+* quota checked after Closing Rush
 
-The intended tension is:
+Tension: *"Take this buyer now, or risk one more before liquidation?"*
 
-```text
-Do I take this okay buyer now, or risk one more buyer before liquidation?
-```
-
-Not:
-
-```text
-The shift ended before I had a fair chance to sell.
-```
+Not: *"Shift ended before I had a fair chance to sell."*
 
 ---
 
-# Deal Archetype Direction
+# Deal Archetypes
 
-Deal Archetypes are the next major gameplay milestone after Closing Rush playtesting.
+**Prototype** — implemented in repo. Weighted generation shapes seller/item/value setup.
 
-Keep the first version small.
+Archetypes: Safe Flip, Scam Trap, Desperate Seller, Bad Deal, Jackpot Junk, Perfect Buyer Setup.
 
-Do not build a huge director system yet.
-
-MVP goal:
-
-```text
-Make seller deals feel authored instead of random soup.
-```
-
-Initial archetypes:
-
-* Safe Flip
-* Scam Trap
-* Desperate Seller
-* Bad Deal
-* Jackpot Junk
-* Perfect Buyer Setup
-
-Deal Archetypes should influence seller/item/value setup and shift rhythm.
-
-They should not become cutscenes, quests, or a giant narrative system.
+Not cutscenes, quests, or a director system. Archetype names are not shown to players; evidence-style clues only.
 
 ---
 
-# Art Direction
+# Art & UI Direction
 
-Style name:
+**Neon Cursed Flea Market** — dusty outside, warm cluttered glowing shop. Not muddy Fallout clone.
 
-```text
-Neon Cursed Flea Market
-```
+UI: receipt paper, price tags, clarity over decoration. Deal UI hidden when idle; hub overlays for shift select and holding props.
 
-The outside world should feel:
-
-* dusty
-* rusty
-* roadside
-* wasteland
-* worn down
-
-The pawn shop interior should feel:
-
-* warm
-* dense
-* cluttered
-* glowing
-* weird
-* half scam, half museum
-
-Avoid muddy realism.
-
-Avoid Fallout clone visuals.
-
-The goal is:
-
-```text
-A stylized roadside pawn shop full of neon signs, cursed junk, alien trash, scammy sellers, and buyers who look like walking red flags.
-```
-
----
-
-# UI Direction
-
-The UI should prioritize clarity.
-
-Useful motifs:
-
-* receipt paper
-* price tags
-* stamped labels
-* sticky notes
-* red marker circles
-* scrap metal frames
-
-Important information must be obvious:
-
-* current phase
-* current seller or buyer
-* item traits
-* estimated value
-* current offer
-* heat
-* inventory slots
-* buyer match
-* buyers left in Closing Rush
-* liquidation penalty
-* profit result
-
-Do not do a large UI polish pass unless explicitly requested.
+No large UI polish pass unless explicitly requested.
 
 ---
 
 # Roadmap Order
 
-Current order:
+Follow `docs/ROADMAP.md`. Summary:
 
-1. Playtest and polish Closing Rush
-2. Deal Archetypes v1
-3. Shift Identity v1
-4. Relics v1
-5. More weird item content
-6. Collection log
-7. Shop display
-8. Shop customization
-9. DataStore progression
-10. Social visits
+1. Stabilize hub + shift prototype (now)
+2. Object model unification **plan**
+3. Haggled item → stash/display prototype (server-authoritative)
+4. Customer-demand / calendar prototype (shifts as traffic-window analog)
+5. Rare walk-in buyer/seller prototype
+6. Later: calendar events, relics, collection, persistence, social visits
 
 Do not skip ahead unless explicitly asked.
 
@@ -408,62 +264,38 @@ Do not skip ahead unless explicitly asked.
 
 # Success Criteria
 
-The game is moving in the right direction if players say:
+**Moving right:** save for collector · perfect buyer match · need to make room · greedy liquidation · weird item memorable · (future) wait for better event.
 
-```text
-I should save this for a collector.
-This buyer is perfect for my item.
-I need to make room.
-I should pass this seller.
-I got greedy and had to liquidate.
-I barely hit quota in Closing Rush.
-I want one more shift.
-Look at this weird item I found.
-```
-
-The game is failing if players say:
-
-```text
-I just sell everything immediately.
-The buyer does not matter.
-The item traits do not matter.
-Every deal feels the same.
-I failed because the game did not let me sell.
-I am just tuning haggling numbers forever.
-The weird items are just names, not gameplay.
-```
+**Failing:** sell everything immediately · buyer does not matter · scavenging-only win · failed because game blocked selling · items are just names.
 
 ---
 
 # Agent Behavior
 
-When responding to a task:
+1. State files inspected.
+2. Brief intended change + design risks.
+3. Smallest clean implementation.
+4. Summarize changed files.
+5. Studio test checklist when gameplay changes.
 
-1. State what files you inspected.
-2. Explain the intended change briefly.
-3. Mention any design risk.
-4. Implement the smallest clean version.
-5. Summarize changed files.
-6. Provide a Studio test checklist.
-
-If the task is unclear, make a reasonable assumption and state it.
-
-Do not invent large systems that were not requested.
-
-Do not chase Roblox trends unless they support the GDD.
-
-Think like a game designer first and a coder second.
+If unclear, state your assumption. Do not invent large unrequested systems. Designer first, coder second.
 
 ---
 
 # North Star
 
-The game should create stories like:
+**Prototype story (today):**
 
 ```text
-I bought a haunted traffic cone for 40 scraps, held it through two bad buyers, almost ran out of time, then sold it during Closing Rush to an alien tourist for ridiculous profit.
+I bought a haunted traffic cone for 40 scraps, held it through two bad buyers,
+almost ran out of time, then sold it during Closing Rush to an alien tourist for ridiculous profit.
 ```
 
-If a feature helps create stories like that, it probably belongs.
+**Target story (future — not implemented):**
 
-If it does not, it can wait.
+```text
+I found an Alien Battery, stashed it, prepped the shop, opened during Alien Caravan,
+and sold to the perfect buyer for a ridiculous markup.
+```
+
+If a feature helps create stories like these, it probably belongs. If not, it can wait.

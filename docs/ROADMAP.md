@@ -1,6 +1,6 @@
 # Wasteland Pawn — Roadmap
 
-Living roadmap derived from [GDD.md](GDD.md) v0.2. Update this when milestones ship or priorities change.
+Living roadmap derived from [GDD.md](GDD.md) v0.3. Update this when milestones ship or priorities change.
 
 ## North star
 
@@ -8,118 +8,101 @@ Create stories like:
 
 > *"I bought a haunted traffic cone for 40 scraps, held it through two bad buyers, almost ran out of time, then sold it during Closing Rush to an alien tourist for a ridiculous profit."*
 
-Haggling resolves deals. **Item routing** (buy → hold → match → cash out) is the game.
+**Target retention hook (future direction, not implemented):**
+
+> *"I found an Alien Battery. Normal buyers offer scraps. Alien Caravan starts soon. I stash it, prep the shop, open when the right traffic arrives, and sell for a ridiculous markup."*
+
+Haggling resolves deals. The bigger game is **object routing**: when to sell, who to sell to, what to keep, and how the shop is prepared.
 
 ---
 
-## Done / mostly working
+## Done / mostly working (current repo)
 
 | Area | Status |
 |------|--------|
-| Seller haggling (tactics, heat, tells, inspect) | Prototype |
-| Buyer haggling (tactics, heat, tells) | Prototype |
-| Item traits & categories | In configs |
-| Buyer matching (score, labels, bonuses) | v1 |
-| Shift inventory (limited slots, shift-scoped) | v1 |
-| Buyer visits (pick item from inventory) | v1 |
-| Payout summaries (profit + bonus breakdown direction) | v1 |
-| Closing Rush structure | v1 |
-| Shift targets (Scrap Rush, Collector Convention, Black Market Night) | Config hooks |
-| Deal archetypes | Early hooks only |
+| Seller haggling (tactics, heat, tells, inspect) | **Prototype** |
+| Buyer haggling (tactics, heat, tells) | **Prototype** |
+| Item traits & categories | **Implemented** (configs) |
+| Buyer matching (score, labels, bonuses) | **Prototype** |
+| Shift inventory (limited slots, shift-scoped) | **Prototype** |
+| Buyer visits (pick item from inventory) | **Prototype** |
+| Payout summaries | **Prototype** |
+| Closing Rush + liquidation | **Prototype** |
+| Closing Rush / liquidation UI clarity | **Prototype** |
+| Deal archetypes (weighted generation) | **Prototype** |
+| Archetype legibility (evidence-style clues) | **Prototype** |
+| Shift balance pass (`buyerWeights`, tuned shifts) | **Prototype** |
+| Physical shop hub — ShiftBoard shift start | **Prototype** |
+| Shift select overlay (from ShiftBoard) | **Prototype** |
+| OpenClosedSign (client visual) | **Prototype** |
+| Hub pickup props (pick up / place / stash) | **Prototype** — decorative only; see GDD |
 
 ---
 
-## Now — playtest & polish (no new systems)
+## Now
 
-**Goal:** Prove holding + matching is fun before adding more content systems.
+**Goal:** Stabilize the physical shop + shift prototype and make normal customer traffic feel good before building calendar or persistence systems.
 
-- [ ] Playtest Closing Rush pacing end-to-end
-- [ ] Rename / clarify "Close Shift" vs liquidation
-- [ ] Surface liquidation rate clearly (e.g. ~35% of true value)
-- [ ] Verify players feel safe holding good items for the right buyer
-- [ ] Verify "buyers left" in Closing Rush creates tension, not frustration
-- [ ] Confirm quota check happens *after* Closing Rush, not before
+- [ ] Playtest shift start from ShiftBoard end-to-end
+- [ ] Playtest Closing Rush pacing and liquidation clarity
+- [ ] Verify buyer matching still matters across shift types
+- [ ] Customer counter presentation at `CustomerSpot` (marker exists; no NPC yet)
+- [ ] Shop open / close flow polish (beyond client sign text)
+- [ ] Make Scrap Rush feel like a reliable “normal day” traffic baseline
+- [ ] Keep hub pickup props clearly separate from shift economy in playtests
 
-**Avoid:** More haggling math tuning unless a specific playtest proves breakage.
-
-**Success quotes to listen for:**
-
-- "I should save this for a collector."
-- "This buyer is perfect for my item."
-- "I need to make room."
-- "I got greedy and had to liquidate."
-
-**Failure quotes:**
-
-- "I just sell everything immediately."
-- "The buyer doesn't matter."
-- "I failed because the game didn't let me sell."
+**Avoid:** Calendar systems, DataStores, relics, unified object inventory, or scavenging economy until hub + shift prototype feels solid.
 
 ---
 
-## Next — Deal Archetypes v1
+## Next
 
-**Goal:** Seller deals feel authored, not random soup.
-
-| Archetype | Player lesson |
-|-----------|----------------|
-| Safe Flip | Confidence, basic loop |
-| Scam Trap | Pass / inspect / Point Out Flaw |
-| Desperate Seller | Pressure, buy low |
-| Bad Deal | Passing is correct |
-| Jackpot Junk | Hidden upside |
-| Perfect Buyer Setup | Hold for the right buyer |
-
-Deliverables:
-
-- Weight archetypes per shift type
-- Hook generation so shifts have rhythm (safe flip + scam + hold opportunity + match moment)
-- Stop relying on pure random seller/item rolls
-
-**MVP only:** weighted seller / item / value setup at generation time. No cutscenes, no quest chains, no big director system yet. Archetypes affect *what spawns*, not a cinematic layer.
+| Milestone | Status | Notes |
+|-----------|--------|-------|
+| Object model unification **plan** | **Planned** | One object ecosystem; hub pickups + haggled items converge later |
+| Haggled item → stash/display decision prototype | **Planned** | Server-authoritative; not hub-prop decorative layer |
+| Customer-demand-focused shift/calendar prototype | **Planned** | Shifts as prototype of event/traffic windows |
+| Rare walk-in buyer/seller prototype | **Planned** | Sellers stay special; buyers remain main money engine |
 
 ---
 
-## Then — Shift Identity v1
+## Later
 
-Make each shift *feel* different beyond profit target number:
-
-| Shift | Intended feel |
-|-------|----------------|
-| Scrap Rush | Beginner, safe flips, desperate sellers, low pressure |
-| Collector Convention | Collectible/cursed routing, perfect-match moments |
-| Black Market Night | Scam traps, jackpot junk, higher risk/reward |
-
-Deliverables:
-
-- Shift-weighted item categories, sellers, buyers, archetypes
-- Modifier text that matches actual hooks (not placeholder only)
-
----
-
-## Later (explicitly not now)
-
-| Milestone | Notes |
+| Milestone | Status |
 |-----------|--------|
-| Relics v1 | Run modifiers that change *decisions*, not flat +10% |
-| Item content pass | More named weird items with traits |
-| Collection log | Discovery / completionist |
-| Shop display | Trophy case for rare flips |
-| Shop customization | Fixed slots, themes — not freeform building |
-| DataStore / progression | After core loop is fun |
-| Social / visits | After shop identity exists |
+| Local calendar events | **Future direction** |
+| Global synchronized events (rare) | **Future direction** |
+| Relic / display modifiers | **Future direction** |
+| Storage and display slot upgrades | **Future direction** |
+| Collection log | **Future direction** |
+| Reputation / faction demand | **Future direction** |
+| DataStore / persistence | **Future direction** |
+| Social shop visits | **Future direction** |
+| More weird item content | **Future direction** |
 
 ---
 
-## Will not build (for now)
+## Not yet
+
+- Full decoration editor
+- Player-to-player trading
+- Employees / scheduling
+- Rebirth / idle passive income
+- Full map expansion
+- Final art pass for hub props
+
+---
+
+## Will not build (unless explicitly requested)
 
 - Realistic pawn sim / full tycoon
-- Employees, scheduling, idle passive income
+- Idle passive income generators
 - Player-to-player trading economy
 - Auctions, rebirth, quests as core loop
-- NPC pathfinding / map building systems
-- Fallout-clone tone (use *Neon Cursed Flea Market* direction)
-- Endless haggling number tuning as substitute for design
+- NPC pathfinding as a core system
+- Fallout-clone tone (use *Neon Cursed Flea Market*)
+- Endless haggling math tuning as substitute for design
+- **Two separate economies** (scavenging vs haggling competing for money)
 
 ---
 
@@ -128,12 +111,12 @@ Deliverables:
 Before adding a feature, ask if it improves **at least one** of:
 
 1. Weird item discovery  
-2. Buy / pass decisions  
-3. Inventory pressure  
-4. Buyer matching  
+2. Acquire / buy / pass decisions  
+3. Inventory or storage pressure  
+4. Buyer matching or customer demand timing  
 5. Big payout moments  
-6. Memorable shift stories  
-7. Long-term collection (later)  
-8. Shop identity / social flex (later)  
+6. Memorable shop stories  
+7. Long-term collection (**later**)  
+8. Shop identity / social flex (**later**)  
 
 If not → wait.

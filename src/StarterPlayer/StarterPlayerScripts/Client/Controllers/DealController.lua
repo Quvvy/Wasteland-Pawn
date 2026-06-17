@@ -9,6 +9,7 @@ local UIController = require(script.Parent.UIController)
 local DealController = {}
 
 local TACTIC_COOLDOWN = 0.35
+local shiftStartPending = false
 
 local function invokeRemote(remoteName: string, ...: any): (boolean, any)
 	local remote = Remotes.get(remoteName) :: RemoteFunction
@@ -20,6 +21,14 @@ local function invokeRemote(remoteName: string, ...: any): (boolean, any)
 		return false, nil
 	end
 	return true, result
+end
+
+local function formatError(prefix: string, result): string
+	local message = if type(result) == "table" then result.error else nil
+	if type(message) == "string" and message ~= "" then
+		return `{prefix}: {message}`
+	end
+	return prefix
 end
 
 local function briefCooldown()
@@ -121,20 +130,36 @@ function DealController:_bindUi()
 end
 
 function DealController:startShiftFlow(shiftId: string): boolean
+	if shiftStartPending then
+		UIController:showHubMessage("Shift start already in progress.")
+		return false
+	end
+
 	if UIController:isShiftActive() then
 		UIController:showHubMessage("Shift already in progress.")
 		return false
 	end
 
+	shiftStartPending = true
 	local ok, result = invokeRemote("StartShift", shiftId)
-	if ok and result and result.ok then
+	if ok and type(result) == "table" and result.ok then
 		UIController:updateShiftSnapshot(result.snapshot)
 		UIController:closeShiftSelect()
-		invokeRemote("StartDeal")
+		local dealOk, dealResult = invokeRemote("StartDeal")
+		if not dealOk then
+			UIController:showHubMessage("Shift started, but the first seller could not load.")
+		elseif type(dealResult) ~= "table" or not dealResult.ok then
+			UIController:showHubMessage(formatError("Shift started, but the first seller could not load", dealResult))
+		end
+		shiftStartPending = false
 		return true
 	end
 
-	UIController:showHubMessage("Could not start shift.")
+	if type(result) == "table" and result.snapshot then
+		UIController:updateShiftSnapshot(result.snapshot)
+	end
+	UIController:showHubMessage(formatError("Could not start shift", result))
+	shiftStartPending = false
 	return false
 end
 
@@ -154,12 +179,6 @@ function DealController:Start()
 		UIController:updateInventorySnapshot(snapshot)
 	end)
 
-	task.defer(function()
-		local ok, result = invokeRemote("GetShiftOptions")
-		if ok and result and result.ok then
-			UIController:updateShiftSnapshot({ active = false, ended = false })
-		end
-	end)
 end
 
 return DealController

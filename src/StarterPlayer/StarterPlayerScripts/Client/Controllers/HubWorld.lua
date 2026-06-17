@@ -116,6 +116,9 @@ function HubWorld.findPickupSpawn(junkLot: Instance?, spawnIndex: number, spawnN
 	if part then
 		return part
 	end
+	if not junkLot then
+		return nil
+	end
 
 	for _, descendant in junkLot:GetDescendants() do
 		local hay = normalize(descendant.Name)
@@ -150,6 +153,9 @@ function HubWorld.findDisplaySlot(shelf: Instance?, slotIndex: number, slotName:
 	local part = HubWorld.findDescendantBasePartByNames(shelf, exactNames)
 	if part then
 		return part
+	end
+	if not shelf then
+		return nil
 	end
 
 	for _, descendant in shelf:GetDescendants() do

@@ -87,6 +87,15 @@ function ShiftService:getShiftOptions()
 end
 
 function ShiftService:startShift(player: Player, shiftId: string?)
+	local activeShift = playerShifts[player]
+	if activeShift and activeShift.active and not activeShift.ended then
+		return {
+			ok = false,
+			error = "Shift already active",
+			snapshot = self:buildSnapshot(player),
+		}
+	end
+
 	local shift = Shifts.get(shiftId or "scrap_rush")
 	if not shift then
 		return { ok = false, error = "Unknown shift" }

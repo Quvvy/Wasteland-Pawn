@@ -17,11 +17,19 @@ local OPEN_COLOR = Color3.fromRGB(80, 200, 100)
 local CLOSED_COLOR = Color3.fromRGB(200, 70, 70)
 
 local SHOP_WAIT_SECONDS = 30
+local DEBUG_HUB_WARNINGS = false
 
 local SHIFT_PART_ALIASES = {
-	shiftboard = { "ShiftBoard", "Shift_Board", "ShiftBoard" },
+	shiftboard = { "ShiftBoard", "Shift_Board" },
 	frontdoor = { "FrontDoor", "Front_Door", "Door" },
 	openclosedsign = { "OpenClosedSign", "Open_Sign", "OpenClosed", "Sign" },
+}
+
+local SHIFT_PROMPT_ALIASES = {
+	"ShiftStartPrompt",
+	"StartShiftPrompt",
+	"ShiftBoardPrompt",
+	"OpenShiftPrompt",
 }
 
 local function findChildChain(root: Instance?, ...: string): Instance?
@@ -57,6 +65,12 @@ local function getOrCreatePrompt(parent: Instance, name: string): ProximityPromp
 	return prompt
 end
 
+local function warnOptional(message: string)
+	if DEBUG_HUB_WARNINGS then
+		warn(message)
+	end
+end
+
 local function isShiftHubPart(instance: Instance): boolean
 	local current: Instance? = instance
 	while current and current ~= Workspace do
@@ -64,7 +78,7 @@ local function isShiftHubPart(instance: Instance): boolean
 		if key == "door" or string.find(key, "shiftboard", 1, true) or string.find(key, "frontdoor", 1, true) then
 			return true
 		end
-		for _, aliases in SHIFT_PART_ALIASES do
+		for _, aliases in { SHIFT_PART_ALIASES.shiftboard, SHIFT_PART_ALIASES.frontdoor } do
 			for _, alias in aliases do
 				if HubWorld.normalizeName(alias) == key then
 					return true
@@ -75,6 +89,16 @@ local function isShiftHubPart(instance: Instance): boolean
 			break
 		end
 		current = current.Parent
+	end
+	return false
+end
+
+local function isKnownShiftPromptName(prompt: ProximityPrompt): boolean
+	local key = HubWorld.normalizeName(prompt.Name)
+	for _, alias in SHIFT_PROMPT_ALIASES do
+		if HubWorld.normalizeName(alias) == key then
+			return true
+		end
 	end
 	return false
 end
@@ -112,12 +136,7 @@ local function invokeRemote(remoteName: string, ...: any): (boolean, any)
 end
 
 local function shouldBindShiftPrompt(prompt: ProximityPrompt): boolean
-	if isShiftHubPart(prompt) then
-		return true
-	end
-
-	local actionText = string.lower(prompt.ActionText or "")
-	if string.find(actionText, "open", 1, true) or string.find(actionText, "shift", 1, true) then
+	if isKnownShiftPromptName(prompt) or isShiftHubPart(prompt) then
 		return true
 	end
 
@@ -131,7 +150,7 @@ function ShopHubController:updateOpenClosedSign(snapshot)
 		if not signWarned then
 			signWarned = true
 			local childList = if shop then HubWorld.listChildNames(shop) else "(no shop)"
-			warn(`ShopHub: OpenClosedSign not found under Workspace.World.Shop. Children: {childList}`)
+			warnOptional(`ShopHub: OpenClosedSign not found under Workspace.World.Shop. Children: {childList}`)
 		end
 		return
 	end
@@ -144,7 +163,7 @@ function ShopHubController:updateOpenClosedSign(snapshot)
 		target.Color = if isOpen then OPEN_COLOR else CLOSED_COLOR
 	elseif not signWarned then
 		signWarned = true
-		warn("ShopHub: OpenClosedSign has no TextLabel or BasePart to update")
+		warnOptional("ShopHub: OpenClosedSign has no TextLabel or BasePart to update")
 	end
 end
 
@@ -208,7 +227,7 @@ function ShopHubController:_bindShopPrompts(shop: Instance): number
 	if boundCount == 0 then
 		if not hubWarned then
 			hubWarned = true
-			warn(
+			warnOptional(
 				`ShopHub: No shift-start ProximityPrompts found under Workspace.World.Shop. Children: {HubWorld.listChildNames(shop)}`
 			)
 		end
@@ -224,7 +243,7 @@ function ShopHubController:_waitAndBindShopHub()
 	if not shop then
 		if not hubWarned then
 			hubWarned = true
-			warn("ShopHub: Workspace.World.Shop not found; shift-start prompts not bound")
+			warnOptional("ShopHub: Workspace.World.Shop not found; shift-start prompts not bound")
 		end
 		return
 	end

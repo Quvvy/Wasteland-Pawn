@@ -11,9 +11,11 @@ local HubPickupController = {}
 
 local WORLD_WAIT_SECONDS = 30
 local LOCAL_FOLDER_NAME = "HubPickupsLocal"
+local DEBUG_HUB_WARNINGS = false
 
 local heldProp: any = nil
 local spawnedAtPickup: { [string]: Model } = {}
+local consumedPickupSpawns: { [string]: boolean } = {}
 local placedOnSlot: { [string]: Model } = {}
 local boundPrompts: { [ProximityPrompt]: boolean } = {}
 local slotPrompts: { [string]: ProximityPrompt } = {}
@@ -27,7 +29,9 @@ local function warnOnce(key: string, message: string)
 		return
 	end
 	warnedMissing[key] = true
-	warn(message)
+	if DEBUG_HUB_WARNINGS then
+		warn(message)
+	end
 end
 
 local function findChildChain(root: Instance?, ...: string): Instance?
@@ -207,6 +211,7 @@ function HubPickupController:_pickUpProp(model: Model, spawnName: string?)
 
 	if spawnName then
 		spawnedAtPickup[spawnName] = nil
+		consumedPickupSpawns[spawnName] = true
 	end
 
 	UIController:setHubHolding(def.displayName)
@@ -234,9 +239,10 @@ function HubPickupController:_placeOnSlot(slotName: string, slotPart: BasePart)
 	placed:PivotTo(pivot)
 	placed.Parent = ensureLocalFolder(world)
 
-	local prompt = placed:FindFirstChildWhichIsA("ProximityPrompt", true)
-	if prompt then
-		prompt:Destroy()
+	for _, descendant in placed:GetDescendants() do
+		if descendant:IsA("ProximityPrompt") then
+			descendant:Destroy()
+		end
 	end
 
 	placedOnSlot[slotName] = placed
@@ -300,7 +306,6 @@ function HubPickupController:_setupOutdoorPickups(world: Instance)
 	local outside = HubWorld.findChildByNames(world, { "Outside" })
 	local junkLot = outside and HubWorld.findChildByNames(outside, { "JunkLot", "Junk_Lot", "Junklot" })
 	if not junkLot then
-		local outside = HubWorld.findChildByNames(world, { "Outside" })
 		warnOnce(
 			"junk_lot",
 			`HubPickup: JunkLot not found under Outside. Outside children: {HubWorld.listChildNames(outside)}`
@@ -309,8 +314,15 @@ function HubPickupController:_setupOutdoorPickups(world: Instance)
 	end
 
 	for index, def in HubPickups.SpawnDefs do
-		if spawnedAtPickup[def.spawnName] then
+		if consumedPickupSpawns[def.spawnName] then
 			continue
+		end
+
+		local spawned = spawnedAtPickup[def.spawnName]
+		if spawned and spawned.Parent then
+			continue
+		elseif spawned then
+			spawnedAtPickup[def.spawnName] = nil
 		end
 
 		local spawn = HubWorld.findPickupSpawn(junkLot, index, def.spawnName)

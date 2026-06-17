@@ -1,19 +1,21 @@
 # Wasteland Pawn
 
-**A shift-based weird-item flipping game for Roblox.**
+**A weird wasteland shopkeeping game for Roblox.**
 
-Buy strange junk, spot hidden value, hold items in limited shift inventory, match them to the right buyers, and cash out for absurd profit. Haggling is the *resolution layer* — the real game is routing weird items to the buyers who want them.
+Run a sketchy pawn shop in a neon cursed flea market: find strange objects, figure out what they might be worth, and sell to the buyers who actually want them. The long-term game is **when** you open, **what** you keep, and **who** you sell to.
 
-> *"I bought a cursed traffic cone for 40 scraps and sold it to an alien tourist for 8,000 because it was a perfect match."*
+The **current prototype** is a shift loop — start at the ShiftBoard, haggle with sellers, hold items in limited inventory, match buyers, and survive Closing Rush. That is playable today; calendar events, persistent stash, and relics are future direction.
+
+> *"I bought a cursed traffic cone for 40 scraps and sold it to an alien tourist for ridiculous profit because it was a perfect match."*
 
 ## Design docs
 
 | Document | Description |
 |----------|-------------|
-| [docs/GDD.md](docs/GDD.md) | Source-of-truth design document |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Current priorities and milestone order |
+| [docs/GDD.md](docs/GDD.md) | Design source of truth (v0.3) |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Milestones and priorities |
 
-Edit **GDD.md** in the repo — not the Word export. A `docs/Wasteland Pawn GDD.docx` may exist as a human-readable export only.
+Edit **GDD.md** in the repo — not the Word export. `docs/Wasteland Pawn GDD.docx` is an optional human export only.
 
 ## Tech stack
 
@@ -45,25 +47,27 @@ Edit **GDD.md** in the repo — not the Word export. A `docs/Wasteland Pawn GDD.
 ```
 src/ReplicatedStorage/Shared/   Shared configs, economy math, remotes
 src/ServerScriptService/Server/ Server services (Deal, Shift, Inventory, …)
-src/StarterPlayer/.../Client/   Client controllers and placeholder UI
-docs/                           GDD, roadmap, design reference
+src/StarterPlayer/.../Client/   Client controllers and UI
+docs/                           GDD, roadmap
 AGENTS.md                       Agent brief for Cursor / Codex
 ```
 
-## Current prototype (high level)
+## Current prototype features
 
-- Tactic-based seller/buyer haggling (heat, tells, profiles)
-- Shift runs with profit targets
-- Limited shift inventory (hold items between seller/buyer visits)
-- Buyer visits — choose which held item to offer
-- Buyer matching (category/traits → match labels and bonuses)
-- Closing Rush — final cashout when sellers run out
-- Placeholder UI (functional, not polished)
+- **Shift loop** — profit targets, seller visits, buyer visits, Closing Rush, liquidation
+- **Haggling** — tactic-based seller/buyer negotiation (heat, tells, inspect)
+- **Shift inventory** — limited slots; hold items between visits (server-authoritative, per shift)
+- **Buyer matching** — category/traits → match labels and payout bonuses
+- **Deal archetypes** — weighted deal shapes (scam traps, jackpots, buyer setups, etc.)
+- **Physical shop hub** — ShiftBoard prompt, shift select overlay, open/closed sign
+- **Hub pickup props** — client-only decorative pick up / place / stash (session-only; **not** economy or saves)
 
-**Not in scope yet:** DataStore saving, shop decoration, employees, auctions, rebirth, player trading.
+**Not built yet:** calendar events, persistent stash/display for haggled items, relics, DataStore saves, unified scavenging economy, shop upgrades.
+
+**Design warning:** scavenging and haggling must eventually feed **one** object economy — not two competing money loops. See [GDD](docs/GDD.md#two-economy-problem).
 
 ## Contributing / AI agents
 
-Start with **[AGENTS.md](AGENTS.md)** — agent brief, implementation rules, and what not to build.
+Start with **[AGENTS.md](AGENTS.md)** — rules, status labels, and what not to build.
 
-Then read [docs/GDD.md](docs/GDD.md) and [docs/ROADMAP.md](docs/ROADMAP.md). Use the [feature filter](docs/GDD.md#feature-filter): if it does not improve weird items, buy/pass decisions, inventory pressure, buyer matching, big payouts, or shift stories — it probably waits.
+Then read [docs/GDD.md](docs/GDD.md) and [docs/ROADMAP.md](docs/ROADMAP.md).

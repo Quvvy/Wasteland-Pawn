@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Version** | 0.2 |
+| **Version** | 0.3 |
 | **Status** | Living design document |
-| **Purpose** | Define vision, core loop, current systems, future direction, and feature boundaries |
+| **Purpose** | Vision, prototype reality, future direction, and feature boundaries |
 
 See also: [ROADMAP.md](ROADMAP.md) for milestone tracking.
 
@@ -12,31 +12,39 @@ See also: [ROADMAP.md](ROADMAP.md) for milestone tracking.
 
 ## Table of contents
 
+- [Implementation status legend](#implementation-status-legend)
 - [One sentence vision](#one-sentence-vision)
 - [High concept](#high-concept)
+- [Target core loop](#target-core-loop-future-direction)
+- [Prototype loop](#prototype-loop-implemented)
 - [Core player fantasy](#core-player-fantasy)
 - [Target platform and audience](#target-platform-and-audience)
 - [Genre](#genre)
 - [Design pillars](#design-pillars)
 - [What the game is not](#what-the-game-is-not)
-- [Core gameplay loop](#core-gameplay-loop)
-- [Current implemented systems](#current-implemented-systems)
-- [Shift structure](#shift-structure)
+- [Current prototype systems](#current-prototype-systems)
+- [Shop hub](#shop-hub)
+- [Shifts (prototype implementation)](#shifts-prototype-implementation)
 - [Deal archetypes](#deal-archetypes)
 - [Items](#items)
-- [Buyers](#buyers)
+- [Object ecosystem](#object-ecosystem-planned)
+- [Player decisions](#player-decisions-sell--stash--display--activate-planned)
+- [Buyers and customer traffic](#buyers-and-customer-traffic)
 - [Sellers](#sellers)
+- [Calendar and events](#calendar-and-events-planned)
+- [Global events](#global-events-future-direction)
+- [Long playtime and CCU](#long-playtime-and-ccu-future-direction)
+- [Two economy problem](#two-economy-problem)
 - [Haggling philosophy](#haggling-philosophy)
 - [Payout screen](#payout-screen)
 - [Holy crap moments](#holy-crap-moments)
 - [Art direction](#art-direction)
 - [UI direction](#ui-direction)
-- [Long-term progression](#long-term-progression)
-- [Relics / counter items](#relics--counter-items)
-- [Future shop system](#future-shop-system)
+- [Long-term progression](#long-term-progression-planned)
+- [Relics](#relics-future-direction)
+- [Documentation warnings](#documentation-warnings)
 - [Feature filter](#feature-filter)
 - [Current development stage](#current-development-stage)
-- [Immediate to-do](#immediate-to-do)
 - [Success criteria](#success-criteria)
 - [Development principles](#development-principles-codex--cursor)
 - [Glossary](#glossary)
@@ -44,162 +52,90 @@ See also: [ROADMAP.md](ROADMAP.md) for milestone tracking.
 
 ---
 
+## Implementation status legend
+
+Use these labels in design discussion and implementation plans:
+
+| Label | Meaning |
+|-------|---------|
+| **Implemented** | In repo and doing real gameplay work (server-authoritative where economy matters) |
+| **Prototype** | Works in playtests but incomplete, may be UI-only, client-only, or likely to change |
+| **Planned** | Next sensible milestone; not built yet |
+| **Future direction** | Intentional design target; do not implement without explicit milestone |
+| **Out of scope** | Do not build unless explicitly requested |
+
+---
+
 ## One sentence vision
 
-**Wasteland Pawn** is a shift-based weird-item flipping game where players buy strange junk, identify hidden value, match items to the right buyers, and cash out for absurd profit.
+**Wasteland Pawn** is a weird wasteland **shopkeeping** game where players acquire strange objects, learn what they might be worth, decide whether to sell, stash, display, or hold them, then open their shop during the right customer traffic or event to make money.
 
-The game is **not** about realistic pawn shop management.
-
-It is about finding value in garbage, making smart flips, and creating stories like:
-
-> *"I bought a cursed traffic cone for 40 scraps and sold it to an alien tourist for 8,000 because it perfectly matched my buyer and bonuses."*
+The prototype still runs on a **shift loop** (sellers, shift inventory, buyers, Closing Rush). That is current repo DNA, not the final structure.
 
 ---
 
 ## High concept
 
-The player runs a sketchy pawn shop in a wasteland.
+The player runs a sketchy pawn shop in a wasteland flea market.
 
-- Sellers bring strange items — some scams, some trash, some secretly worth a fortune.
-- The player decides what to buy, pass, inspect, hold, and which buyer deserves which item.
-- Each **shift** is a short run: profit target, limited seller visits, limited inventory, buyer visits, and a **Closing Rush** cashout phase.
-- Long-term fantasy: become the most notorious junk dealer in the wasteland.
+- **Outside** and **sellers** are sources of weird objects.
+- The **shop**, **stash**, and **display** are where objects live.
+- **Calendar / traffic / events** are sources of demand.
+- **Opening the shop** during the right window is how serious money gets made.
+- **Buyers** are the main money engine; **sellers** stay important as special acquisition moments.
 
----
-
-## Core player fantasy
-
-The player is not just a negotiator. They are:
-
-- a junk dealer
-- a scam spotter
-- a treasure hunter
-- a buyer matcher
-- a risk taker
-- a collector of weird garbage
-- someone who sees value where others see trash
-
-Core fantasy line:
-
-> *"I know this weird thing is worth something. I just need the right buyer."*
+Long-term fantasy: become the most notorious junk dealer in the wasteland — known for what you keep, what you sell, and when you open.
 
 ---
 
-## Target platform and audience
+## Target core loop (future direction)
 
-**Platform:** Roblox
-
-**Audience:**
-
-- Players who like collecting, trading, upgrading, and number-go-up loops
-- Short repeatable sessions
-- Weird items and funny outcomes
-- Decisions without high mechanical skill
-- Showing off progress, rare finds, and customized spaces
-
-**Readability:** A spectator should understand within ~10 seconds:
-
-- buying weird junk
-- selling for more
-- some items are secretly valuable
-- matching the right buyer matters
-
----
-
-## Genre
-
-| Primary | Secondary influences |
-|---------|------------------------|
-| Shift-based item flipping | Roguelite run structure |
-| | Light negotiation game |
-| | Collection game |
-| | Shop fantasy |
-| | Strategy-lite economy |
-
-**Avoid becoming:** pure tycoon, idle simulator, or realistic store-management game.
-
----
-
-## Design pillars
-
-### Pillar 1: Weird items are the star
-
-Players should remember **names and stories**, not `Item #37 (+12% value)`.
-
-Every item needs strong name, traits, category, flavor, and visible value clues.
-
-**Example items:** Possessed Traffic Cone, Cursed Lunchbox, Alien Soda Tab, Crying Toaster, Mayor's Left Shoe, Rusted Robot Heart, Jar of Living Dust, Suspicious Taxidermy Ferret.
-
-### Pillar 2: Smart decisions over realism
-
-Reward judgment. Key questions:
-
-- Should I buy / pass / inspect?
-- Is this seller lying?
-- Is this worth an inventory slot?
-- Sell now or wait for a better buyer?
-- Dump to a bad buyer or hold?
-- Risk one more buyer reroll?
-- Liquidate and close now?
-
-### Pillar 3: Haggling is a resolution layer
-
-Haggling answers: *"How well did this deal resolve?"*
-
-The main game is **item routing:** buy weird item → hold → match buyer → cash out.
-
-### Pillar 4: Buyer matching creates aha moments
-
-Example: Rich Collector visits while you hold Cursed Lunchbox, Broken Toaster, Alien Soda Tab → player should immediately think *"Cursed Lunchbox is the play."*
-
-### Pillar 5: Big payouts feel explosive
-
-Result screen must explain **why** a sale was good: base profit, buyer match bonus, trait bonus, total cash, match label, rarity, true value.
-
-### Pillar 6: Every shift tells a story
-
-Good shifts have highs, lows, risks, and payoff — not six disconnected transactions.
-
----
-
-## What the game is not
-
-| Not this | Why |
-|----------|-----|
-| Realistic pawn sim | Fun > realism; values can exaggerate |
-| Traditional tycoon | Core is active flipping, not passive income |
-| Store management sim | No scheduling/logistics focus |
-| Pure haggling game | Negotiation must not carry the whole experience |
-| Player trading economy | Not core now; maybe much later |
-| Fallout clone | Tone is weird, funny, dusty, cursed, **neon** — not generic brown apocalypse |
-
----
-
-## Core gameplay loop
-
-1. Start a shift.
-2. Seller arrives with a weird item.
-3. Player reads item info, traits, estimate, seller tell.
-4. Player haggles, inspects, buys, or passes.
-5. Bought item enters **limited shift inventory**.
-6. **Buyer visits** occur during the shift.
-7. Player **chooses which inventory item** to offer.
-8. Buyer interest depends on category and traits.
-9. Player haggles sale.
-10. Sale pays cash and **match bonuses**.
-11. Seller visits eventually run out.
-12. If inventory remains → **Closing Rush**.
-13. Cash out remaining inventory or liquidate.
-14. Shift result vs profit quota.
-
-### Loop diagram
-
+```text
+Acquire weird object
+    ↓
+Understand its value (inspect, experience, reputation, events)
+    ↓
+Decide: sell now · stash for later · display in shop · keep as trophy · activate relic later
+    ↓
+Watch calendar / customer demand / upcoming events
+    ↓
+Prepare: scavenge, rearrange display, pull from stash, choose modifiers
+    ↓
+Open shop at the right time
+    ↓
+Sell to the right buyer
+    ↓
+Earn scraps, reputation, collection progress, or shop identity
+    ↓
+Repeat
 ```
-Start Shift
+
+**Not implemented.** The repo does not yet have calendar events, persistent stash, unified objects, relics, or server-authoritative hub scavenging.
+
+---
+
+## Prototype loop (implemented)
+
+What players can do in the **current repo**:
+
+1. Walk to **ShiftBoard** in the physical shop hub and start a shift.
+2. **Seller visits** bring weird items; player haggles, inspects, buys, or passes.
+3. Bought items enter **limited shift inventory** (3 slots; resets each shift).
+4. **Buyer visits** occur; player chooses which held item to offer.
+5. **Buyer matching** affects interest and bonuses.
+6. Player haggles the sale.
+7. Sellers run out; remaining inventory enters **Closing Rush** or shift ends.
+8. Unsold items may **liquidate** at a bad rate (~35%).
+9. Shift result vs profit quota.
+
+Separately (decorative only): **hub pickup props** can be picked up outside, placed on display slots, or dropped in the stash bin — they do not affect scraps, shift inventory, or saves.
+
+### Prototype loop diagram
+
+```text
+ShiftBoard → Start Shift
     ↓
-Buying Phase
-    ↓
-Seller Visit → Evaluate → Buy / Pass / Inspect / Haggle → Store in Inventory
+Buying Phase: Seller → Haggle/Buy/Pass → Shift Inventory
     ↓
 Buyer Visit → Choose Item → Sell / Hold / Skip
     ↓
@@ -212,373 +148,470 @@ Shift Result
 
 ---
 
-## Current implemented systems
+## Core player fantasy
 
-*As of latest prototype direction.*
+The player is:
 
-### Seller haggling
+- a junk dealer and shopkeeper
+- a scam spotter and treasure hunter
+- a buyer matcher and demand timer
+- a collector of weird garbage
+- someone who sees value where others see trash
 
-Resolution mechanic for buying. Includes tactics, heat, leverage, confidence, final-offer states, profile weaknesses/resistances, inspect, seller tells.
+Core fantasy line:
 
-**Buy tactics:** Lowball, Split Difference, Point Out Flaw, Pressure, Accept Price, Pass.
-
-*Keep stable — good enough unless playtest proves breakage.*
-
-### Buyer haggling
-
-Resolution mechanic for selling after choosing an inventory item. Includes offer, maximum, heat, leverage, confidence, buyer profiles, match influence.
-
-**Sell tactics:** Small Bump, Pitch Value, Hold Firm, Bluff, Accept Offer, Find Another Buyer / Keep Item.
-
-*Keep stable — good enough unless playtest proves breakage.*
-
-### Shift inventory
-
-- **3 active slots** per shift (direction)
-- Bought items enter inventory; resets each shift
-- No DataStore yet
-- Creates slot pressure — *does this item deserve a slot?*
-
-### Buyer visits
-
-Player **chooses** which held item to offer. Visit should show:
-
-- buyer name, tell, wants/preferences
-- inventory items with **match labels** per item
-
-Matching should matter more than tiny haggle deltas.
-
-### Buyer matching
-
-**Inputs:** item category, item traits, buyer category/trait preferences.
-
-**Outputs:** match score, match label, offer multiplier, matched categories/traits, bonus lines.
-
-**Labels:** Bad Match → Low Interest → Curious → Interested → Perfect Match
-
-### Payout bonuses
-
-Bonuses are **real cash**, not fake score. If the UI shows a bonus, wallet must reflect it.
-
-### Closing Rush
-
-When seller visits end but inventory remains:
-
-- No more sellers
-- Limited final buyers
-- Sell, hold, or skip
-- Unsold items **liquidate** at bad rate (~35% intended)
-- Quota checked **after** Closing Rush ends
-
-**Fixes old problem:** game encouraged holding items then ended shift before selling.
-
-**New tension:** *"I can hold this, but I might have to dump it."*
+> *"I know this weird thing is worth something. I just need the right buyer — or the right event."*
 
 ---
 
-## Shift structure
+## Target platform and audience
+
+**Platform:** Roblox
+
+**Audience:** players who like collecting, upgrading, weird items, readable decisions, and showing off a shop.
+
+**Readability:** a spectator should understand within ~10 seconds that this is a weird junk shop where matching buyers and timing matter.
+
+---
+
+## Genre
+
+| Primary (target) | Secondary influences |
+|------------------|----------------------|
+| Weird shopkeeping | Light negotiation |
+| Object routing / timing | Collection |
+| | Strategy-lite economy |
+
+**Prototype genre today:** shift-based item flipping with physical hub wrapper.
+
+**Avoid becoming:** pure tycoon, idle simulator, realistic store-management sim.
+
+---
+
+## Design pillars
+
+### Pillar 1: Weird items are the star
+
+Players remember **names and stories**, not `Item #37 (+12% value)`.
+
+### Pillar 2: Smart decisions over realism
+
+Key questions today: buy, pass, inspect, hold for buyer, liquidate?
+
+Key questions tomorrow: sell now, stash for event, display for demand, wait for rare buyer?
+
+### Pillar 3: Haggling is one resolution layer
+
+Haggling answers: *"How well did this deal resolve?"*
+
+The bigger game is **object routing**: what to keep, who to sell to, when to open, how the shop is built.
+
+### Pillar 4: Buyer matching creates aha moments
+
+Rich Collector visits while you hold Cursed Lunchbox → *"That's the play."*
+
+### Pillar 5: Big payouts feel explosive
+
+Receipt-style results must explain **why** money moved.
+
+### Pillar 6: Every run tells a story
+
+Good sessions have tension, holds, and payoff — not disconnected transactions.
+
+---
+
+## What the game is not
+
+| Not this | Why |
+|----------|-----|
+| Realistic pawn sim | Fun > realism |
+| Traditional tycoon | No passive generators |
+| Idle income game | Player makes active choices |
+| Pure haggling game | Negotiation supports routing, not replaces it |
+| Player trading economy | Not core now |
+| Fallout clone | *Neon Cursed Flea Market* tone |
+
+---
+
+## Current prototype systems
+
+### Seller haggling — **Prototype**
+
+Buy tactics: Lowball, Split Difference, Point Out Flaw, Pressure, Accept Price, Pass. Heat, tells, inspect, profiles.
+
+### Buyer haggling — **Prototype**
+
+Sell tactics: Small Bump, Pitch Value, Hold Firm, Bluff, Accept Offer, Keep / Skip buyer.
+
+### Shift inventory — **Prototype**
+
+3 slots per shift; server-authoritative; resets each shift; no DataStore.
+
+### Buyer visits + matching — **Prototype**
+
+Player picks inventory item to offer. Match labels: Bad Match → … → Perfect Match. Bonuses are real cash.
+
+### Closing Rush — **Prototype**
+
+No more sellers; limited final buyers; liquidation fallback; quota after phase ends.
+
+### Deal archetypes — **Prototype**
+
+Weighted seller/item/value setup via archetypes (Safe Flip, Scam Trap, Desperate Seller, Bad Deal, Jackpot Junk, Perfect Buyer Setup). Evidence-style clues in UI; archetype names not shown to players.
+
+### Shift balance — **Prototype**
+
+Per-shift `dealArchetypeWeights` and `buyerWeights` in [Shifts.lua](../src/ReplicatedStorage/Shared/Config/Shifts.lua). Scrap Rush / Collector Convention / Black Market Night tuned as traffic-pattern examples.
+
+### Shop hub — **Prototype**
+
+- **ShiftBoard** `ProximityPrompt` opens shift selection overlay; starts shift via existing remotes.
+- **OpenClosedSign** updates OPEN/CLOSED from shift state (client visual).
+- **CustomerSpot** exists as a future presentation marker (no NPC pathfinding).
+- Physical hierarchy expected under `Workspace.World` (Outside, Shop, JunkLot, DisplayShelf, StashBin, etc.).
+
+### Hub pickup props — **Prototype** (decorative only)
+
+**Be honest:** this is **not** final gameplay.
+
+| Property | Hub pickups today |
+|----------|-------------------|
+| Authority | **Client-only** |
+| Persistence | **Session-only**; no save data |
+| Economy | **No** scraps, shift inventory, progression |
+| Purpose | Flavor + foundation for future object/shop loop |
+
+Player can pick up a prop at outdoor spawns, see `Holding: …` UI, place on `DisplaySlot1–3`, or drop in `StashBin`. Haggled shift items are a **separate** system.
+
+---
+
+## Shop hub
+
+### Expected Studio hierarchy
+
+```text
+Workspace
+└── World
+    ├── PlayerSpawn
+    ├── Outside
+    │   └── JunkLot (PickupSpawn1–3, JunkPile, …)
+    └── Shop
+        ├── ShiftBoard (+ ProximityPrompt)
+        ├── OpenClosedSign
+        ├── CustomerSpot
+        ├── DisplayShelf (DisplaySlot1–3, ShelfBack or Back)
+        ├── StashBin
+        ├── Counter, CashRegister, Building, …
+```
+
+### Current — **Prototype**
+
+Shift start from physical board, client sign, decorative hub props, deal UI during active shift.
+
+### Future — **Planned / future direction**
+
+Open/close shop as core verb; stash/display for **all** objects; calendar board; relic placement; shop upgrades; customer presentation at counter; rare walk-ins.
+
+---
+
+## Shifts (prototype implementation)
+
+**Status:** **Prototype** — code and config still use the word *shift*. Long-term, shifts are an analog of **shop-open / event traffic windows**, not a permanent menu of three static modes.
 
 | Phase | What happens |
 |-------|----------------|
-| **Buying** | Limited seller visits; periodic buyer visits; inventory pressure; profit target visible |
-| **Closing Rush** | No sellers; final buyers; limited count; liquidation fallback; quota after phase ends |
-| **Ended** | Result: total profit, target, success/fail, grade, liquidation summary |
+| **Buying** | Seller visits; periodic buyer visits; shift inventory; profit target |
+| **Closing Rush** | No sellers; final buyers; liquidation; quota after phase |
+| **Ended** | Grade, profit vs target, liquidation summary |
 
-### Shift examples (config direction)
+### Current shift examples ([Shifts.lua](../src/ReplicatedStorage/Shared/Config/Shifts.lua))
 
-| Shift | Purpose | Player feel |
-|-------|---------|-------------|
-| **Scrap Rush** | Beginner | Short, easy target, safe flips, low pressure |
-| **Collector Convention** | Matching | Collectibles/cursed routing, higher target |
-| **Black Market Night** | Risk | Scam traps, jackpot junk, big upside/downside |
+| Shift | Prototype role |
+|-------|----------------|
+| **Scrap Rush** | Steady, low-risk; practical buyers; forgiving Closing Rush |
+| **Collector Convention** | Hold for match; more traps/bad stock; collector-biased buyers |
+| **Black Market Night** | Scam/jackpot heavy; volatile buyers; highest target |
 
-### What makes a good shift
+### Future role — **Future direction**
 
-Include across the run:
-
-- at least one safe flip
-- one clear pass
-- one scam/suspicious seller
-- one item worth holding
-- one buyer-match opportunity
-- one high-upside moment
-- one tense cashout decision
+Scrap Rush ≈ normal day traffic. Collector Convention ≈ collectible demand event. Black Market Night ≈ high-volatility event. A **calendar** replaces static menu picks over time.
 
 ---
 
 ## Deal archetypes
 
-*Planned / early hooks — makes deals feel authored.*
-
-**MVP scope:** weighted seller/item/value at generation time only. No cutscenes, quest chains, or director system.
+**Status:** **Prototype** (implemented in repo)
 
 | Archetype | Purpose |
 |-----------|---------|
-| **Safe Flip** | Confidence, teaches loop, low risk |
-| **Scam Trap** | Pass/inspect/flaw matter; punishes blind buy |
-| **Desperate Seller** | Pressure tactics, buy-low satisfaction |
-| **Bad Deal** | Correct play is pass |
-| **Jackpot Junk** | Looks bad, secretly valuable |
-| **Perfect Buyer Setup** | Mediocre alone, great with right buyer |
+| Safe Flip | Teach loop; confidence |
+| Scam Trap | Inspect / pass / flaw matter |
+| Desperate Seller | Buy low under pressure |
+| Bad Deal | Correct play is pass |
+| Jackpot Junk | Hidden upside |
+| Perfect Buyer Setup | Hold for right buyer |
+
+No cutscenes, quest chains, or director system.
 
 ---
 
 ## Items
 
-Most important content. Each item should have:
+Each haggled item has: name, category, traits, rarity, true value, estimate, flavor, buyer appeal.
 
-name · category · traits · rarity · true value · estimate range · flavor · buyer appeal · visual identity
-
-### Categories (examples)
-
-Scrap · Cursed Junk · Alien Tech · Old World Tech · Collectibles · Military · Dangerous · Sentimental · Weird Artifacts · Rare Parts
-
-### Traits (examples)
-
-Cursed · Alien · Collectible · Useful · Damaged · Shiny · Fake · Military · Weird · Dangerous · Sentimental · Ancient · Broken · Rare Part · Contraband
-
-### Item name examples
-
-Possessed Traffic Cone · Crying Toaster · Moon Casino Token · Suspicious Taxidermy Ferret · Mini Gravity Reactor · The Mayor's Left Shoe · Jar of Living Dust · Singing Teeth · Alien Soda Tab · Cursed Lunchbox · Rusted Robot Heart · …
+Categories and traits live in configs. Item **content** can expand over time.
 
 ---
 
-## Buyers
+## Object ecosystem (planned)
 
-Readable archetypes — player infers wants from name/look/description.
+**Status:** **Planned** — not one unified inventory yet.
 
-| Buyer | Role | Likes (examples) |
-|-------|------|------------------|
-| **Cheap Scavenger** | Dump bad items; low offers | cheap junk, scrap |
-| **Rich Collector** | Big payouts for matches | Collectible, Cursed, Weird, Sentimental |
-| **Desperate Mechanic** | Practical parts | Useful, Damaged, Old World Tech, Rare Part |
-| **Alien Tourist** | Volatile jackpots | Alien, Weird, Cursed, Shiny |
-| **Robot Appraiser** | Fair, hard to trick | accurate value, practical |
-| **Black Market Dealer** | Risky high reward | Military, Dangerous, Contraband, Cursed |
+Eventually all sources feed one mental model: *"A weird object I found."*
+
+| Type | Role | Examples |
+|------|------|----------|
+| **Junk** | Usually sold; common | Rusted Pipe, Broken Radio |
+| **Collectible** | Sell, stash, or display | Mutant Plushie, Cursed Doll |
+| **Relic** | Sell, display, or **activate** as shop modifier | Alien Battery, Cursed Bell |
+| **Trophy** | Prestige / shop identity | Golden Traffic Cone |
+
+Sources (future): scavenging, walk-in sellers, event rewards, rare customers, haggling during open hours.
+
+**Hub pickups today are not this system yet** — they preview placement/stash fantasy only.
 
 ---
 
-## Sellers
+## Player decisions: sell / stash / display / activate (planned)
 
-Affect asking price, minimum, tells, tactic weaknesses, scam chance, desperation, confidence.
+| Decision | Meaning |
+|----------|---------|
+| **Sell** | Immediate scraps |
+| **Stash** | Save for better event, buyer, or collection |
+| **Display** | Shop identity; possible future demand influence |
+| **Activate** | Relic modifiers (future) |
 
-Examples: Desperate Survivor · Shady Scammer · Rich Collector · Robot Trader · Alien Tourist Seller · …
+Future design must use **slot limits** on stash and display so players curate, not hoard infinitely.
+
+**Not implemented** for haggled items or persistent stash.
+
+---
+
+## Buyers and customer traffic
+
+**Future direction:** buyers are the **main money engine** during open shop hours.
+
+Buyer types: scavengers, mechanics, collectors, black market dealers, alien tourists, robot appraisers, cultists, military buyers, desperate weirdos.
+
+**Normal days** should feel like Scrap Rush: reliable traffic, many item types, lower ceiling, good for clearing stock.
+
+**Rare buyers** can appear on normal days — *"I've been holding this cursed doll for days; a collector finally walked in."*
+
+### Sellers
+
+**Still matter.** Do not remove sellers.
+
+Future: sellers are **rarer and more exciting** — nervous traveler with suspicious object, classic pawn fantasy. They feed the **same object economy** as scavenging, not a competing money loop.
+
+---
+
+## Calendar and events (planned)
+
+**Status:** **Planned** — not in repo.
+
+Player should not pick three static shifts forever. A schedule drives demand:
+
+Normal Day · Scrap Rush · Collector Convention · Black Market Night · Repair Fair · Estate Sale · Alien Caravan · Cult Auction · Vault Opening · …
+
+**Good event design = preparation**, not passive waiting:
+
+```text
+Collector Convention in 20 minutes.
+→ Find collectibles, pull from stash, arrange display, decide what to hold, open when collectors arrive.
+```
+
+**Bad:** *"Event starts in 20 minutes. Wait."*
+
+---
+
+## Global events (future direction)
+
+**Status:** **Future direction** — not implemented.
+
+| Type | Frequency | Examples |
+|------|-----------|----------|
+| **Local / shop calendar** | Frequent | Normal Day, Scrap Rush, Collector Convention, Repair Fair |
+| **Global synchronized** | Rare | Alien Caravan, Military Convoy, Vault Opening, Meteor Junkfall |
+
+Global events can boost CCU. **Warning:** the game must not depend on global timers — normal local play must always be worthwhile.
+
+---
+
+## Long playtime and CCU (future direction)
+
+Target retention loop:
+
+```text
+Check upcoming events → Prepare inventory → Acquire / identify objects
+→ Arrange shop → Open during useful traffic → Sell to matching buyers
+→ Earn scraps / reputation → Upgrade capacity / relics → Check next event
+```
+
+**Short-term goals:** sell today, clear space, identify suspicious object, catch rare customer.
+
+**Medium-term:** prepare for Collector Convention, save item for right buyer, unlock slots/tools.
+
+**Long-term:** collection log, shop identity, relics, rarer events, faction reputation.
+
+**Strongest hook:** *"I have something valuable, but I'm waiting for the perfect moment to sell it."*
+
+---
+
+## Two economy problem
+
+**Critical design warning — keep prominent.**
+
+If scavenging pays better than haggling → nobody haggles.
+
+If haggling pays better than scavenging → nobody scavenges.
+
+**Solution:** one object economy, multiple acquisition sources, one decision loop:
+
+```text
+Acquire → Learn value → Store / display / sell / wait
+→ Use demand windows → Convert to money, reputation, or shop power
+```
+
+Scavenging must not be a separate money machine. Haggling must not be the only source of valuable objects.
 
 ---
 
 ## Haggling philosophy
 
-**Should be:** readable, tense, short, tactic-based, profile-driven, heat/confidence, supportive of item game.
-
-**Should not be:** perfect sim, long dialogue trees, endless tiny tuning, the only source of decisions.
-
-- Good: *"I can push one more time, but they might walk."*
-- Bad: *"I'm clicking numbers until the price changes."*
+Readable, tense, short, profile-driven. Supports the object game; does not replace it.
 
 ---
 
 ## Payout screen
 
-Messy pawn receipt — the dopamine moment.
-
-Show:
-
-- Bought For / Sold For
-- Cash Bonuses (Buyer Match, Trait Match)
-- Total Cash Received / Base Profit / Total Profit
-- Match Label · True Value · Rarity · Shift Progress
-
-**Example:**
-
-```
-Bought for:     80 scraps
-Sold for:       260 scraps
-Cash Bonuses:   +195 scraps
-  Buyer Match:  +120 scraps
-  Trait Match:  +75 scraps
-Cash Received:  455 scraps
-Total Profit:   +375 scraps
-Stamp:          PERFECT MATCH
-```
+Messy pawn receipt showing bought/sold, bonuses, match label, true value, shift progress.
 
 ---
 
 ## Holy crap moments
 
-- Jackpot junk discovered after buy
-- Perfect buyer for held item
-- Huge flip (many × purchase price)
-- Scam caught / avoided
-- Closing Rush quota save
-- Relic combo (future)
-- Rare discovery (new item)
-
-Must be **visible, readable, shareable**.
+Jackpot reveal · perfect buyer match · scam caught · Closing Rush save · rare discovery · (future) event-timed huge sale · relic combo
 
 ---
 
 ## Art direction
 
-**Style name:** *Neon Cursed Flea Market*
-
-| Outside world | Shop interior |
-|---------------|---------------|
-| dusty, rusty, roadside, worn | warm, dense, cluttered, glowing, weird |
-
-Avoid muddy brown apocalypse realism. Target: stylized roadside pawn shop — neon signs, cursed junk, alien trash, scammy sellers, buyers who look like walking red flags.
-
-**Item visuals:** readable silhouette, one funny detail, one value clue, one rarity effect.
+**Neon Cursed Flea Market** — dusty outside, glowing cluttered shop interior. Not muddy brown apocalypse.
 
 ---
 
 ## UI direction
 
-Pawn receipt / price tag / scrap-paper ledger.
-
-Motifs: receipt paper, stamped labels, price tags, sticky notes, red circles, scrap frames, handwritten warnings.
-
-Key labels: Seller Ask · Inventory · Buyer Match · Closing Rush · Buyers Left · Total Flip · Perfect Match · Scam Caught · Liquidated
-
-**Clarity over decoration.**
+Receipt paper, price tags, stamped labels, clarity over decoration. Shift/deal UI is **prototype**; hidden when idle; hub overlays for shift select and holding props.
 
 ---
 
-## Long-term progression
+## Long-term progression (planned)
 
-*Not implemented.*
-
-| System | Purpose |
-|--------|---------|
-| Collection log | Discovery, rare chase, social flex |
-| Shop display | Trophy case for best flips |
-| Shop customization | Fixed slots/themes — not freeform building |
-| Shift / buyer / relic unlocks | Run variety and buildcraft |
-
----
-
-## Relics / counter items
-
-*Future.* Must change **decisions**, not flat +10%.
-
-Good examples:
-
-- First Cursed item sold each shift also counts as Collectible
-- Pass two sellers → next seller higher jackpot chance
-- Alien buyers pay double for Weird; others pay less
-- +1 inventory slot but higher shift quota
+| System | Status |
+|--------|--------|
+| Collection log | **Future direction** |
+| Shop display (meaningful) | **Planned** |
+| Shop customization (fixed slots) | **Future direction** |
+| DataStore / persistence | **Future direction** |
+| Reputation / factions | **Future direction** |
 
 ---
 
-## Future shop system
+## Relics (future direction)
 
-Shop customization + display, **not** freeform building.
+Shop modifiers that change **decisions**, not flat +10%.
 
-Player should say: *"Come look at my cursed item room."*
+Examples (not implemented):
 
-Supports visual progress and social showing — must not distract from flipping loop.
+- Collector's Lamp → more collector buyers; fewer scavengers
+- Cursed Traffic Cone → more weird items and rare buyers; more scams
+- Alien Battery → more alien buyers; humans value alien stock less
+
+---
+
+## Documentation warnings
+
+1. **Do not make scavenging a second economy.**
+2. **Do not make events passive waiting** — always create prep goals.
+3. **Do not overuse global timers** — local play must stay rewarding.
+4. **Do not allow unlimited decoration** without stash/display limits.
+5. **Do not remove sellers** — make them special, not constant.
+6. **Do not turn this into a tycoon** — no idle generators, employees, rebirth ladders.
+7. **Do not document hub pickups as real economy** — they are client-only decorative prototype.
+8. **Do not imply calendar, relics, unified stash, or persistent display are built** until milestones ship.
 
 ---
 
 ## Feature filter
 
-Before adding a feature, does it improve at least one of:
+Does the feature improve at least one of:
 
 1. Weird item discovery  
-2. Buy/pass decisions  
-3. Inventory pressure  
-4. Buyer matching  
+2. Acquire / buy / pass decisions  
+3. Inventory or storage pressure  
+4. Buyer matching or demand timing  
 5. Big payout moments  
-6. Memorable shift stories  
-7. Long-term collection (later)  
-8. Shop identity / social flex (later)  
+6. Memorable shop stories  
+7. Long-term collection (**later**)  
+8. Shop identity (**later**)  
 
-**Examples:**
-
-| Feature | Verdict |
-|---------|---------|
-| Collection log | Yes |
-| Full employee scheduling | No — management sim |
-| Pets | Only if they support discovery/identity |
-| Full building system | Not now |
-| Relics | Yes, after core loop stable |
-| More haggling math | Only if playtest proves need |
+If not → wait.
 
 ---
 
 ## Current development stage
 
-### Completed / mostly working
+| Layer | Status |
+|-------|--------|
+| Shift haggle loop | **Prototype** — playable |
+| Shop hub + ShiftBoard | **Prototype** |
+| Hub pickup props | **Prototype** — decorative only |
+| Calendar / persistence / relics | **Not started** |
 
-Seller & buyer haggling · traits · buyer matching · shift inventory · buyer visits · payout summaries · Closing Rush structure
-
-### Current focus
-
-Playtest: Closing Rush pacing, buyer limits, inventory pressure, quota fairness, liquidation clarity, whether holding feels good.
-
-### Next major milestone
-
-**Deal Archetypes v1** — authored deals, shift rhythm, less random soup.
-
-### Following
-
-**Shift Identity v1** — Scrap Rush / Collector Convention / Black Market Night feel distinct.
-
-### Later
-
-Relics · more items · collection log · shop display/customization · saving/progression.
-
----
-
-## Immediate to-do
-
-**Do now:**
-
-- Playtest Closing Rush
-- Clarify Close Shift / liquidation UI
-- Show ~35% liquidation rate
-- Validate holding good items feels safe
-- Validate buyers-left tension
-
-**Do next:** Deal Archetypes v1, shift weights, stronger shift identity.
-
-**Do later:** Relics, content, collection, shop, saving.
+See [ROADMAP.md](ROADMAP.md) for milestone order.
 
 ---
 
 ## Success criteria
 
-**Moving right if players say:**
+**Moving right:**
 
 - "Save this for a collector."
-- "This buyer is perfect."
+- "This buyer is perfect for my item."
+- "I should wait for a better event."
 - "I need to make room."
-- "I got greedy and liquidated."
-- "Barely hit quota in Closing Rush."
-- "One more shift."
+- "I got greedy and had to liquidate."
 - "Look at this weird item."
 
-**Failing if:**
+**Failing:**
 
 - "I sell everything immediately."
-- "Buyer doesn't matter."
-- "Traits don't matter."
-- "Every deal feels the same."
-- "Game didn't let me sell."
-- "Just tuning haggling forever."
+- "The buyer doesn't matter."
+- "Scavenging is the only way to win."
+- "I failed because the game didn't let me sell."
 - "Weird items are only names."
 
 ---
 
 ## Development principles (Codex & Cursor)
 
-1. Protect the core loop — don't fight holding + matching.
+1. Protect holding + matching in the prototype loop.
 2. Small, testable milestones.
 3. Don't rewrite haggling without playtest proof.
-4. Future systems stay hooks until loop works.
+4. Label implemented vs planned in docs and PRs.
 5. Decisions visible in UI.
-6. Payout causes clear.
-7. Avoid overengineering and unrelated Roblox trends.
-8. **Designer first, coder second.**
+6. Designer first, coder second.
 
 ---
 
@@ -586,26 +619,32 @@ Relics · more items · collection log · shop display/customization · saving/p
 
 | Term | Definition |
 |------|------------|
-| **Seller visit** | Buying opportunity — seller brings an item |
-| **Buyer visit** | Selling opportunity — player picks inventory item to offer |
-| **Shift** | Short run with sellers, buyers, inventory cap, quota, result |
-| **Buying phase** | Main shift phase while sellers still arrive |
+| **Shift** | Prototype run: sellers, buyers, inventory cap, quota (**Prototype**) |
+| **Seller visit** | Buying opportunity during a shift |
+| **Buyer visit** | Selling opportunity; pick inventory item |
 | **Closing Rush** | Final cashout after sellers exhausted |
-| **Liquidation** | Bad fallback cashout for unsold items (~35% intended) |
-| **Buyer match** | How well item fits buyer preferences |
-| **Perfect match** | High-value fit; should feel exciting |
-| **Deal archetype** | Authored deal shape (Safe Flip, Scam Trap, …) |
-| **Relic** | Future run modifier for buildcraft |
-| **Shift identity** | What makes each shift type feel different |
+| **Liquidation** | Bad fallback for unsold items (~35%) |
+| **Buyer match** | Fit between item and buyer preferences |
+| **Deal archetype** | Authored deal shape at generation time |
+| **Hub prop** | Client-only decorative pickup (**Prototype**) |
+| **Shop open** | Future core verb; ShiftBoard is prototype entry (**Planned**) |
+| **Calendar event** | Demand window affecting buyers/traffic (**Planned**) |
+| **Relic** | Displayable/activatable shop modifier (**Future direction**) |
 
 ---
 
 ## North star
 
-> *"I bought a haunted traffic cone for 40 scraps, held it through two bad buyers, almost ran out of time, then sold it during Closing Rush to an alien tourist for a ridiculous profit."*
+**Prototype story (implemented today):**
 
-If a feature helps create stories like that, it probably belongs. If not, it can wait.
+> *"I bought a haunted traffic cone for 40 scraps, held it through two bad buyers, almost ran out of time, then sold it during Closing Rush to an alien tourist for ridiculous profit."*
+
+**Target story (future direction, not implemented):**
+
+> *"I found an Alien Battery. Normal buyers offered scraps. I stashed it, prepped the shop, opened during Alien Caravan, and sold to the perfect buyer for a ridiculous markup."*
+
+If a feature helps create stories like these, it probably belongs. If not, it can wait.
 
 ---
 
-*This file (`docs/GDD.md`) is the source of truth for design (v0.2). `docs/Wasteland Pawn GDD.docx` is an optional human export — edit the markdown, not the Word file.*
+*This file (`docs/GDD.md`) is the source of truth for design (v0.3). `docs/Wasteland Pawn GDD.docx` is an optional human export — edit the markdown, not the Word file.*
