@@ -183,6 +183,20 @@ function HubWorld.findDisplaySlot(shelf: Instance?, slotIndex: number, slotName:
 	return nil
 end
 
+local CUSTOMER_SPOT_EXACT_NAMES = {
+	"CustomerSpot",
+	"Customer_Spot",
+}
+
+function HubWorld.findCustomerSpot(shop: Instance?): BasePart?
+	if not shop then
+		return nil
+	end
+
+	local found = HubWorld.findShopPart(shop, CUSTOMER_SPOT_EXACT_NAMES, "customerspot")
+	return HubWorld.resolveBasePart(found)
+end
+
 function HubWorld.findShopPart(shop: Instance?, names: { string }, pattern: string?): Instance?
 	local found = HubWorld.findChildByNames(shop, names)
 	if found then

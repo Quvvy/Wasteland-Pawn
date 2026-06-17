@@ -4,6 +4,7 @@ local controllerModules = {
 	Controllers:WaitForChild("UIController"),
 	Controllers:WaitForChild("DealController"),
 	Controllers:WaitForChild("ShopHubController"),
+	Controllers:WaitForChild("CustomerPresentationController"),
 	Controllers:WaitForChild("HubPickupController"),
 	Controllers:WaitForChild("CameraController"),
 }
