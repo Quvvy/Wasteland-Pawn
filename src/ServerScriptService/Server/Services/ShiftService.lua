@@ -118,6 +118,7 @@ function ShiftService:startShift(player: Player, shiftId: string?)
 		buyerVisitEvery = buyerVisitEvery,
 		pendingBuyerVisit = false,
 		dealArchetypeWeights = shift.dealArchetypeWeights,
+		buyerWeights = shift.buyerWeights,
 		closingRushBuyerLimit = closingRushBuyerLimit,
 		closingRushBuyersRemaining = closingRushBuyerLimit,
 		closingRushBuyersSeen = 0,

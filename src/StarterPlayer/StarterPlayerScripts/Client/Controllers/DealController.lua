@@ -112,12 +112,30 @@ function DealController:_bindUi()
 	end)
 
 	UIController:onStartShift(function(shiftId: string)
-		local ok, result = invokeRemote("StartShift", shiftId)
-		if ok and result and result.ok then
-			UIController:updateShiftSnapshot(result.snapshot)
-			invokeRemote("StartDeal")
-		end
+		self:startShiftFlow(shiftId)
 	end)
+
+	UIController:onShiftSelectStart(function(shiftId: string)
+		self:startShiftFlow(shiftId)
+	end)
+end
+
+function DealController:startShiftFlow(shiftId: string): boolean
+	if UIController:isShiftActive() then
+		UIController:showHubMessage("Shift already in progress.")
+		return false
+	end
+
+	local ok, result = invokeRemote("StartShift", shiftId)
+	if ok and result and result.ok then
+		UIController:updateShiftSnapshot(result.snapshot)
+		UIController:closeShiftSelect()
+		invokeRemote("StartDeal")
+		return true
+	end
+
+	UIController:showHubMessage("Could not start shift.")
+	return false
 end
 
 function DealController:Start()

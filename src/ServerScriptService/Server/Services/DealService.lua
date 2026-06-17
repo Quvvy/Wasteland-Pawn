@@ -851,7 +851,7 @@ function DealService:startBuyerVisit(player: Player)
 	end
 
 	local rng = self:_getRng(player)
-	local buyer = BuyerService:rollBuyer(rng)
+	local buyer = BuyerService:rollBuyer(rng, shift and shift.buyerWeights)
 	if not buyer then
 		return { ok = false, error = "No buyers configured" }
 	end

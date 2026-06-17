@@ -11,10 +11,16 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local screenGui: ScreenGui
+local dealRoot: Frame
 local labels: { [string]: TextLabel } = {}
 local buttons: { [string]: TextButton } = {}
 local heatBarBg: Frame
 local heatBarFill: Frame
+local shiftSelectOverlay: Frame
+local shiftSelectList: ScrollingFrame
+local hubToast: TextLabel
+local hubHoldingBanner: TextLabel
+local shiftSelectStartCallback: ((string) -> ())?
 
 local currentSnapshot: any = nil
 local currentShiftSnapshot: any = nil
@@ -135,6 +141,28 @@ local function createLabel(parent: Instance, name: string, text: string, positio
 	return label
 end
 
+local function formatShiftOptionStats(option, cur: string): string
+	local sellerCount = option.sellerVisitCount or option.dealCount or 0
+	local buyerEvery = option.buyerVisitEvery or 2
+	return `Target: {option.targetProfit or 0} {cur} | Sellers: {sellerCount} | Slots: {option.inventorySlots or 3} | Buyer every {buyerEvery}`
+end
+
+local function clearShiftSelectList()
+	for _, child in shiftSelectList:GetChildren() do
+		if child:IsA("GuiObject") then
+			child:Destroy()
+		end
+	end
+end
+
+local function refreshDealRootVisibility()
+	if not dealRoot then
+		return
+	end
+	local snap = currentShiftSnapshot
+	dealRoot.Visible = snap ~= nil and snap.active == true
+end
+
 local function createButton(parent: Instance, name: string, text: string, position: UDim2, size: UDim2): TextButton
 	local button = Instance.new("TextButton")
 	button.Name = name
@@ -154,7 +182,29 @@ function UIController:Init()
 	screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "WastelandPawnDealUI"
 	screenGui.ResetOnSpawn = false
+	screenGui.DisplayOrder = 50
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	screenGui.Parent = playerGui
+
+	hubToast = createLabel(screenGui, "HubToast", "", UDim2.new(0.5, -220, 0, 12), UDim2.fromOffset(440, 36))
+	hubToast.Visible = false
+	hubToast.ZIndex = 20
+	hubToast.TextXAlignment = Enum.TextXAlignment.Center
+	hubToast.Font = Enum.Font.GothamBold
+	hubToast.TextSize = 14
+	hubToast.TextColor3 = Color3.fromRGB(255, 235, 175)
+	hubToast.BackgroundColor3 = Color3.fromRGB(30, 28, 38)
+	hubToast.BackgroundTransparency = 0.1
+
+	hubHoldingBanner = createLabel(screenGui, "HubHoldingBanner", "", UDim2.new(0.5, -220, 0, 52), UDim2.fromOffset(440, 28))
+	hubHoldingBanner.Visible = false
+	hubHoldingBanner.ZIndex = 20
+	hubHoldingBanner.TextXAlignment = Enum.TextXAlignment.Center
+	hubHoldingBanner.Font = Enum.Font.Gotham
+	hubHoldingBanner.TextSize = 13
+	hubHoldingBanner.TextColor3 = Color3.fromRGB(200, 230, 200)
+	hubHoldingBanner.BackgroundColor3 = Color3.fromRGB(28, 38, 32)
+	hubHoldingBanner.BackgroundTransparency = 0.15
 
 	local root = Instance.new("Frame")
 	root.Name = "Root"
@@ -162,7 +212,9 @@ function UIController:Init()
 	root.BorderSizePixel = 0
 	root.Position = UDim2.fromOffset(20, 20)
 	root.Size = UDim2.fromOffset(440, 700)
+	root.Visible = false
 	root.Parent = screenGui
+	dealRoot = root
 
 	labels.title = createLabel(root, "Title", "Wasteland Pawn - Tactics", UDim2.fromOffset(12, 8), UDim2.fromOffset(416, 26))
 	labels.title.TextSize = 17
@@ -257,6 +309,9 @@ function UIController:Init()
 	buttons.shiftBlackMarket = createButton(root, "ShiftBlackMarket", "Black Market Night", UDim2.fromOffset(304, 634), UDim2.fromOffset(124, 30))
 	buttons.shiftCollector.TextSize = 11
 	buttons.shiftBlackMarket.TextSize = 11
+	for _, name in { "shiftScrapRush", "shiftCollector", "shiftBlackMarket" } do
+		buttons[name].Visible = false
+	end
 
 	local sellOnly = {
 		"smallBump",
@@ -274,11 +329,232 @@ function UIController:Init()
 		buttons[name].Visible = false
 	end
 	buttons.next.Visible = false
+
+	shiftSelectOverlay = Instance.new("Frame")
+	shiftSelectOverlay.Name = "ShiftSelectOverlay"
+	shiftSelectOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	shiftSelectOverlay.BackgroundTransparency = 0.45
+	shiftSelectOverlay.BorderSizePixel = 0
+	shiftSelectOverlay.Size = UDim2.fromScale(1, 1)
+	shiftSelectOverlay.Visible = false
+	shiftSelectOverlay.ZIndex = 10
+	shiftSelectOverlay.Parent = screenGui
+
+	local shiftSelectPanel = Instance.new("Frame")
+	shiftSelectPanel.Name = "Panel"
+	shiftSelectPanel.BackgroundColor3 = Color3.fromRGB(22, 20, 28)
+	shiftSelectPanel.BorderSizePixel = 0
+	shiftSelectPanel.Position = UDim2.new(0.5, -210, 0.5, -240)
+	shiftSelectPanel.Size = UDim2.fromOffset(420, 480)
+	shiftSelectPanel.Parent = shiftSelectOverlay
+
+	local panelStroke = Instance.new("UIStroke")
+	panelStroke.Color = Color3.fromRGB(255, 120, 180)
+	panelStroke.Thickness = 2
+	panelStroke.Parent = shiftSelectPanel
+
+	local panelCorner = Instance.new("UICorner")
+	panelCorner.CornerRadius = UDim.new(0, 10)
+	panelCorner.Parent = shiftSelectPanel
+
+	labels.shiftSelectTitle = createLabel(
+		shiftSelectPanel,
+		"Title",
+		"Shift Board",
+		UDim2.fromOffset(12, 10),
+		UDim2.fromOffset(396, 28)
+	)
+	labels.shiftSelectTitle.BackgroundTransparency = 1
+	labels.shiftSelectTitle.Font = Enum.Font.GothamBold
+	labels.shiftSelectTitle.TextSize = 20
+	labels.shiftSelectTitle.TextColor3 = Color3.fromRGB(255, 220, 140)
+
+	labels.shiftSelectSubtitle = createLabel(
+		shiftSelectPanel,
+		"Subtitle",
+		"Pick what kind of day you want to run.",
+		UDim2.fromOffset(12, 38),
+		UDim2.fromOffset(396, 22)
+	)
+	labels.shiftSelectSubtitle.BackgroundTransparency = 1
+	labels.shiftSelectSubtitle.TextSize = 13
+	labels.shiftSelectSubtitle.TextColor3 = Color3.fromRGB(190, 190, 200)
+
+	buttons.shiftSelectClose = createButton(shiftSelectPanel, "Close", "Close", UDim2.fromOffset(340, 8), UDim2.fromOffset(68, 24))
+	buttons.shiftSelectClose.TextSize = 12
+	buttons.shiftSelectClose.MouseButton1Click:Connect(function()
+		self:closeShiftSelect()
+	end)
+
+	shiftSelectList = Instance.new("ScrollingFrame")
+	shiftSelectList.Name = "OptionList"
+	shiftSelectList.BackgroundTransparency = 1
+	shiftSelectList.BorderSizePixel = 0
+	shiftSelectList.Position = UDim2.fromOffset(12, 68)
+	shiftSelectList.Size = UDim2.fromOffset(396, 400)
+	shiftSelectList.CanvasSize = UDim2.fromOffset(0, 0)
+	shiftSelectList.ScrollBarThickness = 6
+	shiftSelectList.Parent = shiftSelectPanel
+
+	local listLayout = Instance.new("UIListLayout")
+	listLayout.Padding = UDim.new(0, 8)
+	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	listLayout.Parent = shiftSelectList
+
+	listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		shiftSelectList.CanvasSize = UDim2.fromOffset(0, listLayout.AbsoluteContentSize.Y + 8)
+	end)
+
 	self:updateShiftSnapshot({ active = false, ended = false })
 end
 
 function UIController:getSnapshot()
 	return currentSnapshot
+end
+
+function UIController:getShiftSnapshot()
+	return currentShiftSnapshot
+end
+
+function UIController:isShiftActive(): boolean
+	return currentShiftSnapshot ~= nil and currentShiftSnapshot.active == true
+end
+
+function UIController:showHubMessage(text: string)
+	labels.shift.Text = text
+	if hubToast then
+		hubToast.Text = text
+		hubToast.Visible = text ~= ""
+		if text ~= "" then
+			task.delay(4, function()
+				if hubToast and hubToast.Text == text then
+					hubToast.Visible = false
+				end
+			end)
+		end
+	end
+end
+
+function UIController:setHubHolding(displayName: string?)
+	if not hubHoldingBanner then
+		return
+	end
+	if displayName and displayName ~= "" then
+		hubHoldingBanner.Text = `Holding: {displayName}`
+		hubHoldingBanner.Visible = true
+	else
+		hubHoldingBanner.Text = ""
+		hubHoldingBanner.Visible = false
+	end
+end
+
+function UIController:closeShiftSelect()
+	if shiftSelectOverlay then
+		shiftSelectOverlay.Visible = false
+	end
+end
+
+function UIController:onShiftSelectStart(callback: (string) -> ())
+	shiftSelectStartCallback = callback
+end
+
+function UIController:openShiftSelect(options)
+	if self:isShiftActive() then
+		self:showHubMessage("Shift already in progress. Finish or end it first.")
+		return false
+	end
+
+	if not options or #options == 0 then
+		self:showHubMessage("No shift options available.")
+		return false
+	end
+
+	if not shiftSelectStartCallback then
+		self:showHubMessage("Shift start is not ready yet. Try again.")
+		warn("UIController: shiftSelectStartCallback missing")
+		return false
+	end
+
+	local cur = currencyLabel(currentSnapshot)
+	clearShiftSelectList()
+
+	for index, option in options do
+		local card = Instance.new("Frame")
+		card.Name = `Option_{option.id or index}`
+		card.BackgroundColor3 = Color3.fromRGB(34, 32, 42)
+		card.BorderSizePixel = 0
+		card.Size = UDim2.new(1, -4, 0, 118)
+		card.LayoutOrder = index
+		card.Parent = shiftSelectList
+
+		local cardCorner = Instance.new("UICorner")
+		cardCorner.CornerRadius = UDim.new(0, 8)
+		cardCorner.Parent = card
+
+		local cardStroke = Instance.new("UIStroke")
+		cardStroke.Color = Color3.fromRGB(80, 75, 95)
+		cardStroke.Thickness = 1
+		cardStroke.Parent = card
+
+		local nameLabel = createLabel(card, "Name", option.displayName or "Shift", UDim2.fromOffset(10, 6), UDim2.new(1, -120, 0, 22))
+		nameLabel.BackgroundTransparency = 1
+		nameLabel.Font = Enum.Font.GothamBold
+		nameLabel.TextSize = 15
+		nameLabel.TextColor3 = Color3.fromRGB(255, 235, 175)
+
+		local modifierLabel = createLabel(
+			card,
+			"Modifier",
+			option.modifierText or "",
+			UDim2.fromOffset(10, 28),
+			UDim2.new(1, -20, 0, 18)
+		)
+		modifierLabel.BackgroundTransparency = 1
+		modifierLabel.TextSize = 12
+		modifierLabel.TextColor3 = Color3.fromRGB(200, 180, 255)
+
+		local descLabel = createLabel(
+			card,
+			"Description",
+			option.description or "",
+			UDim2.fromOffset(10, 46),
+			UDim2.new(1, -20, 0, 32)
+		)
+		descLabel.BackgroundTransparency = 1
+		descLabel.TextSize = 12
+		descLabel.TextColor3 = Color3.fromRGB(210, 210, 210)
+
+		local statsLabel = createLabel(
+			card,
+			"Stats",
+			formatShiftOptionStats(option, cur),
+			UDim2.fromOffset(10, 78),
+			UDim2.new(1, -120, 0, 32)
+		)
+		statsLabel.BackgroundTransparency = 1
+		statsLabel.TextSize = 11
+		statsLabel.TextColor3 = Color3.fromRGB(160, 200, 160)
+
+		local startButton = createButton(card, "Start", "Start", UDim2.new(1, -100, 1, -34), UDim2.fromOffset(88, 26))
+		startButton.TextSize = 12
+		startButton.BackgroundColor3 = Color3.fromRGB(70, 120, 80)
+		local shiftId = option.id
+		startButton.MouseButton1Click:Connect(function()
+			if self:isShiftActive() then
+				self:showHubMessage("Shift already in progress.")
+				return
+			end
+			if shiftSelectStartCallback and shiftId then
+				shiftSelectStartCallback(shiftId)
+			end
+		end)
+	end
+
+	if hubToast then
+		hubToast.Visible = false
+	end
+	shiftSelectOverlay.Visible = true
+	return true
 end
 
 local function refreshAcceptBuyButton()
@@ -299,10 +575,12 @@ end
 function UIController:setTacticButtonsEnabled(enabled: boolean)
 	tacticButtonsEnabled = enabled
 	local alpha = if enabled then 0 else 0.45
-	for _, button in buttons do
-		button.Active = enabled
-		button.AutoButtonColor = enabled
-		button.BackgroundTransparency = alpha
+	for name, button in buttons do
+		if name ~= "shiftSelectClose" then
+			button.Active = enabled
+			button.AutoButtonColor = enabled
+			button.BackgroundTransparency = alpha
+		end
 	end
 	refreshAcceptBuyButton()
 end
@@ -499,11 +777,8 @@ function UIController:updateShiftSnapshot(snapshot)
 	currentShiftSnapshot = snapshot or { active = false, ended = false }
 	local cur = currencyLabel(currentSnapshot)
 
-	for _, name in { "shiftScrapRush", "shiftCollector", "shiftBlackMarket" } do
-		buttons[name].Visible = not currentShiftSnapshot.active
-	end
-
 	if currentShiftSnapshot.active then
+		self:closeShiftSelect()
 		local phase = currentShiftSnapshot.phase or "Buying"
 		local buyerText = if currentShiftSnapshot.pendingBuyerVisit then " | Buyer waiting" else ""
 		if phase == "ClosingRush" then
@@ -543,6 +818,7 @@ function UIController:updateShiftSnapshot(snapshot)
 	end
 
 	self:setPhaseControls(currentSnapshot and currentSnapshot.phase or "")
+	refreshDealRootVisibility()
 end
 
 function UIController:updateInventorySnapshot(snapshot)
