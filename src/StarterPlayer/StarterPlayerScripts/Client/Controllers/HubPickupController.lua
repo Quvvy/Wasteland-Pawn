@@ -16,9 +16,7 @@ local DEBUG_HUB_WARNINGS = false
 local heldProp: any = nil
 local spawnedAtPickup: { [string]: Model } = {}
 local consumedPickupSpawns: { [string]: boolean } = {}
-local placedOnSlot: { [string]: Model } = {}
 local boundPrompts: { [ProximityPrompt]: boolean } = {}
-local slotPrompts: { [string]: ProximityPrompt } = {}
 local stashPrompt: ProximityPrompt? = nil
 local localFolder: Folder? = nil
 
@@ -32,17 +30,6 @@ local function warnOnce(key: string, message: string)
 	if DEBUG_HUB_WARNINGS then
 		warn(message)
 	end
-end
-
-local function findChildChain(root: Instance?, ...: string): Instance?
-	local current = root
-	for _, name in { ... } do
-		if not current then
-			return nil
-		end
-		current = current:FindFirstChild(name)
-	end
-	return current
 end
 
 local function waitForWorld(): Instance?
@@ -178,17 +165,6 @@ function HubPickupController:_isHolding(): boolean
 end
 
 function HubPickupController:_refreshPlacementPrompts()
-	local holding = self:_isHolding()
-	local displayName = heldProp and heldProp.displayName or ""
-
-	for _, prompt in slotPrompts do
-		if holding then
-			prompt.ActionText = `Place {displayName}`
-		else
-			prompt.ActionText = "Need a prop to place"
-		end
-	end
-
 	if stashPrompt then
 		stashPrompt.ActionText = "Drop in Stash"
 	end
@@ -216,40 +192,6 @@ function HubPickupController:_pickUpProp(model: Model, spawnName: string?)
 
 	UIController:setHubHolding(def.displayName)
 	self:_refreshPlacementPrompts()
-end
-
-function HubPickupController:_placeOnSlot(slotName: string, slotPart: BasePart)
-	if not self:_isHolding() then
-		UIController:showHubMessage("Pick up a prop first.")
-		return
-	end
-
-	if placedOnSlot[slotName] then
-		UIController:showHubMessage("Slot already has something.")
-		return
-	end
-
-	local world = findChildChain(Workspace, "World")
-	if not world then
-		return
-	end
-
-	local placed = self:_createPickupModel(heldProp)
-	local pivot = slotPart:GetPivot() * CFrame.new(0, HubPickups.PlaceYOffset, 0)
-	placed:PivotTo(pivot)
-	placed.Parent = ensureLocalFolder(world)
-
-	for _, descendant in placed:GetDescendants() do
-		if descendant:IsA("ProximityPrompt") then
-			descendant:Destroy()
-		end
-	end
-
-	placedOnSlot[slotName] = placed
-	heldProp = nil
-	UIController:setHubHolding(nil)
-	self:_refreshPlacementPrompts()
-	UIController:showHubMessage(`Placed on {slotName}.`)
 end
 
 function HubPickupController:_dropInStash()
@@ -337,51 +279,6 @@ function HubPickupController:_setupOutdoorPickups(world: Instance)
 	end
 end
 
-function HubPickupController:_bindDisplaySlots(world: Instance)
-	local shop = HubWorld.findChildByNames(world, { "Shop" })
-	local shelf = shop
-		and HubWorld.findChildByNames(shop, { "DisplayShelf", "Display_Shelf", "Shelf", "Display" })
-	if not shelf then
-		warnOnce(
-			"display_shelf",
-			`HubPickup: DisplayShelf not found. Shop children: {HubWorld.listChildNames(shop)}`
-		)
-		return
-	end
-
-	local shelfBack = HubWorld.findChildByNames(shelf, { "ShelfBack", "Back" })
-	if not shelfBack then
-		warnOnce("shelf_back", "HubPickup: ShelfBack/Back not found on DisplayShelf (optional)")
-	end
-
-	for index, slotName in HubPickups.DisplaySlots do
-		if slotPrompts[slotName] then
-			continue
-		end
-
-		local slot = HubWorld.findDisplaySlot(shelf, index, slotName)
-		if not slot then
-			warnOnce(
-				`slot_{slotName}`,
-				`HubPickup: {slotName} not found under DisplayShelf. Children: {HubWorld.listChildNames(shelf)}`
-			)
-			continue
-		end
-
-		local prompt = getOrCreatePrompt(slot, "PlacePrompt")
-		slotPrompts[slotName] = prompt
-
-		if boundPrompts[prompt] then
-			continue
-		end
-		boundPrompts[prompt] = true
-
-		prompt.Triggered:Connect(function()
-			self:_placeOnSlot(slotName, slot)
-		end)
-	end
-end
-
 function HubPickupController:_bindStashBin(world: Instance)
 	local shop = HubWorld.findChildByNames(world, { "Shop" })
 	local stash = shop
@@ -425,7 +322,7 @@ function HubPickupController:_waitAndSetup(world: Instance?)
 	end
 
 	self:_setupOutdoorPickups(world)
-	self:_bindDisplaySlots(world)
+	-- DisplayShelf is gameplay-owned; decorative pickups only use pickup and stash prompts.
 	self:_bindStashBin(world)
 	self:_refreshPlacementPrompts()
 end

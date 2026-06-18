@@ -158,10 +158,10 @@ function HubWorld.findDisplaySlot(shelf: Instance?, slotIndex: number, slotName:
 		return nil
 	end
 
-	for _, descendant in shelf:GetDescendants() do
-		local hay = normalize(descendant.Name)
-		if string.find(hay, "displayslot", 1, true) and string.find(hay, tostring(slotIndex), 1, true) then
-			part = HubWorld.resolveBasePart(descendant)
+	for _, child in shelf:GetChildren() do
+		local hay = normalize(child.Name)
+		if hay == `displayslot{slotIndex}` or hay == `displayslot{slotIndex}` or hay == `slot{slotIndex}` then
+			part = HubWorld.resolveBasePart(child)
 			if part then
 				return part
 			end
@@ -170,12 +170,10 @@ function HubWorld.findDisplaySlot(shelf: Instance?, slotIndex: number, slotName:
 
 	for _, descendant in shelf:GetDescendants() do
 		local hay = normalize(descendant.Name)
-		if string.find(hay, "slot", 1, true) and string.find(hay, tostring(slotIndex), 1, true) then
-			if not string.find(hay, "shelfback", 1, true) and hay ~= "back" then
-				part = HubWorld.resolveBasePart(descendant)
-				if part then
-					return part
-				end
+		if hay == `displayslot{slotIndex}` or hay == `displayslot{slotIndex}` then
+			part = HubWorld.resolveBasePart(descendant)
+			if part then
+				return part
 			end
 		end
 	end
@@ -195,6 +193,97 @@ function HubWorld.findCustomerSpot(shop: Instance?): BasePart?
 
 	local found = HubWorld.findShopPart(shop, CUSTOMER_SPOT_EXACT_NAMES, "customerspot")
 	return HubWorld.resolveBasePart(found)
+end
+
+local COUNTER_ITEM_SPOT_EXACT_NAMES = {
+	"CounterItemSpot",
+	"Counter_Item_Spot",
+}
+
+function HubWorld.findCounterItemSpot(shop: Instance?): BasePart?
+	if not shop then
+		return nil
+	end
+
+	local found = HubWorld.findShopPart(shop, COUNTER_ITEM_SPOT_EXACT_NAMES, "counteritemspot")
+	return HubWorld.resolveBasePart(found)
+end
+
+local INVENTORY_SHELF_EXACT_NAMES = {
+	"InventoryShelf",
+	"Inventory_Shelf",
+	"HeldItemSlots",
+	"Held_Item_Slots",
+}
+
+function HubWorld.findInventoryShelf(shop: Instance?): Instance?
+	if not shop then
+		return nil
+	end
+
+	local found = HubWorld.findShopPart(shop, INVENTORY_SHELF_EXACT_NAMES, "inventoryshelf")
+	if found then
+		return found
+	end
+
+	return HubWorld.findShopPart(shop, INVENTORY_SHELF_EXACT_NAMES, "helditemslots")
+end
+
+function HubWorld.findInventorySlot(shelf: Instance?, slotIndex: number): BasePart?
+	if not shelf then
+		return nil
+	end
+
+	local exactNames = {
+		`InventorySlot{slotIndex}`,
+		`Inventory_Slot{slotIndex}`,
+		`Slot{slotIndex}`,
+	}
+	local part = HubWorld.resolveBasePart(HubWorld.findChildByNames(shelf, exactNames))
+	if part then
+		return part
+	end
+
+	for _, child in shelf:GetChildren() do
+		local hay = normalize(child.Name)
+		if string.find(hay, "inventoryslot", 1, true) and string.find(hay, tostring(slotIndex), 1, true) then
+			part = HubWorld.resolveBasePart(child)
+			if part then
+				return part
+			end
+		end
+	end
+
+	for _, child in shelf:GetChildren() do
+		local hay = normalize(child.Name)
+		if hay == `slot{slotIndex}` or (string.find(hay, "slot", 1, true) and string.find(hay, tostring(slotIndex), 1, true)) then
+			if not string.find(hay, "displayslot", 1, true) and not string.find(hay, "shelfback", 1, true) then
+				part = HubWorld.resolveBasePart(child)
+				if part then
+					return part
+				end
+			end
+		end
+	end
+
+	return nil
+end
+
+local DISPLAY_SHELF_EXACT_NAMES = {
+	"DisplayShelf",
+	"Display_Shelf",
+}
+
+function HubWorld.findDisplayShelf(shop: Instance?): Instance?
+	if not shop then
+		return nil
+	end
+
+	return HubWorld.findShopPart(shop, DISPLAY_SHELF_EXACT_NAMES, "displayshelf")
+end
+
+function HubWorld.findDisplayShelfSlot(shelf: Instance?, slotIndex: number): BasePart?
+	return HubWorld.findDisplaySlot(shelf, slotIndex, `DisplaySlot{slotIndex}`)
 end
 
 function HubWorld.findShopPart(shop: Instance?, names: { string }, pattern: string?): Instance?

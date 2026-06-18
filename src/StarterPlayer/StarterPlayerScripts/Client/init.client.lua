@@ -3,8 +3,12 @@ local Controllers = script:WaitForChild("Controllers")
 local controllerModules = {
 	Controllers:WaitForChild("UIController"),
 	Controllers:WaitForChild("DealController"),
+	Controllers:WaitForChild("DebugOverlayController"),
 	Controllers:WaitForChild("ShopHubController"),
 	Controllers:WaitForChild("CustomerPresentationController"),
+	Controllers:WaitForChild("ItemPresentationController"),
+	Controllers:WaitForChild("InventoryShelfPresentationController"),
+	Controllers:WaitForChild("DisplayShelfPresentationController"),
 	Controllers:WaitForChild("HubPickupController"),
 	Controllers:WaitForChild("CameraController"),
 }

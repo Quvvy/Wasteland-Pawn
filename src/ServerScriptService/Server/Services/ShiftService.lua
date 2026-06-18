@@ -165,6 +165,21 @@ function ShiftService:canRollClosingRushBuyer(player: Player): boolean
 		and (shift.closingRushBuyersRemaining or 0) > 0
 end
 
+function ShiftService:queueClosingRushBuyer(player: Player): boolean
+	local shift = playerShifts[player]
+	if not shift or shift.ended or shift.phase ~= PHASE_CLOSING_RUSH then
+		return false
+	end
+	if InventoryService:getCount(player) <= 0 then
+		return false
+	end
+	if not self:canRollClosingRushBuyer(player) then
+		return false
+	end
+	shift.pendingBuyerVisit = true
+	return true
+end
+
 function ShiftService:enterClosingRush(player: Player)
 	local shift = playerShifts[player]
 	if not shift or not shift.active or shift.ended then
@@ -424,6 +439,21 @@ end
 function ShiftService:_pushState(player: Player)
 	local shiftStateUpdate = Remotes.get("ShiftStateUpdate") :: RemoteEvent
 	shiftStateUpdate:FireClient(player, self:buildSnapshot(player))
+end
+
+function ShiftService:debugSetPendingBuyerVisit(player: Player): boolean
+	if not game:GetService("RunService"):IsStudio() then
+		return false
+	end
+
+	local shift = playerShifts[player]
+	if not shift or not shift.active or shift.ended then
+		return false
+	end
+
+	shift.pendingBuyerVisit = true
+	self:_pushState(player)
+	return true
 end
 
 return ShiftService

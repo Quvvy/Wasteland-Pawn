@@ -7,6 +7,7 @@ local HaggleTuning = {
 	autoNextDelayWalkedAway = 2.5,
 	autoNextDelayResult = 2.5,
 	autoNextDelayPass = 1.5,
+	requireManualAdvance = true,
 
 	passPenaltyCaps = 0,
 	buyerRerollCost = 0,

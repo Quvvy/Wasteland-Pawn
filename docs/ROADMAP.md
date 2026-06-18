@@ -36,6 +36,7 @@ Haggling resolves deals. The bigger game is **object routing**: when to sell, wh
 | Shift select overlay (from ShiftBoard) | **Prototype** |
 | OpenClosedSign (client visual) | **Prototype** |
 | Hub pickup props (pick up / place / stash) | **Prototype** — decorative only; see GDD |
+| Customer counter presentation (`CustomerPresentationController`, cloned visitor rigs) | **Prototype** |
 
 ---
 
@@ -46,10 +47,23 @@ Haggling resolves deals. The bigger game is **object routing**: when to sell, wh
 - [ ] Playtest shift start from ShiftBoard end-to-end
 - [ ] Playtest Closing Rush pacing and liquidation clarity
 - [ ] Verify buyer matching still matters across shift types
-- [ ] Customer counter presentation at `CustomerSpot` (marker exists; no NPC yet)
+- [ ] Playtest customer counter presentation at `CustomerSpot` (visitor rigs + labels)
 - [ ] Shop open / close flow polish (beyond client sign text)
 - [ ] Make Scrap Rush feel like a reliable “normal day” traffic baseline
 - [ ] Keep hub pickup props clearly separate from shift economy in playtests
+
+**Inventory shelf prompt mode (BuyerVisit vs Hold Back):**
+
+- [ ] BuyerVisit starts
+- [ ] InventoryShelf item shows exactly one prompt: `Offer <Item Name>`
+- [ ] Pressing prompt starts Selling and moves item to CounterItemSpot
+- [ ] No Hold Back / Display action fires during BuyerVisit
+- [ ] Outside BuyerVisit, same item shows exactly one prompt: `Hold Back`
+- [ ] Pressing Hold Back moves item to DisplayShelf
+- [ ] No SelectInventoryItemForBuyer call fires when pressing Hold Back
+- [ ] Rapid phase changes do not leave stale prompts or stale callbacks
+- [ ] Server rejects DisplayInventoryItem during BuyerVisit with clear error
+- [ ] Displayed items still cannot be offered to buyers
 
 **Avoid:** Calendar systems, DataStores, relics, unified object inventory, or scavenging economy until hub + shift prototype feels solid.
 
@@ -59,6 +73,7 @@ Haggling resolves deals. The bigger game is **object routing**: when to sell, wh
 
 | Milestone | Status | Notes |
 |-----------|--------|-------|
+| Item counter props at `CounterItemSpot` | **Planned** | Clone from `ReplicatedStorage.Assets.Items`; client-only presentation |
 | Object model unification **plan** | **Planned** | One object ecosystem; hub pickups + haggled items converge later |
 | Haggled item → stash/display decision prototype | **Planned** | Server-authoritative; not hub-prop decorative layer |
 | Customer-demand-focused shift/calendar prototype | **Planned** | Shifts as prototype of event/traffic windows |

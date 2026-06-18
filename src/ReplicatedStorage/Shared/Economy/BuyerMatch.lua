@@ -79,6 +79,14 @@ local function getTraitMatches(buyer, traits): { string }
 	return matches
 end
 
+function BuyerMatch.getCategoryInterest(buyer, category: string?): (number, { string })
+	return getCategoryScore(buyer, category)
+end
+
+function BuyerMatch.getMatchingTraits(buyer, traits): { string }
+	return getTraitMatches(buyer, traits)
+end
+
 function BuyerMatch.score(item, buyer)
 	local trueValue = item and item.trueValue or 0
 	local categoryScore, matchedCategories = getCategoryScore(buyer, item and item.category)

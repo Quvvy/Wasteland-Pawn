@@ -267,4 +267,20 @@ function Items.getRandom(rng: Random?)
 	return TableUtil.pickRandom(Items.List, rng)
 end
 
+function Items.pickRandomInCategories(categories: { string }, rng: Random?)
+	local wanted = {}
+	for _, category in categories do
+		wanted[category] = true
+	end
+
+	local pool = {}
+	for _, item in Items.List do
+		if wanted[item.category] then
+			table.insert(pool, item)
+		end
+	end
+
+	return TableUtil.pickRandom(pool, rng)
+end
+
 return Items

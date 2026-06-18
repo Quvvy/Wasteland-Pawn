@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local HaggleTuning = require(Shared.Config.HaggleTuning)
 local Shifts = require(Shared.Config.Shifts)
+local InventorySnapshot = require(Shared.Util.InventorySnapshot)
 
 local UIController = {}
 
@@ -72,14 +73,32 @@ local function formatInventorySummary(inventory): string
 	local lines = {
 		`Inventory: {inventory.usedSlots or 0}/{inventory.maxSlots or 3}`,
 	}
-	for index = 1, inventory.maxSlots or 3 do
-		local item = inventory.items and inventory.items[index]
+	for slotIndex = 1, inventory.maxSlots or 3 do
+		local item = inventory.items and inventory.items[slotIndex]
 		if item then
-			table.insert(lines, `{index}. {item.displayName} ({item.category}) - paid {item.purchasePrice}`)
+			local heldTag = if item.heldBack then " [Held Back]" else ""
+			table.insert(lines, `{slotIndex}. {item.displayName} ({item.category}) - paid {item.purchasePrice}{heldTag}`)
 		else
-			table.insert(lines, `{index}. Empty`)
+			table.insert(lines, `{slotIndex}. Empty`)
 		end
 	end
+
+	local displayMax = inventory.displayMaxSlots or 3
+	local displayUsed = inventory.displayUsedSlots or 0
+	local displayBySlot = InventorySnapshot.indexDisplayItemsBySlot(inventory.displayItems)
+	table.insert(lines, `Display: {displayUsed}/{displayMax}`)
+	for slotIndex = 1, displayMax do
+		local item = displayBySlot[slotIndex]
+		if item then
+			table.insert(lines, `D{slotIndex}. {item.displayName} ({item.category})`)
+		end
+	end
+
+	local appeal = inventory.displayAppealSummary
+	if appeal and appeal ~= "" then
+		table.insert(lines, `Display Appeal: {appeal}`)
+	end
+
 	return table.concat(lines, "\n")
 end
 
@@ -620,16 +639,28 @@ function UIController:setPhaseControls(phase: string)
 	buttons.keep.Visible = hasShift and (buyerVisit or sell)
 	buttons.keep.Text = if buyerVisit then "Skip Buyer" else "Keep Item"
 	buttons.closeShift.Visible = hasShift and closingRush and not sell
-	buttons.next.Visible = hasShift and terminal and ((currentShiftSnapshot and currentShiftSnapshot.dealsRemaining or 0) > 0)
+	local buyerSkipped = phase == "BuyerSkipped"
+	local inventoryCount = currentInventorySnapshot and currentInventorySnapshot.usedSlots or 0
+	local sellersRemaining = (currentShiftSnapshot and currentShiftSnapshot.dealsRemaining or 0) > 0
+	local closingRushBuyersAvailable = closingRush
+		and inventoryCount > 0
+		and ((currentShiftSnapshot and currentShiftSnapshot.closingRushBuyersRemaining or 0) > 0
+			or currentShiftSnapshot.pendingBuyerVisit == true)
+	buttons.next.Visible = hasShift
+		and (buyerSkipped or (terminal and (sellersRemaining or closingRushBuyersAvailable)))
+	buttons.next.Text = if buyerSkipped then "Continue" else "Next Customer"
 
-	for _, name in { "customer", "dialogue", "item", "prices", "cash", "outcome" } do
-		labels[name].Visible = showDeal
-	end
+	labels.customer.Visible = showDeal
+	labels.dialogue.Visible = showDeal
+	labels.item.Visible = showDeal and not buyerSkipped
+	labels.prices.Visible = showDeal and not buyerSkipped
+	labels.cash.Visible = showDeal
+	labels.outcome.Visible = showDeal and not buyerSkipped
 	heatBarBg.Visible = showDeal and (buy or sell)
 	labels.heat.Visible = showDeal and (buy or sell)
 	labels.tell.Visible = showDeal and (buy or sell or buyerVisit or phase == "Stored")
 	labels.inspect.Visible = showDeal and buy
-	labels.result.Visible = showDeal and (buyerVisit or sell or terminal)
+	labels.result.Visible = showDeal and (buyerVisit or sell or (terminal and not buyerSkipped))
 	labels.inventory.Visible = hasShift and not (currentShiftSnapshot and currentShiftSnapshot.ended)
 end
 
@@ -647,17 +678,41 @@ function UIController:updateSnapshot(snapshot)
 	if snapshot.shift then
 		currentShiftSnapshot = snapshot.shift
 	end
-	self:setPhaseControls(phase)
+	if phase == "BuyerSkipped" and currentShiftSnapshot then
+		self:updateShiftSnapshot(currentShiftSnapshot)
+	else
+		self:setPhaseControls(phase)
+	end
+
+	if phase == "BuyerSkipped" then
+		labels.customer.Text = "Buyer Visit Skipped"
+		labels.dialogue.Text = snapshot.dialogue or "A buyer came looking, but your shelves are empty."
+		labels.item.Text = ""
+		labels.prices.Text = ""
+		labels.cash.Text = `Your {cur}: {snapshot.playerCash or 0}`
+		labels.heat.Text = ""
+		labels.tell.Text = ""
+		labels.inspect.Text = ""
+		labels.result.Text = ""
+		labels.outcome.Text = ""
+		refreshInventoryLabel()
+		refreshAcceptBuyButton()
+		return
+	end
 
 	local isSell = phase == "Selling"
 	local isBuyerVisit = phase == "BuyerVisit"
-	labels.customer.Text = if isSell or isBuyerVisit
+	local isBuyerFacing = isSell or isBuyerVisit
+	labels.customer.Text = if isBuyerFacing
 		then `Buyer: {snapshot.buyerName or "?"}`
 		else `Seller: {snapshot.customerName or "?"}`
-	local readHint = if isSell or isBuyerVisit then snapshot.buyerReadHint or snapshot.buyerWants else snapshot.sellerReadHint
-	labels.tell.Text = `Tell: {if isSell or isBuyerVisit then snapshot.buyerTell or "?" else snapshot.sellerTell or "?"}`
+	local readHint = if isBuyerFacing then snapshot.buyerReadHint or snapshot.buyerWants else snapshot.sellerReadHint
+	labels.tell.Text = `Tell: {if isBuyerFacing then snapshot.buyerTell or "?" else snapshot.sellerTell or "?"}`
 	if readHint then
 		labels.tell.Text ..= `\n{readHint}`
+	end
+	if snapshot.displayInfluenceLabel and isBuyerVisit then
+		labels.tell.Text ..= `\n{snapshot.displayInfluenceLabel}`
 	end
 	labels.dialogue.Text = snapshot.dialogue or "..."
 	if isBuyerVisit then
@@ -780,15 +835,19 @@ function UIController:updateShiftSnapshot(snapshot)
 	if currentShiftSnapshot.active then
 		self:closeShiftSelect()
 		local phase = currentShiftSnapshot.phase or "Buying"
-		local buyerText = if currentShiftSnapshot.pendingBuyerVisit then " | Buyer waiting" else ""
+		local activeDealPhase = currentSnapshot and currentSnapshot.phase
+		local buyerText = if currentShiftSnapshot.pendingBuyerVisit and activeDealPhase ~= "BuyerSkipped"
+			then " | Buyer waiting"
+			else ""
 		if phase == "ClosingRush" then
 			local inventoryCount = currentInventorySnapshot and currentInventorySnapshot.usedSlots or 0
 			local inventoryMax = currentInventorySnapshot and currentInventorySnapshot.maxSlots or currentShiftSnapshot.inventoryMaxSlots or 3
 			labels.shift.Size = UDim2.fromOffset(416, 54)
 			labels.shift.Text = formatClosingRushShiftText(currentShiftSnapshot, cur, inventoryCount, inventoryMax)
 		else
-			local activeDealPhase = currentSnapshot and currentSnapshot.phase
-			local activityText = if activeDealPhase == "BuyerVisit" or activeDealPhase == "Selling"
+			local activityText = if activeDealPhase == "BuyerSkipped"
+				then "Buyer Visit Skipped"
+				elseif activeDealPhase == "BuyerVisit" or activeDealPhase == "Selling"
 				then "Buyer Visit"
 				else "Buying"
 			labels.shift.Size = UDim2.fromOffset(416, 48)
