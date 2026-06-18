@@ -70,17 +70,22 @@ local function formatInventorySummary(inventory): string
 		return "Inventory: 0/3"
 	end
 
+	local usedSlots = inventory.usedSlots or 0
+	local maxSlots = inventory.maxSlots or 3
 	local lines = {
-		`Inventory: {inventory.usedSlots or 0}/{inventory.maxSlots or 3}`,
+		`Inventory: {usedSlots}/{maxSlots}`,
 	}
-	for slotIndex = 1, inventory.maxSlots or 3 do
+	for slotIndex = 1, maxSlots do
 		local item = inventory.items and inventory.items[slotIndex]
 		if item then
 			local heldTag = if item.heldBack then " [Held Back]" else ""
 			table.insert(lines, `{slotIndex}. {item.displayName} ({item.category}) - paid {item.purchasePrice}{heldTag}`)
-		else
-			table.insert(lines, `{slotIndex}. Empty`)
 		end
+	end
+	if usedSlots <= 0 then
+		table.insert(lines, "Shelf: empty")
+	elseif usedSlots < maxSlots then
+		table.insert(lines, `Open slots: {maxSlots - usedSlots}`)
 	end
 
 	local displayMax = inventory.displayMaxSlots or 3
@@ -118,19 +123,20 @@ local function refreshInventoryLabel()
 	labels.inventory.Text = formatInventorySummary(currentInventorySnapshot)
 end
 
-local function formatInventoryMatches(matches): string
-	if not matches or #matches == 0 then
-		return "No inventory to offer."
+local function compactTerminalDialogue(phase: string, snapshot): string
+	if not snapshot.dealSummary then
+		return snapshot.dialogue or "..."
 	end
 
-	local lines = {}
-	for index, item in matches do
-		table.insert(
-			lines,
-			`{index}. {item.displayName} ({item.category}) - {item.matchLabel or "Curious"} | Paid {item.purchasePrice or 0}`
-		)
+	if phase == "Stored" then
+		return "Stored."
+	elseif phase == "WalkedAway" then
+		return "They left."
+	elseif phase == "Result" then
+		return "Resolved."
 	end
-	return table.concat(lines, "\n")
+
+	return snapshot.dialogue or "..."
 end
 
 local function formatLiquidationSummary(summary, cur: string): string
@@ -660,7 +666,7 @@ function UIController:setPhaseControls(phase: string)
 	labels.heat.Visible = showDeal and (buy or sell)
 	labels.tell.Visible = showDeal and (buy or sell or buyerVisit or phase == "Stored")
 	labels.inspect.Visible = showDeal and buy
-	labels.result.Visible = showDeal and (buyerVisit or sell or (terminal and not buyerSkipped))
+	labels.result.Visible = showDeal and (sell or (terminal and not buyerSkipped))
 	labels.inventory.Visible = hasShift and not (currentShiftSnapshot and currentShiftSnapshot.ended)
 end
 
@@ -714,9 +720,9 @@ function UIController:updateSnapshot(snapshot)
 	if snapshot.displayInfluenceLabel and isBuyerVisit then
 		labels.tell.Text ..= `\n{snapshot.displayInfluenceLabel}`
 	end
-	labels.dialogue.Text = snapshot.dialogue or "..."
+	labels.dialogue.Text = compactTerminalDialogue(phase, snapshot)
 	if isBuyerVisit then
-		labels.item.Text = "Buyer Visit\nChoose one inventory item to offer.\nA bad match can be worth skipping."
+		labels.item.Text = "Choose an item to offer."
 	else
 		local traits = formatTraits(snapshot.traits)
 		labels.item.Text = `{snapshot.itemName or "?"} ({snapshot.category or "?"})\nTraits: {traits}\n{snapshot.flavorText or ""}`
@@ -744,7 +750,6 @@ function UIController:updateSnapshot(snapshot)
 		if snapshot.buyerWants then
 			table.insert(lines, snapshot.buyerWants)
 		end
-		table.insert(lines, formatInventoryMatches(snapshot.inventoryMatches))
 	end
 	if snapshot.estimatedLow and snapshot.estimatedHigh and phase ~= "Result" then
 		table.insert(lines, `Estimate: {snapshot.estimatedLow}-{snapshot.estimatedHigh} {cur}`)
@@ -785,9 +790,9 @@ function UIController:updateSnapshot(snapshot)
 	if snapshot.dealSummary then
 		labels.result.Text = snapshot.dealSummary.resultText or ""
 	elseif isBuyerVisit then
-		labels.result.Text = formatInventoryMatches(snapshot.inventoryMatches)
+		labels.result.Text = ""
 	elseif phase == "Stored" then
-		labels.result.Text = "Stored on your shelf. Wait for the right buyer."
+		labels.result.Text = ""
 	else
 		labels.result.Text = ""
 	end
