@@ -36,6 +36,7 @@ local ACTION_BUTTONS = {
 	{ id = "GiveRandomCollectible", label = "Give Random Collectible" },
 	{ id = "FillInventory", label = "Fill Inventory" },
 	{ id = "ClearInventory", label = "Clear Inventory" },
+	{ id = "ClearDisplay", label = "Clear Display" },
 	{ id = "GiveRandomDisplayItem", label = "Give Random Display Item" },
 	{ id = "ForceBuyerVisit", label = "Force Buyer Visit" },
 	{ id = "SkipToClosingRush", label = "Skip To Closing Rush" },
@@ -64,6 +65,8 @@ local lastInventorySnapshot: any? = nil
 local lastShiftUpdateAt: number? = nil
 local lastDealUpdateAt: number? = nil
 local lastInventoryUpdateAt: number? = nil
+local lastLoggedPhase: string? = nil
+local lastLoggedTacticDebug: string? = nil
 local remoteLog: { string } = {}
 local worldScanCache: any? = nil
 local promptScanCache: any? = nil
@@ -82,13 +85,6 @@ local function formatTime(clockTime: number?): string
 		return "-"
 	end
 	return os.date("%H:%M:%S", clockTime)
-end
-
-local function formatTraits(traits): string
-	if traits and #traits > 0 then
-		return table.concat(traits, ", ")
-	end
-	return "-"
 end
 
 local function appendLog(line: string)
@@ -126,77 +122,216 @@ local function field(value: any): string
 	return tostring(value)
 end
 
+local function formatListField(value: any): string
+	if type(value) ~= "table" or #value == 0 then
+		return "-"
+	end
+	return table.concat(value, ", ")
+end
+
+local function formatInfluenceBonus(bonus: any): string
+	if type(bonus) ~= "number" then
+		return "n/a"
+	end
+	local percent = math.floor(bonus * 100 + 0.5)
+	if percent <= 0 then
+		return "0% (no display match)"
+	end
+	return `+{percent}% roll weight`
+end
+
+local function isBuyerFacingPhase(phase: string?): boolean
+	return phase == "BuyerVisit" or phase == "Selling" or phase == "BuyerSkipped"
+end
+
+local TERMINAL_DEAL_PHASES = {
+	WalkedAway = true,
+	Result = true,
+	Stored = true,
+	BuyerSkipped = true,
+}
+
+local function formatDealStartLog(snapshot: any): string
+	if not snapshot then
+		return ""
+	end
+	return `DEAL START | archetype={field(snapshot.dealArchetypeId)} | {field(snapshot.customerName)} | {field(snapshot.itemName)} | ask={field(snapshot.debugOriginalAsk or snapshot.currentSellerPrice)} min={field(snapshot.debugMinimumAccept or snapshot.minimumAccept)} true={field(snapshot.debugTrueValue or snapshot.trueValue)} tell="{field(snapshot.sellerTell)}"`
+end
+
+local function formatDealDoneLog(snapshot: any): string
+	if not snapshot or not snapshot.dealSummary then
+		return ""
+	end
+	local s = snapshot.dealSummary
+	return `DEAL DONE | archetype={field(s.dealArchetypeId or snapshot.dealArchetypeId)} | true={field(s.trueValue)} ask={field(s.sellerAsk)} min={field(s.sellerMinimum)} bought={field(s.purchasePrice)} buyer={field(s.buyerId)} open={field(s.buyerOpeningOffer)} max={field(s.buyerMaximum)} sold={field(s.salePrice or "kept")} profit={field(s.totalProfit or s.profit)} inspected={field(s.inspected)} tactics={field(s.tacticsUsed)} sellerTell="{field(snapshot.sellerTell)}" buyerTell="{field(snapshot.buyerTell)}" heat={field(snapshot.sellerHeat)}/{field(snapshot.buyerHeat)}`
+end
+
+local function logDealSnapshotEvents(snapshot: any?)
+	if not snapshot then
+		lastLoggedPhase = nil
+		lastLoggedTacticDebug = nil
+		return
+	end
+
+	local phase = snapshot.phase
+	if phase == "Haggling" and lastLoggedPhase ~= "Haggling" then
+		appendLog(formatDealStartLog(snapshot))
+	end
+
+	if phase == "BuyerVisit" and lastLoggedPhase ~= "BuyerVisit" then
+		appendLog(
+			`BUYER VISIT | {field(snapshot.buyerName)} | display influence: {formatInfluenceBonus(snapshot.displayInfluenceBonus)}`
+		)
+	end
+
+	if TERMINAL_DEAL_PHASES[phase] and lastLoggedPhase ~= phase then
+		local doneLine = formatDealDoneLog(snapshot)
+		if doneLine ~= "" then
+			appendLog(doneLine)
+		end
+	end
+
+	local tacticLine = snapshot.lastTacticDebug
+	if type(tacticLine) == "string" and tacticLine ~= "" and tacticLine ~= lastLoggedTacticDebug then
+		appendLog(tacticLine)
+		lastLoggedTacticDebug = tacticLine
+	end
+
+	lastLoggedPhase = phase
+end
+
 local function formatExpectedInteraction(phase: string?): string
 	if phase == "BuyerVisit" then
-		return "BuyerVisit: InventoryShelf prompts should say Offer <Item>. DisplayShelf: Return to Shelf."
+		return "Offer from inventory shelf. Display items cannot be offered."
 	elseif phase == "Selling" then
-		return "Selling: selected item hidden from InventoryShelf and visible on counter."
+		return "Sell tactics on counter item."
 	elseif phase == "Haggling" then
-		return "Haggling: buy from seller at counter. No shelf offer/hold prompts for negotiation item."
+		return "Buy from seller at counter."
 	elseif phase == "WalkedAway" or phase == "Result" or phase == "Stored" or phase == "BuyerSkipped" then
-		return "Terminal: click Next Customer to continue (no auto-advance)."
+		return "Terminal — click Next Customer."
 	elseif phase == nil or phase == "" then
-		return "No deal: InventoryShelf prompts should say Hold Back when shift is active."
+		return "No deal — Hold Back on inventory shelf when shift is active."
 	end
-	return `Phase {phase}: use normal gameplay controls.`
+	return `Phase {phase}.`
 end
 
 local function formatShiftSection(): string
 	local snapshot = lastShiftSnapshot
 	local deal = lastDealSnapshot
+	if not snapshot then
+		return "=== SHIFT ===\n(no data)"
+	end
+
+	local name = snapshot.displayName or snapshot.shiftId or "?"
+	local phase = snapshot.phase or "?"
+	local profit = `{field(snapshot.shiftProfit)}/{field(snapshot.targetProfit)}`
+	local sellers = `{field(snapshot.dealsCompleted or snapshot.sellerVisitsResolved)}/{field(snapshot.sellerVisitCount or snapshot.dealCount)}`
+	local buyerFlag = if snapshot.pendingBuyerVisit then " | buyer waiting" else ""
+
 	local lines = {
 		"=== SHIFT ===",
-		`active: {field(snapshot and snapshot.active)}`,
-		`ended: {field(snapshot and snapshot.ended)}`,
-		`phase: {field(snapshot and snapshot.phase)}`,
-		`shiftId: {field(snapshot and snapshot.shiftId)}`,
-		`displayName: {field(snapshot and snapshot.displayName)}`,
-		`playerCash: {field(deal and deal.playerCash)}`,
-		`dealsCompleted: {field(snapshot and (snapshot.dealsCompleted or snapshot.sellerVisitsResolved))}`,
-		`dealsRemaining: {field(snapshot and snapshot.dealsRemaining)}`,
-		`pendingBuyerVisit: {field(snapshot and snapshot.pendingBuyerVisit)}`,
-		`closingRushBuyersRemaining: {field(snapshot and snapshot.closingRushBuyersRemaining)}`,
-		`closingRushBuyersSeen: {field(snapshot and snapshot.closingRushBuyersSeen)}`,
-		`last ShiftStateUpdate: {formatTime(lastShiftUpdateAt)}`,
+		`{name} | {phase} | profit {profit} | sellers {sellers}{buyerFlag}`,
+		`cash: {field(deal and deal.playerCash)} | remaining sellers: {field(snapshot.dealsRemaining)}`,
 	}
+
+	if snapshot.phase == "ClosingRush" then
+		table.insert(lines, `closing rush buyers: {field(snapshot.closingRushBuyersRemaining)}`)
+	end
+	if snapshot.ended then
+		table.insert(lines, `ended: {field(snapshot.grade)} — {field(snapshot.resultTitle)}`)
+	end
+
 	return table.concat(lines, "\n")
 end
 
 local function formatDealSection(): string
 	local snapshot = lastDealSnapshot
+	if not snapshot then
+		return "=== DEAL ===\n(no active deal)"
+	end
+
+	local phase = snapshot.phase or "?"
 	local lines = {
 		"=== DEAL ===",
-		`phase: {field(snapshot and snapshot.phase)}`,
-		`customer: {field(snapshot and (snapshot.customerName or snapshot.customerId))}`,
-		`buyer: {field(snapshot and (snapshot.buyerName or snapshot.buyerId))}`,
-		`item: {field(snapshot and (snapshot.itemName or snapshot.itemId))}`,
-		`instanceId: {field(snapshot and snapshot.instanceId)}`,
-		`category: {field(snapshot and snapshot.category)}`,
-		`traits: {formatTraits(snapshot and snapshot.traits)}`,
-		`buyerInterest: {field(snapshot and snapshot.buyerInterest)}`,
-		`buyerMatchLabel: {field(snapshot and snapshot.buyerMatchLabel)}`,
-		`displayInfluenceLabel: {field(snapshot and snapshot.displayInfluenceLabel)}`,
-		`displayInfluenceBuyerId: {field(snapshot and snapshot.displayInfluenceBuyerId)}`,
-		`last DealStateUpdate: {formatTime(lastDealUpdateAt)}`,
+		`phase: {phase}`,
 	}
+
+	if phase == "Haggling" then
+		table.insert(lines, `archetype: {field(snapshot.dealArchetypeId)} ({field(snapshot.dealArchetypeName)})`)
+		table.insert(lines, `seller: {field(snapshot.customerName)} | item: {field(snapshot.itemName)} ({field(snapshot.category)})`)
+		table.insert(
+			lines,
+			`ask {field(snapshot.debugOriginalAsk or snapshot.currentSellerPrice)} | min {field(snapshot.debugMinimumAccept or snapshot.minimumAccept)} | true {field(snapshot.debugTrueValue or snapshot.trueValue)}`
+		)
+		table.insert(
+			lines,
+			`seller heat {field(snapshot.sellerHeat)}/{field(snapshot.sellerHeatMax)} | {field(snapshot.lastTactic)} -> {field(snapshot.lastTacticResult)}`
+		)
+	elseif isBuyerFacingPhase(phase) then
+		table.insert(lines, `buyer: {field(snapshot.buyerName)} ({field(snapshot.buyerId)})`)
+		table.insert(lines, `display influence: {formatInfluenceBonus(snapshot.displayInfluenceBonus)}`)
+		local matchedCats = formatListField(snapshot.displayInfluenceMatchedCategories)
+		local matchedTraits = formatListField(snapshot.displayInfluenceMatchedTraits)
+		if matchedCats ~= "-" then
+			table.insert(lines, `  matched categories: {matchedCats}`)
+		end
+		if matchedTraits ~= "-" then
+			table.insert(lines, `  matched traits: {matchedTraits}`)
+		end
+		if snapshot.displayInfluenceLabel then
+			table.insert(lines, `  note: {snapshot.displayInfluenceLabel}`)
+		end
+		if phase == "BuyerVisit" then
+			table.insert(lines, `buyer wants: {field(snapshot.buyerWants)}`)
+			local matchCount = snapshot.inventoryMatches and #snapshot.inventoryMatches or 0
+			table.insert(lines, `inventory offers available: {matchCount}`)
+		elseif phase == "Selling" then
+			table.insert(
+				lines,
+				`item: {field(snapshot.itemName)} | offer {field(snapshot.currentBuyerOffer)} / max {field(snapshot.buyerMaximum)}`
+			)
+			table.insert(
+				lines,
+				`buyer heat {field(snapshot.buyerHeat)}/{field(snapshot.buyerHeatMax)} | match: {field(snapshot.buyerMatchLabel)}`
+			)
+		end
+	else
+		table.insert(lines, `customer: {field(snapshot.customerName)} | buyer: {field(snapshot.buyerName)}`)
+		table.insert(lines, `item: {field(snapshot.itemName)}`)
+		local summary = snapshot.dealSummary
+		if summary then
+			table.insert(
+				lines,
+				`result: {field(summary.resultReason)} | profit {field(summary.totalProfit or summary.profit)}`
+			)
+		end
+	end
+
+	if snapshot.lastTacticDebug and snapshot.lastTacticDebug ~= "" then
+		table.insert(lines, `last tactic debug: {snapshot.lastTacticDebug}`)
+	end
+
 	return table.concat(lines, "\n")
 end
 
 local function formatInventorySection(): string
 	local snapshot = lastInventorySnapshot
+	if not snapshot then
+		return "=== INVENTORY ===\n(no data)"
+	end
+
 	local lines = {
-		"=== INVENTORY (working stock) ===",
-		`usedSlots / maxSlots: {field(snapshot and snapshot.usedSlots)} / {field(snapshot and snapshot.maxSlots)}`,
+		"=== INVENTORY ===",
+		`stock: {field(snapshot.usedSlots)}/{field(snapshot.maxSlots)}`,
 	}
 
-	local items = snapshot and snapshot.items or {}
+	local items = snapshot.items or {}
 	if #items == 0 then
 		table.insert(lines, "(empty)")
 	else
 		for index, entry in ipairs(items) do
-			table.insert(lines, `# {index} | {entry.instanceId} | {entry.itemId} | {entry.displayName}`)
-			table.insert(lines, `  category={entry.category} location={entry.location} heldBack={field(entry.heldBack)}`)
-			table.insert(lines, `  traits={formatTraits(entry.traits)} purchasePrice={field(entry.purchasePrice)}`)
+			local held = if entry.heldBack then " [held]" else ""
+			table.insert(lines, `{index}. {entry.displayName} ({entry.category}) — paid {field(entry.purchasePrice)}{held}`)
 		end
 	end
 
@@ -204,25 +339,33 @@ local function formatInventorySection(): string
 end
 
 local function formatDisplaySection(): string
-	local snapshot = lastInventorySnapshot
+	local inv = lastInventorySnapshot
+	local deal = lastDealSnapshot
+	if not inv then
+		return "=== DISPLAY ===\n(no data)"
+	end
+
 	local lines = {
 		"=== DISPLAY ===",
-		`displayUsedSlots / displayMaxSlots: {field(snapshot and snapshot.displayUsedSlots)} / {field(snapshot and snapshot.displayMaxSlots)}`,
-		`displayAppealSummary: {field(snapshot and snapshot.displayAppealSummary)}`,
-		"Note: display items do NOT count toward inventory usedSlots.",
+		`shelf: {field(inv.displayUsedSlots)}/{field(inv.displayMaxSlots)} | appeal: {field(inv.displayAppealSummary)}`,
 	}
 
-	local displayMax = snapshot and snapshot.displayMaxSlots or 3
-	local displayItems = InventorySnapshot.indexDisplayItemsBySlot(snapshot and snapshot.displayItems)
+	local displayMax = inv.displayMaxSlots or 3
+	local displayItems = InventorySnapshot.indexDisplayItemsBySlot(inv.displayItems)
+	local anyItem = false
 	for slotIndex = 1, displayMax do
 		local entry = displayItems[slotIndex]
 		if entry then
-			table.insert(lines, `D{slotIndex} | {entry.instanceId} | {entry.itemId} | {entry.displayName}`)
-			table.insert(lines, `  category={entry.category} location={entry.location} heldBack={field(entry.heldBack)}`)
-			table.insert(lines, `  traits={formatTraits(entry.traits)}`)
-		else
-			table.insert(lines, `D{slotIndex}: Empty`)
+			anyItem = true
+			table.insert(lines, `D{slotIndex}. {entry.displayName} ({entry.category})`)
 		end
+	end
+	if not anyItem then
+		table.insert(lines, "(empty)")
+	end
+
+	if deal and isBuyerFacingPhase(deal.phase) then
+		table.insert(lines, `buyer influence this visit: {formatInfluenceBonus(deal.displayInfluenceBonus)}`)
 	end
 
 	return table.concat(lines, "\n")
@@ -328,63 +471,62 @@ end
 
 local function formatWorldSection(scan: any): string
 	if not scan then
-		return "=== WORLD ===\n(not scanned)"
+		return "=== WORLD ===\n(click Refresh)"
 	end
 
 	local function status(found: boolean): string
 		return if found then "OK" else "MISSING"
 	end
 
-	local lines = {
-		"=== WORLD ===",
-		`Workspace.World: {status(scan.world)}`,
-		`Workspace.World.Shop: {status(scan.shop)}`,
-		`InventoryShelf: {status(scan.inventoryShelf)}`,
-		`InventorySlot1: {status(scan.inventorySlots[1])}`,
-		`InventorySlot2: {status(scan.inventorySlots[2])}`,
-		`InventorySlot3: {status(scan.inventorySlots[3])}`,
-		`DisplayShelf: {status(scan.displayShelf)}`,
-		`DisplaySlot1: {status(scan.displaySlots[1])}`,
-		`DisplaySlot2: {status(scan.displaySlots[2])}`,
-		`DisplaySlot3: {status(scan.displaySlots[3])}`,
-		`CounterItemSpot: {status(scan.counterItemSpot)}`,
-		`CustomerSpot: {status(scan.customerSpot)}`,
-		`OpenClosedSign: {status(scan.openClosedSign)}`,
-	}
-
-	for _, folderName in LOCAL_FOLDERS do
-		local folderInfo = scan.localFolders[folderName]
-		if folderInfo and folderInfo.found then
-			table.insert(lines, `{folderName}: OK ({folderInfo.childCount} children)`)
-		else
-			table.insert(lines, `{folderName}: MISSING`)
+	local problems = {}
+	local function check(label: string, found: boolean)
+		if not found then
+			table.insert(problems, label)
 		end
 	end
 
-	return table.concat(lines, "\n")
+	check("World", scan.world)
+	check("Shop", scan.shop)
+	check("InventoryShelf", scan.inventoryShelf)
+	check("DisplayShelf", scan.displayShelf)
+	check("CounterItemSpot", scan.counterItemSpot)
+	check("CustomerSpot", scan.customerSpot)
+
+	for slotIndex = 1, 3 do
+		check(`InventorySlot{slotIndex}`, scan.inventorySlots[slotIndex])
+		check(`DisplaySlot{slotIndex}`, scan.displaySlots[slotIndex])
+	end
+
+	if #problems > 0 then
+		return `=== WORLD ===\nMISSING: {table.concat(problems, ", ")}`
+	end
+
+	return "=== WORLD ===\nAll core parts OK"
 end
 
 local function formatPromptSection(scan: any): string
 	if not scan then
-		return "=== PROMPTS ===\n(not scanned)"
+		return "=== PROMPTS ===\n(click Refresh)"
 	end
 
 	local legacy = scan.legacyCounts
+	local legacyTotal = legacy.ShelfOfferPrompt + legacy.ShelfHoldPrompt + legacy.ShelfDisplayPrompt
 	local lines = {
 		"=== PROMPTS ===",
-		`count={#scan.prompts} | legacy: ShelfOfferPrompt={legacy.ShelfOfferPrompt} ShelfHoldPrompt={legacy.ShelfHoldPrompt} ShelfDisplayPrompt={legacy.ShelfDisplayPrompt}`,
+		`active: {#scan.prompts} | legacy duplicates: {legacyTotal}`,
 	}
 
+	if legacyTotal > 0 then
+		table.insert(lines, "Warning: legacy shelf prompts still in world.")
+	end
+
 	for _, prompt in scan.prompts do
-		local modeText = if prompt.promptMode then ` PromptMode={prompt.promptMode}` else ""
-		local instanceText = if prompt.instanceId then ` InstanceId={prompt.instanceId}` else ""
-		table.insert(lines, `- {prompt.name} | {prompt.actionText} | enabled={field(prompt.enabled)}`)
-		table.insert(lines, `  object={prompt.objectText} dist={prompt.maxDistance}{modeText}{instanceText}`)
-		table.insert(lines, `  parent={prompt.parentPath}`)
+		local modeText = if prompt.promptMode then ` [{prompt.promptMode}]` else ""
+		table.insert(lines, `- {prompt.actionText} ({prompt.name}) enabled={field(prompt.enabled)}{modeText}`)
 	end
 
 	if #scan.prompts == 0 then
-		table.insert(lines, "(no matching prompts)")
+		table.insert(lines, "(none)")
 	end
 
 	return table.concat(lines, "\n")
@@ -409,7 +551,7 @@ function DebugOverlayController:rebuildText()
 
 	local phase = lastDealSnapshot and lastDealSnapshot.phase
 	local sections = {
-		"=== EXPECTED INTERACTION ===",
+		"=== NOW ===",
 		formatExpectedInteraction(phase),
 		"",
 		formatShiftSection(),
@@ -720,7 +862,6 @@ end
 local function onShiftSnapshot(snapshot: any?)
 	lastShiftSnapshot = snapshot
 	lastShiftUpdateAt = os.time()
-	appendLog(`[{formatTime(lastShiftUpdateAt)}] ShiftStateUpdate: active={field(snapshot and snapshot.active)} phase={field(snapshot and snapshot.phase)}`)
 	if overlayVisible then
 		DebugOverlayController:rebuildText()
 	end
@@ -737,7 +878,7 @@ local function onDealSnapshot(snapshot: any?)
 		lastShiftSnapshot = snapshot.shift
 		lastShiftUpdateAt = lastDealUpdateAt
 	end
-	appendLog(`[{formatTime(lastDealUpdateAt)}] DealStateUpdate: {field(snapshot and snapshot.phase)}`)
+	logDealSnapshotEvents(snapshot)
 	if overlayVisible then
 		DebugOverlayController:rebuildText()
 	end
@@ -746,9 +887,6 @@ end
 local function onInventorySnapshot(snapshot: any?)
 	lastInventorySnapshot = snapshot
 	lastInventoryUpdateAt = os.time()
-	local used = snapshot and snapshot.usedSlots or 0
-	local displayUsed = snapshot and snapshot.displayUsedSlots or 0
-	appendLog(`[{formatTime(lastInventoryUpdateAt)}] InventoryStateUpdate: items={used} display={displayUsed}`)
 	if overlayVisible then
 		DebugOverlayController:rebuildText()
 	end

@@ -389,11 +389,6 @@ function DisplayShelfPresentationController:showSlot(slotIndex: number, entry: a
 end
 
 function DisplayShelfPresentationController:refreshDisplayShelf(inventorySnapshot: any?)
-	if not shiftActive then
-		self:clearAll()
-		return
-	end
-
 	if not inventorySnapshot then
 		self:clearAll()
 		return
@@ -427,11 +422,6 @@ end
 
 local function onShiftSnapshot(snapshot: any?)
 	shiftActive = snapshot ~= nil and snapshot.active == true and snapshot.ended ~= true
-	if not shiftActive then
-		DisplayShelfPresentationController:clearAll()
-		return
-	end
-
 	DisplayShelfPresentationController:refreshDisplayShelf(lastInventorySnapshot)
 end
 

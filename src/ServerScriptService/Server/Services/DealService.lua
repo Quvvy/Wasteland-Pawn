@@ -366,15 +366,14 @@ function DealService:_applySellResult(deal, result)
 	deal.heatWarning = result.warning
 end
 
-function DealService:_logTacticDebug(player: Player, side: string, tacticId: string, deal, result)
+function DealService:_logTacticDebug(_player: Player, side: string, tacticId: string, deal, result)
 	if not RunService:IsStudio() then
 		return
 	end
 
 	local npc = if side == "buy" then deal.customer else deal.buyer
-	print(
-		`[WastelandPawn] TACTIC {side} | player={player.Name} npc={npc and npc.id or "?"} tactic={tacticId} fit={string.format("%.2f", result.fit or 0)} repeat={result.repeatCount or 0} leverage={result.oldLeverage or 0}->{result.newLeverage or "?"} confidence={result.oldConfidence or 0}->{result.newConfidence or "?"} heat={result.oldHeat or 0}->{result.newHeat or "?"} state={result.oldState or "?"}->{result.newState or "?"} priceDelta={result.priceDelta or 0} final={result.finalOffer or false} walk={result.walkedAway or false} reason={result.finalReason or "-"}`
-	)
+	deal.lastTacticDebug =
+		`TACTIC {side} | npc={npc and npc.id or "?"} tactic={tacticId} fit={string.format("%.2f", result.fit or 0)} repeat={result.repeatCount or 0} leverage={result.oldLeverage or 0}->{result.newLeverage or "?"} confidence={result.oldConfidence or 0}->{result.newConfidence or "?"} heat={result.oldHeat or 0}->{result.newHeat or "?"} state={result.oldState or "?"}->{result.newState or "?"} priceDelta={result.priceDelta or 0} final={result.finalOffer or false} walk={result.walkedAway or false} reason={result.finalReason or "-"}`
 end
 
 function DealService:_initDealState(
@@ -428,6 +427,7 @@ function DealService:_initDealState(
 		tacticsUsed = {},
 		lastTactic = nil,
 		lastTacticResult = nil,
+		lastTacticDebug = nil,
 		pendingInstanceId = nil,
 		purchasePrice = nil,
 		salePrice = nil,
@@ -521,6 +521,9 @@ function DealService:_buildSnapshot(player: Player, deal)
 		dealSummary = deal.dealSummary,
 		displayInfluenceLabel = deal.displayInfluenceLabel,
 		displayInfluenceBuyerId = deal.displayInfluenceBuyerId,
+		displayInfluenceBonus = deal.displayInfluenceBonus,
+		displayInfluenceMatchedCategories = deal.displayInfluenceMatchedCategories,
+		displayInfluenceMatchedTraits = deal.displayInfluenceMatchedTraits,
 		shift = ShiftService:buildSnapshot(player),
 	}
 
@@ -529,6 +532,24 @@ function DealService:_buildSnapshot(player: Player, deal)
 			snapshot.trueValue = deal.hiddenOutcome.trueValue
 			snapshot.rarityName = rarity and rarity.displayName or deal.hiddenOutcome.rarityId
 			snapshot.buyerMaximum = deal.buyerMaximum
+			snapshot.minimumAccept = deal.minimumAccept
+		end
+	end
+
+	if RunService:IsStudio() then
+		if deal.hiddenOutcome then
+			snapshot.debugTrueValue = deal.hiddenOutcome.trueValue
+			snapshot.debugMinimumAccept = deal.minimumAccept
+			snapshot.debugOriginalAsk = deal.originalAskingPrice
+		end
+		snapshot.lastTacticDebug = deal.lastTacticDebug
+		if deal.buyerOpeningOffer then
+			snapshot.buyerOpeningOffer = deal.buyerOpeningOffer
+		end
+		if deal.buyerMaximum and not snapshot.buyerMaximum then
+			snapshot.buyerMaximum = deal.buyerMaximum
+		end
+		if deal.minimumAccept and not snapshot.minimumAccept then
 			snapshot.minimumAccept = deal.minimumAccept
 		end
 	end
@@ -611,7 +632,6 @@ function DealService:startDeal(player: Player, customerId: string?, itemId: stri
 
 	local deal = self:_initDealState(customer, item, hidden, ask, minAccept, estLow, estHigh, rng, archetype, weakClue)
 	activeDeals[player] = deal
-	self:_logDealStart(player, deal)
 	self:_pushState(player)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end
@@ -855,14 +875,21 @@ local function rollBuyerForVisit(_player: Player, rng: Random, shift, displayIte
 end
 
 local function applyDisplayInfluenceFeedback(deal, buyer, influenceByBuyerId)
-	if not buyer or not influenceByBuyerId then
+	if not buyer then
 		return
 	end
 
-	local influenceEntry = influenceByBuyerId[buyer.id]
-	if influenceEntry and (influenceEntry.bonus or 0) > 0 then
-		deal.displayInfluenceBuyerId = buyer.id
+	deal.displayInfluenceBuyerId = buyer.id
+	local influenceEntry = influenceByBuyerId and influenceByBuyerId[buyer.id]
+	local bonus = if influenceEntry then influenceEntry.bonus or 0 else 0
+	deal.displayInfluenceBonus = bonus
+	deal.displayInfluenceMatchedCategories = if influenceEntry then influenceEntry.matchedCategories else nil
+	deal.displayInfluenceMatchedTraits = if influenceEntry then influenceEntry.matchedTraits else nil
+
+	if bonus > 0 and influenceEntry then
 		deal.displayInfluenceLabel = DisplayInfluence.describeBuyerInfluence(buyer, influenceEntry)
+	else
+		deal.displayInfluenceLabel = nil
 	end
 end
 
@@ -1339,7 +1366,6 @@ function DealService:_completeSale(player: Player, deal, salePrice: number)
 		finalBuyerHeat = deal.buyerHeat,
 	}
 	deal.dealSummary.resultText = self:_formatDealSummaryText(deal.dealSummary)
-	self:_logDealSummary(player, deal)
 
 	deal.phase = "Result"
 	deal.dialogue = deal.dealSummary.resultText
@@ -1396,7 +1422,6 @@ function DealService:keepItem(player: Player, instanceId: any)
 
 	deal.dealSummary = self:_buildHeldItemSummary(deal, "Held for a better buyer")
 	deal.dealSummary.resultText = self:_formatDealSummaryText(deal.dealSummary)
-	self:_logDealSummary(player, deal)
 	deal.phase = "Result"
 	deal.revealTrueValue = false
 	deal.dialogue = deal.dealSummary.resultText
@@ -1628,25 +1653,6 @@ function DealService:_formatDealSummaryText(summary)
 	return table.concat(lines, "\n")
 end
 
-function DealService:_logDealStart(player: Player, deal)
-	if not RunService:IsStudio() then
-		return
-	end
-	print(
-		`[WastelandPawn] DEAL START | archetype={deal.dealArchetypeId or "none"} | {deal.customer.displayName} | {deal.item.displayName} | ask={deal.currentSellerPrice} min={deal.minimumAccept} true={deal.hiddenOutcome.trueValue} tell="{deal.sellerTell}"`
-	)
-end
-
-function DealService:_logDealSummary(player: Player, deal)
-	if not RunService:IsStudio() or not deal.dealSummary then
-		return
-	end
-	local s = deal.dealSummary
-	print(
-		`[WastelandPawn] DEAL DONE | archetype={s.dealArchetypeId or deal.dealArchetypeId or "none"} | true={s.trueValue} ask={s.sellerAsk} min={s.sellerMinimum} bought={s.purchasePrice} buyer={s.buyerId} open={s.buyerOpeningOffer} max={s.buyerMaximum} sold={s.salePrice or "kept"} profit={s.totalProfit or s.profit} inspected={s.inspected} tactics={s.tacticsUsed} sellerTell="{deal.sellerTell}" buyerTell="{deal.buyerTell or ""}" heat={deal.sellerHeat}/{deal.buyerHeat}`
-	)
-end
-
 function DealService:_setupStudioDebug()
 	local function hook(player: Player)
 		player.Chatted:Connect(function(message)
@@ -1688,11 +1694,6 @@ function DealService:_handleDebugChat(player: Player, message: string)
 				self:_beginBuyerNegotiation(deal, buyer, self:_getRng(player))
 				self:_pushState(player)
 			end
-		end
-	elseif command == "summary" then
-		local deal = activeDeals[player]
-		if deal then
-			print(`[WastelandPawn] phase={deal.phase} heat={deal.sellerHeat}/{deal.buyerHeat} price={deal.currentSellerPrice} offer={deal.currentBuyerOffer}`)
 		end
 	end
 end

@@ -320,7 +320,7 @@ function ShiftService:liquidateRemainingInventory(player: Player, reason: string
 	local totalCash = 0
 	local totalProfit = 0
 
-	for _, entry in InventoryService:getActiveItems(player) do
+	for _, entry in InventoryService:getInventoryItems(player) do
 		local trueValue = entry.trueValue or 0
 		local liquidationValue = math.max(0, math.floor(trueValue * Shifts.LiquidationRate + 0.5))
 		local profit = liquidationValue - (entry.purchasePrice or 0)
@@ -393,6 +393,7 @@ function ShiftService:endShift(player: Player)
 	shift.grade = getGrade(shift)
 	shift.resultTitle = getResultTitle(shift)
 
+	InventoryService:pushSnapshot(player)
 	self:_pushState(player)
 	return self:buildSnapshot(player)
 end

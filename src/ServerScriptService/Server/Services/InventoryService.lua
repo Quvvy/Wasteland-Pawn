@@ -79,11 +79,28 @@ function InventoryService:_pushState(player: Player)
 	(Remotes.get("InventoryStateUpdate") :: RemoteEvent):FireClient(player, self:getSnapshot(player))
 end
 
+function InventoryService:pushSnapshot(player: Player)
+	self:_pushState(player)
+end
+
 function InventoryService:startShiftInventory(player: Player, maxSlots: number?)
+	local existing = inventories[player]
+	local preservedDisplay = {}
+	local displayMaxSlots = DEFAULT_DISPLAY_SLOTS
+
+	if existing then
+		displayMaxSlots = existing.displayMaxSlots or DEFAULT_DISPLAY_SLOTS
+		for _, entry in existing.items do
+			if not entry.disposed and self:_itemLocation(entry) == LOCATION_DISPLAY then
+				table.insert(preservedDisplay, entry)
+			end
+		end
+	end
+
 	inventories[player] = {
-		items = {},
+		items = preservedDisplay,
 		maxSlots = maxSlots or DEFAULT_MAX_SLOTS,
-		displayMaxSlots = DEFAULT_DISPLAY_SLOTS,
+		displayMaxSlots = displayMaxSlots,
 	}
 	self:_pushState(player)
 end
@@ -194,6 +211,7 @@ function InventoryService:markDisposed(player: Player, instanceId: string): bool
 end
 
 function InventoryService:getActiveItems(player: Player): { any }
+	-- All non-disposed items (inventory + display). Do not use for liquidation.
 	local inventory = inventories[player]
 	if not inventory then
 		return {}
@@ -352,6 +370,21 @@ function InventoryService:debugClearWorkingInventory(player: Player): (number, s
 
 	local cleared = 0
 	for _, entry in self:getInventoryItems(player) do
+		if self:markDisposed(player, entry.instanceId) then
+			cleared += 1
+		end
+	end
+
+	return cleared, nil
+end
+
+function InventoryService:debugClearDisplay(player: Player): (number, string?)
+	if not assertStudioDebug() then
+		return 0, "Debug actions disabled"
+	end
+
+	local cleared = 0
+	for _, entry in self:getDisplayItems(player) do
 		if self:markDisposed(player, entry.instanceId) then
 			cleared += 1
 		end

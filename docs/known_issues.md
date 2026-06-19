@@ -9,17 +9,6 @@ Keep entries short. Add enough context that future us knows what happened.
 
 Issues that can corrupt state, break core gameplay, duplicate items/money, or allow exploits.
 
-### Display items wiped during shift end
-
-Status: Watch
-Area: Inventory / Display / Shift
-Risk: DisplayShelf items may be cleared or liquidated when ending a shift.
-Notes:
-- `liquidateRemainingInventory` uses `getActiveItems`, which includes all non-disposed items regardless of location.
-- Session Display Persistence V1 is planned to make display items survive between shifts.
-Possible Fix:
-- Ensure liquidation only applies to `location == "inventory"`.
-
 ### Prompt mode conflict during BuyerVisit
 
 Status: Watch
@@ -88,7 +77,8 @@ Status: Intentional
 Area: Display / Persistence
 Risk: Players may expect display items to survive rejoin/server reset later.
 Notes:
-- For now this is session-only. Do not add DataStores yet.
+- Display items now persist across shifts within the same server session.
+- Rejoin and server reset still clear display. Do not add DataStores yet.
 Possible Fix:
 - Add real persistence only after stash/display/collection design is clearer.
 
@@ -98,11 +88,39 @@ Possible Fix:
 
 Systems that may become confusing, too complex, or conflict with the core design.
 
+### Display visible between shifts but not interactive
+
+Status: Intentional
+Area: Display / UX
+Risk: Players may try to return displayed items to inventory when no shift is active.
+Notes:
+- V1 shows display props after shift end but disables Return to Shelf prompts until the next shift starts.
+- No after-hours inventory or stash in this pass.
+Possible Fix:
+- Add stash or after-hours routing only when that design is ready.
+
 ---
 
 ## Recently Resolved
 
 Move fixed issues here instead of deleting them immediately.
+
+### Display items wiped during shift end
+
+Status: Fixed (Session Display Persistence V1)
+Area: Inventory / Display / Shift
+Notes:
+- `startShiftInventory` now preserves `location == "display"` entries.
+- `liquidateRemainingInventory` uses `getInventoryItems` only.
+- Display shelf props follow `displayItems`, not `shift.active`.
+
+### Deal diagnostics moved to Ctrl+U overlay
+
+Status: Fixed
+Area: Debug UI / DealService
+Notes:
+- `[WastelandPawn]` DEAL START/DONE/TACTIC Output prints removed.
+- Archetype, pricing, tactic debug, and buyer influence bonus now show in the debug overlay.
 
 ---
 

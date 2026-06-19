@@ -53,6 +53,8 @@ function DebugService:runAction(player: Player, actionId: any, _payload: any)
 		return self:_fillInventory(player)
 	elseif actionId == "ClearInventory" then
 		return self:_clearInventory(player)
+	elseif actionId == "ClearDisplay" then
+		return self:_clearDisplay(player)
 	elseif actionId == "GiveRandomDisplayItem" then
 		return self:_giveRandomDisplayItem(player, Items.getRandom(debugRng))
 	elseif actionId == "ForceBuyerVisit" then
@@ -130,6 +132,21 @@ function DebugService:_clearInventory(player: Player)
 	end
 
 	return { ok = true, message = `Cleared {cleared} working inventory item(s)` }
+end
+
+function DebugService:_clearDisplay(player: Player)
+	local cleared, clearError = InventoryService:debugClearDisplay(player)
+	if clearError then
+		return { ok = false, error = clearError }
+	end
+
+	DealService:debugRefreshBuyerVisitMatches(player)
+
+	if cleared == 0 then
+		return { ok = true, message = "Display shelf already empty" }
+	end
+
+	return { ok = true, message = `Cleared {cleared} display item(s)` }
 end
 
 function DebugService:_giveRandomDisplayItem(player: Player, itemDef: any)
