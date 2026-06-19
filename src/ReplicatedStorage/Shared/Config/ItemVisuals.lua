@@ -21,6 +21,7 @@ ItemVisuals.uniqueItems = {
 }
 
 export type ItemData = {
+	objectId: string?,
 	itemId: string?,
 	itemName: string?,
 	displayName: string?,
@@ -50,18 +51,19 @@ end
 
 local function buildItemKey(itemData: ItemData): string
 	local name = itemDisplayName(itemData)
+	local objectId = itemData.objectId or itemData.itemId
 	if itemData.shelfSlot and itemData.instanceId then
-		return `{itemData.shelfSlot}:{itemData.instanceId}:{itemData.itemId or name or "?"}:{itemData.category or "?"}`
+		return `{itemData.shelfSlot}:{itemData.instanceId}:{objectId or name or "?"}:{itemData.category or "?"}`
 	end
 	if itemData.displaySlot and itemData.instanceId then
-		return `d:{itemData.displaySlot}:{itemData.instanceId}:{itemData.itemId or name or "?"}:{itemData.category or "?"}`
+		return `d:{itemData.displaySlot}:{itemData.instanceId}:{objectId or name or "?"}:{itemData.category or "?"}`
 	end
 
 	local phase = itemData.phase or "unknown"
 	if phase == "Selling" and itemData.instanceId then
 		return `sell:{itemData.instanceId}:{name or "?"}:{itemData.category or "?"}`
 	end
-	return `seller:{itemData.itemId or name or "?"}:{itemData.category or "?"}`
+	return `seller:{objectId or name or "?"}:{itemData.category or "?"}`
 end
 
 function ItemVisuals.resolvePropName(itemData: ItemData): (string, string?)

@@ -25,6 +25,7 @@ local slotKeys: { [number]: string? } = {}
 local slotPrompts: { [number]: ProximityPrompt? } = {}
 local slotPromptModes: { [number]: string? } = {}
 local boundPrompts: { [ProximityPrompt]: boolean } = {}
+local promptGeneration = 0
 
 local shiftActive = false
 local lastInventorySnapshot: any? = nil
@@ -167,6 +168,10 @@ local function showMessage(message: string)
 	end
 end
 
+local function bumpPromptGeneration()
+	promptGeneration += 1
+end
+
 local function getPrimaryPromptMode(entry: any): string?
 	if isBuyerVisit then
 		if entry.heldBack == true then
@@ -252,7 +257,7 @@ end
 local function setAllPromptsEnabled(enabled: boolean)
 	for _, prompt in slotPrompts do
 		if prompt then
-			prompt.Enabled = enabled
+			prompt.Enabled = enabled and prompt:GetAttribute("PromptGeneration") == promptGeneration
 		end
 	end
 end
@@ -310,7 +315,16 @@ local function bindPrimaryPrompt(prompt: ProximityPrompt)
 
 		local instanceId = prompt:GetAttribute("InstanceId")
 		local mode = prompt:GetAttribute("PromptMode")
-		if type(instanceId) ~= "string" or type(mode) ~= "string" then
+		local slotIndex = prompt:GetAttribute("SlotIndex")
+		local generation = prompt:GetAttribute("PromptGeneration")
+		if
+			type(instanceId) ~= "string"
+			or type(mode) ~= "string"
+			or type(slotIndex) ~= "number"
+			or generation ~= promptGeneration
+			or slotPrompts[slotIndex] ~= prompt
+			or slotPromptModes[slotIndex] ~= mode
+		then
 			return
 		end
 
@@ -362,6 +376,8 @@ function InventoryShelfPresentationController:syncPrimaryPrompt(slotIndex: numbe
 	slotPromptModes[slotIndex] = desiredMode
 	prompt:SetAttribute("InstanceId", entry.instanceId)
 	prompt:SetAttribute("PromptMode", desiredMode)
+	prompt:SetAttribute("SlotIndex", slotIndex)
+	prompt:SetAttribute("PromptGeneration", promptGeneration)
 
 	if desiredMode == PROMPT_MODE_OFFER then
 		local matchLookup = buildMatchLookup(currentDealSnapshot)
@@ -425,6 +441,7 @@ function InventoryShelfPresentationController:clearSlot(slotIndex: number)
 end
 
 function InventoryShelfPresentationController:clearAll()
+	bumpPromptGeneration()
 	clearAllShelfPrompts()
 	promptActionPending = false
 
@@ -517,11 +534,13 @@ end
 
 local function onInventorySnapshot(snapshot: any?)
 	lastInventorySnapshot = snapshot
+	bumpPromptGeneration()
 	InventoryShelfPresentationController:refreshShelf(snapshot)
 end
 
 local function onShiftSnapshot(snapshot: any?)
 	shiftActive = snapshot ~= nil and snapshot.active == true and snapshot.ended ~= true
+	bumpPromptGeneration()
 	if not shiftActive then
 		InventoryShelfPresentationController:clearAll()
 		return
@@ -551,8 +570,10 @@ local function onDealSnapshot(snapshot: any?)
 	local buyerVisitChanged = wasBuyerVisit ~= isBuyerVisit
 
 	if sellingIdChanged then
+		bumpPromptGeneration()
 		InventoryShelfPresentationController:refreshShelf(lastInventorySnapshot)
 	elseif buyerVisitChanged or isBuyerVisit then
+		bumpPromptGeneration()
 		InventoryShelfPresentationController:syncAllShelfPrompts()
 	end
 end

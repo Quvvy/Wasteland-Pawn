@@ -1,9 +1,11 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TextService = game:GetService("TextService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local HaggleTuning = require(Shared.Config.HaggleTuning)
 local Shifts = require(Shared.Config.Shifts)
+local DemandPreview = require(Shared.Economy.DemandPreview)
 local InventorySnapshot = require(Shared.Util.InventorySnapshot)
 
 local UIController = {}
@@ -18,15 +20,22 @@ local buttons: { [string]: TextButton } = {}
 local heatBarBg: Frame
 local heatBarFill: Frame
 local shiftSelectOverlay: Frame
+local shiftSelectPanel: Frame?
 local shiftSelectList: ScrollingFrame
+local shiftSelectPreviewPane: Frame?
+local shiftSelectPreviewLabel: TextLabel?
+local stashOverlay: Frame
+local stashList: ScrollingFrame?
 local hubToast: TextLabel
 local hubHoldingBanner: TextLabel
 local shiftSelectStartCallback: ((string) -> ())?
+local stashActionCallback: ((string, string) -> ())?
 
 local currentSnapshot: any = nil
 local currentShiftSnapshot: any = nil
 local currentInventorySnapshot: any = nil
 local tacticButtonsEnabled = true
+local stashActionsEnabled = true
 
 local TACTIC_RESULT_DISPLAY = {
 	price_drop = "Price dropped",
@@ -104,6 +113,10 @@ local function formatInventorySummary(inventory): string
 		table.insert(lines, `Display Appeal: {appeal}`)
 	end
 
+	local stashUsed = inventory.stashUsedSlots or 0
+	local stashMax = inventory.stashMaxSlots or 6
+	table.insert(lines, `Stash: {stashUsed}/{stashMax}`)
+
 	return table.concat(lines, "\n")
 end
 
@@ -172,7 +185,186 @@ local function formatShiftOptionStats(option, cur: string): string
 	return `Target: {option.targetProfit or 0} {cur} | Sellers: {sellerCount} | Slots: {option.inventorySlots or 3} | Buyer every {buyerEvery}`
 end
 
+local SHIFT_PREVIEW_HINT = "Tap ? on a shift to see likely demand."
+local SHIFT_PREVIEW_MIN_HEIGHT = 28
+local SHIFT_PREVIEW_MAX_HEIGHT = 150
+local SHIFT_PREVIEW_LIST_MIN_HEIGHT = 140
+local SHIFT_PREVIEW_PANEL_MIN_HEIGHT = 520
+local SHIFT_PREVIEW_TEXT_WIDTH = 380
+local SHIFT_PREVIEW_TEXT_SIZE = 11
+local SHIFT_PREVIEW_FONT = Enum.Font.Gotham
+local SHIFT_CARD_ACTION_RIGHT = 10
+local SHIFT_CARD_START_HEIGHT = 26
+local SHIFT_CARD_PREVIEW_HEIGHT = 22
+local SHIFT_CARD_ACTION_GAP = 4
+local shiftPreviewExpanded = false
+local selectedShiftPreviewId: string? = nil
+local shiftPreviewButtons: { [string]: TextButton } = {}
+local shiftPreviewCardStrokes: { [string]: UIStroke } = {}
+
+local SHIFT_CARD_STROKE_COLOR = Color3.fromRGB(80, 75, 95)
+local SHIFT_CARD_SELECTED_STROKE_COLOR = Color3.fromRGB(255, 220, 140)
+local SHIFT_PREVIEW_BUTTON_COLOR = Color3.fromRGB(55, 70, 95)
+local SHIFT_PREVIEW_BUTTON_SELECTED_COLOR = Color3.fromRGB(100, 120, 70)
+
+local function joinNames(rows: { any }?, fieldName: string): string
+	local names = {}
+	for _, row in rows or {} do
+		local name = row[fieldName]
+		if type(name) == "string" and name ~= "" then
+			table.insert(names, name)
+		end
+	end
+	return if #names > 0 then table.concat(names, ", ") else "None"
+end
+
+local function formatDemandPreviewText(preview: any?): string
+	if not preview then
+		return SHIFT_PREVIEW_HINT
+	end
+
+	local lines = { preview.displayName or "Shift" }
+
+	if preview.likelyBuyers and #preview.likelyBuyers > 0 then
+		table.insert(lines, `Likely buyers: {joinNames(preview.likelyBuyers, "displayName")}`)
+	end
+
+	if preview.hasMixedDemand then
+		table.insert(lines, "Good stock: mixed demand")
+	else
+		if preview.goodCategories and #preview.goodCategories > 0 then
+			table.insert(lines, `Good categories: {table.concat(preview.goodCategories, ", ")}`)
+		end
+		if preview.goodTraits and #preview.goodTraits > 0 then
+			table.insert(lines, `Good traits: {table.concat(preview.goodTraits, ", ")}`)
+		end
+	end
+
+	if preview.hasDisplayItems and preview.displayAppealSummary and preview.displayAppealSummary ~= "" then
+		table.insert(lines, `Your display: {preview.displayAppealSummary}`)
+	else
+		table.insert(lines, "Your display: empty")
+	end
+
+	if not preview.hasDisplayItems then
+		table.insert(lines, "Display effect: none yet")
+	elseif preview.displayEffects and #preview.displayEffects > 0 then
+		table.insert(lines, `Display effect: {joinNames(preview.displayEffects, "displayName")} may be more likely`)
+	else
+		table.insert(lines, "Display effect: no strong match here")
+	end
+
+	return table.concat(lines, "\n")
+end
+
+local function appendStrings(target: { string }, values: any)
+	if type(values) ~= "table" then
+		return
+	end
+
+	for _, value in values do
+		if type(value) == "string" and value ~= "" then
+			table.insert(target, value)
+		end
+	end
+end
+
+local function formatDisplayInfluenceHelp(snapshot): string?
+	if not snapshot or (snapshot.displayInfluenceBonus or 0) <= 0 then
+		return nil
+	end
+
+	local matched = {}
+	appendStrings(matched, snapshot.displayInfluenceMatchedCategories)
+	appendStrings(matched, snapshot.displayInfluenceMatchedTraits)
+
+	if #matched > 0 then
+		return `Display helped: {table.concat(matched, " / ")}`
+	end
+
+	return snapshot.displayInfluenceLabel or "Display helped attract this buyer."
+end
+
+local function measurePreviewTextHeight(text: string): number
+	local bounds = TextService:GetTextSize(
+		text,
+		SHIFT_PREVIEW_TEXT_SIZE,
+		SHIFT_PREVIEW_FONT,
+		Vector2.new(SHIFT_PREVIEW_TEXT_WIDTH, 10000)
+	)
+	return bounds.Y
+end
+
+local function refreshShiftSelectLayout()
+	if not shiftSelectPanel or not shiftSelectPreviewPane or not shiftSelectList or not shiftSelectPreviewLabel then
+		return
+	end
+
+	local text = shiftSelectPreviewLabel.Text
+	local textHeight = measurePreviewTextHeight(text)
+	local desiredPreviewHeight = if shiftPreviewExpanded then textHeight + 14 else SHIFT_PREVIEW_MIN_HEIGHT
+	local previewHeight = math.max(
+		SHIFT_PREVIEW_MIN_HEIGHT,
+		math.min(desiredPreviewHeight, SHIFT_PREVIEW_MAX_HEIGHT)
+	)
+	local previewBottomMargin = 8
+	local listTop = 68
+	local listGap = 8
+
+	shiftSelectPreviewLabel.Size = UDim2.new(1, -16, 0, textHeight + 4)
+
+	shiftSelectPreviewPane.Size = UDim2.fromOffset(396, previewHeight)
+	shiftSelectPreviewPane.Position = UDim2.new(0, 12, 1, -(previewHeight + previewBottomMargin))
+
+	local panelHeight = math.max(
+		SHIFT_PREVIEW_PANEL_MIN_HEIGHT,
+		listTop + SHIFT_PREVIEW_LIST_MIN_HEIGHT + listGap + previewHeight + previewBottomMargin
+	)
+	shiftSelectPanel.Size = UDim2.fromOffset(420, panelHeight)
+	shiftSelectPanel.Position = UDim2.new(0.5, -210, 0.5, -math.floor(panelHeight / 2))
+
+	local listHeight = panelHeight - listTop - previewHeight - previewBottomMargin - listGap
+	shiftSelectList.Size = UDim2.fromOffset(396, math.max(SHIFT_PREVIEW_LIST_MIN_HEIGHT, listHeight))
+end
+
+local function refreshShiftPreviewSelection()
+	for shiftId, button in shiftPreviewButtons do
+		local selected = shiftId == selectedShiftPreviewId
+		button.BackgroundColor3 = if selected then SHIFT_PREVIEW_BUTTON_SELECTED_COLOR else SHIFT_PREVIEW_BUTTON_COLOR
+	end
+
+	for shiftId, stroke in shiftPreviewCardStrokes do
+		local selected = shiftId == selectedShiftPreviewId
+		stroke.Color = if selected then SHIFT_CARD_SELECTED_STROKE_COLOR else SHIFT_CARD_STROKE_COLOR
+		stroke.Thickness = if selected then 2 else 1
+	end
+end
+
+local function setShiftDemandPreview(shiftId: string?)
+	if not shiftSelectPreviewLabel then
+		return
+	end
+
+	if not shiftId then
+		shiftPreviewExpanded = false
+		selectedShiftPreviewId = nil
+		shiftSelectPreviewLabel.Text = SHIFT_PREVIEW_HINT
+	else
+		shiftPreviewExpanded = true
+		selectedShiftPreviewId = shiftId
+		local preview = DemandPreview.buildFromSnapshot(shiftId, currentInventorySnapshot)
+		shiftSelectPreviewLabel.Text = formatDemandPreviewText(preview)
+	end
+
+	refreshShiftPreviewSelection()
+	task.defer(refreshShiftSelectLayout)
+end
+
 local function clearShiftSelectList()
+	selectedShiftPreviewId = nil
+	shiftPreviewButtons = {}
+	shiftPreviewCardStrokes = {}
+
 	for _, child in shiftSelectList:GetChildren() do
 		if child:IsA("GuiObject") then
 			child:Destroy()
@@ -201,6 +393,227 @@ local function createButton(parent: Instance, name: string, text: string, positi
 	button.Size = size
 	button.Parent = parent
 	return button
+end
+
+local function clearStashList()
+	if not stashList then
+		return
+	end
+
+	for _, child in stashList:GetChildren() do
+		if child:IsA("GuiObject") then
+			child:Destroy()
+		end
+	end
+end
+
+local function isStashRouteLocked(): boolean
+	local phase = currentSnapshot and currentSnapshot.phase
+	return phase == "BuyerVisit" or phase == "Selling"
+end
+
+local function setRouteButtonState(button: TextButton, enabled: boolean, label: string, disabledLabel: string?)
+	button.Text = if enabled then label else (disabledLabel or label)
+	button.Active = enabled
+	button.AutoButtonColor = enabled
+	button.BackgroundTransparency = if enabled then 0 else 0.45
+	button.BackgroundColor3 = if enabled then Color3.fromRGB(70, 100, 76) else Color3.fromRGB(55, 55, 55)
+end
+
+local function invokeStashAction(remoteName: string, instanceId: string)
+	if not stashActionsEnabled or not stashActionCallback then
+		return
+	end
+	stashActionCallback(remoteName, instanceId)
+end
+
+local function itemSubtitle(entry: any): string
+	local parts = {}
+	if entry.category and entry.category ~= "" then
+		table.insert(parts, entry.category)
+	end
+	if entry.purchasePrice then
+		table.insert(parts, `paid {entry.purchasePrice}`)
+	end
+	return if #parts > 0 then table.concat(parts, " - ") else ""
+end
+
+local function addStashSectionHeader(text: string, order: number)
+	if not stashList then
+		return order
+	end
+
+	local header = createLabel(stashList, `Header_{order}`, text, UDim2.fromOffset(0, 0), UDim2.new(1, -8, 0, 24))
+	header.LayoutOrder = order
+	header.BackgroundTransparency = 1
+	header.Font = Enum.Font.GothamBold
+	header.TextSize = 14
+	header.TextColor3 = Color3.fromRGB(255, 220, 140)
+	return order + 1
+end
+
+local function addStashEmptyRow(text: string, order: number)
+	if not stashList then
+		return order
+	end
+
+	local row = createLabel(stashList, `Empty_{order}`, text, UDim2.fromOffset(0, 0), UDim2.new(1, -8, 0, 30))
+	row.LayoutOrder = order
+	row.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+	row.BackgroundTransparency = 0.15
+	row.TextSize = 12
+	row.TextColor3 = Color3.fromRGB(175, 175, 185)
+	return order + 1
+end
+
+local function addStashItemRow(entry: any, actions: { any }, order: number)
+	if not stashList then
+		return order
+	end
+
+	local row = Instance.new("Frame")
+	row.Name = `Item_{entry.instanceId or order}`
+	row.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+	row.BackgroundTransparency = 0.08
+	row.BorderSizePixel = 0
+	row.Size = UDim2.new(1, -8, 0, 54)
+	row.LayoutOrder = order
+	row.Parent = stashList
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = row
+
+	local nameLabel = createLabel(
+		row,
+		"Name",
+		entry.displayName or "Item",
+		UDim2.fromOffset(8, 5),
+		UDim2.new(1, -190, 0, 22)
+	)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextSize = 13
+	nameLabel.TextColor3 = Color3.fromRGB(235, 235, 235)
+
+	local detailLabel = createLabel(
+		row,
+		"Details",
+		itemSubtitle(entry),
+		UDim2.fromOffset(8, 28),
+		UDim2.new(1, -190, 0, 18)
+	)
+	detailLabel.BackgroundTransparency = 1
+	detailLabel.TextSize = 11
+	detailLabel.TextColor3 = Color3.fromRGB(175, 205, 180)
+
+	local buttonWidth = 82
+	local buttonGap = 6
+	local startX = 468 - (#actions * buttonWidth) - ((#actions - 1) * buttonGap) - 12
+	for index, action in actions do
+		local button = createButton(
+			row,
+			action.name,
+			action.label,
+			UDim2.fromOffset(startX + (index - 1) * (buttonWidth + buttonGap), 14),
+			UDim2.fromOffset(buttonWidth, 26)
+		)
+		button.TextSize = 11
+		setRouteButtonState(button, action.enabled, action.label, action.disabledLabel)
+		button.MouseButton1Click:Connect(function()
+			if action.enabled and entry.instanceId then
+				invokeStashAction(action.remoteName, entry.instanceId)
+			end
+		end)
+	end
+
+	return order + 1
+end
+
+local function refreshStashOverlay()
+	if not stashOverlay or not stashOverlay.Visible or not stashList then
+		return
+	end
+
+	clearStashList()
+
+	local inventory = currentInventorySnapshot or {}
+	local activeShift = currentShiftSnapshot ~= nil and currentShiftSnapshot.active == true and currentShiftSnapshot.ended ~= true
+	local locked = isStashRouteLocked()
+	local stashFull = (inventory.stashUsedSlots or 0) >= (inventory.stashMaxSlots or 6)
+	local displayFull = (inventory.displayUsedSlots or 0) >= (inventory.displayMaxSlots or 3)
+	local shelfFull = (inventory.usedSlots or 0) >= (inventory.maxSlots or 3)
+	local lockedLabel = if locked then "Finish buyer first" else nil
+	local order = 1
+
+	order = addStashSectionHeader(`Working Stock ({inventory.usedSlots or 0}/{inventory.maxSlots or 3})`, order)
+	local stockItems = inventory.items or {}
+	if #stockItems == 0 then
+		order = addStashEmptyRow("No working stock on the shelf.", order)
+	else
+		for _, entry in stockItems do
+			local enabled = activeShift and not locked and not stashFull and stashActionsEnabled
+			local disabledLabel = lockedLabel or (if not activeShift then "Open shift" elseif stashFull then "Stash full" else "Stash")
+			order = addStashItemRow(entry, {
+				{
+					name = "Stash",
+					label = "Stash",
+					disabledLabel = disabledLabel,
+					enabled = enabled,
+					remoteName = "StashInventoryItem",
+				},
+			}, order)
+		end
+	end
+
+	order = addStashSectionHeader(`Stash ({inventory.stashUsedSlots or 0}/{inventory.stashMaxSlots or 6})`, order)
+	local stashItems = inventory.stashItems or {}
+	if #stashItems == 0 then
+		order = addStashEmptyRow("Nothing stashed.", order)
+	else
+		for _, entry in stashItems do
+			local displayEnabled = not locked and not displayFull and stashActionsEnabled
+			local shelfEnabled = activeShift and not locked and not shelfFull and stashActionsEnabled
+			local displayDisabled = lockedLabel or (if displayFull then "Display full" else "Display")
+			local shelfDisabled = lockedLabel or (if not activeShift then "Open shift" elseif shelfFull then "Shelf full" else "To Shelf")
+			order = addStashItemRow(entry, {
+				{
+					name = "Display",
+					label = "Display",
+					disabledLabel = displayDisabled,
+					enabled = displayEnabled,
+					remoteName = "MoveStashedItemToDisplay",
+				},
+				{
+					name = "ToShelf",
+					label = "To Shelf",
+					disabledLabel = shelfDisabled,
+					enabled = shelfEnabled,
+					remoteName = "ReturnStashedItemToInventory",
+				},
+			}, order)
+		end
+	end
+
+	order = addStashSectionHeader(`Display ({inventory.displayUsedSlots or 0}/{inventory.displayMaxSlots or 3})`, order)
+	local displayItems = inventory.displayItems or {}
+	if #displayItems == 0 then
+		order = addStashEmptyRow("DisplayShelf is empty.", order)
+	else
+		for _, entry in displayItems do
+			local enabled = not locked and not stashFull and stashActionsEnabled
+			local disabledLabel = lockedLabel or (if stashFull then "Stash full" else "Stash")
+			order = addStashItemRow(entry, {
+				{
+					name = "Stash",
+					label = "Stash",
+					disabledLabel = disabledLabel,
+					enabled = enabled,
+					remoteName = "MoveDisplayItemToStash",
+				},
+			}, order)
+		end
+	end
 end
 
 function UIController:Init()
@@ -329,15 +742,6 @@ function UIController:Init()
 	buttons.offerSlot2.TextWrapped = true
 	buttons.offerSlot3.TextWrapped = true
 
-	buttons.shiftScrapRush = createButton(root, "ShiftScrapRush", "Scrap Rush", UDim2.fromOffset(12, 634), UDim2.fromOffset(130, 30))
-	buttons.shiftCollector = createButton(root, "ShiftCollector", "Collector Convention", UDim2.fromOffset(148, 634), UDim2.fromOffset(150, 30))
-	buttons.shiftBlackMarket = createButton(root, "ShiftBlackMarket", "Black Market Night", UDim2.fromOffset(304, 634), UDim2.fromOffset(124, 30))
-	buttons.shiftCollector.TextSize = 11
-	buttons.shiftBlackMarket.TextSize = 11
-	for _, name in { "shiftScrapRush", "shiftCollector", "shiftBlackMarket" } do
-		buttons[name].Visible = false
-	end
-
 	local sellOnly = {
 		"smallBump",
 		"pitch",
@@ -365,12 +769,12 @@ function UIController:Init()
 	shiftSelectOverlay.ZIndex = 10
 	shiftSelectOverlay.Parent = screenGui
 
-	local shiftSelectPanel = Instance.new("Frame")
+	shiftSelectPanel = Instance.new("Frame")
 	shiftSelectPanel.Name = "Panel"
 	shiftSelectPanel.BackgroundColor3 = Color3.fromRGB(22, 20, 28)
 	shiftSelectPanel.BorderSizePixel = 0
-	shiftSelectPanel.Position = UDim2.new(0.5, -210, 0.5, -240)
-	shiftSelectPanel.Size = UDim2.fromOffset(420, 480)
+	shiftSelectPanel.Position = UDim2.new(0.5, -210, 0.5, -260)
+	shiftSelectPanel.Size = UDim2.fromOffset(420, 520)
 	shiftSelectPanel.Parent = shiftSelectOverlay
 
 	local panelStroke = Instance.new("UIStroke")
@@ -397,7 +801,7 @@ function UIController:Init()
 	labels.shiftSelectSubtitle = createLabel(
 		shiftSelectPanel,
 		"Subtitle",
-		"Pick what kind of day you want to run.",
+		"Pick a shift. Tap ? for demand preview.",
 		UDim2.fromOffset(12, 38),
 		UDim2.fromOffset(396, 22)
 	)
@@ -416,7 +820,7 @@ function UIController:Init()
 	shiftSelectList.BackgroundTransparency = 1
 	shiftSelectList.BorderSizePixel = 0
 	shiftSelectList.Position = UDim2.fromOffset(12, 68)
-	shiftSelectList.Size = UDim2.fromOffset(396, 400)
+	shiftSelectList.Size = UDim2.fromOffset(396, 300)
 	shiftSelectList.CanvasSize = UDim2.fromOffset(0, 0)
 	shiftSelectList.ScrollBarThickness = 6
 	shiftSelectList.Parent = shiftSelectPanel
@@ -430,6 +834,119 @@ function UIController:Init()
 		shiftSelectList.CanvasSize = UDim2.fromOffset(0, listLayout.AbsoluteContentSize.Y + 8)
 	end)
 
+	local previewPane = Instance.new("Frame")
+	previewPane.Name = "DemandPreview"
+	previewPane.BackgroundColor3 = Color3.fromRGB(28, 26, 34)
+	previewPane.BorderSizePixel = 0
+	previewPane.Position = UDim2.fromOffset(12, 364)
+	previewPane.Size = UDim2.fromOffset(396, SHIFT_PREVIEW_MIN_HEIGHT)
+	previewPane.Parent = shiftSelectPanel
+	shiftSelectPreviewPane = previewPane
+
+	local previewCorner = Instance.new("UICorner")
+	previewCorner.CornerRadius = UDim.new(0, 8)
+	previewCorner.Parent = previewPane
+
+	local previewStroke = Instance.new("UIStroke")
+	previewStroke.Color = Color3.fromRGB(90, 85, 110)
+	previewStroke.Thickness = 1
+	previewStroke.Parent = previewPane
+
+	shiftSelectPreviewLabel = createLabel(
+		previewPane,
+		"PreviewText",
+		SHIFT_PREVIEW_HINT,
+		UDim2.fromOffset(8, 6),
+		UDim2.new(1, -16, 0, 20)
+	)
+	shiftSelectPreviewLabel.BackgroundTransparency = 1
+	shiftSelectPreviewLabel.TextXAlignment = Enum.TextXAlignment.Left
+	shiftSelectPreviewLabel.TextYAlignment = Enum.TextYAlignment.Top
+	shiftSelectPreviewLabel.TextWrapped = true
+	shiftSelectPreviewLabel.TextSize = SHIFT_PREVIEW_TEXT_SIZE
+	shiftSelectPreviewLabel.TextColor3 = Color3.fromRGB(205, 205, 215)
+	shiftSelectPreviewLabel.Font = SHIFT_PREVIEW_FONT
+	shiftSelectPreviewLabel.ClipsDescendants = false
+
+	refreshShiftSelectLayout()
+
+	stashOverlay = Instance.new("Frame")
+	stashOverlay.Name = "StashOverlay"
+	stashOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	stashOverlay.BackgroundTransparency = 0.45
+	stashOverlay.BorderSizePixel = 0
+	stashOverlay.Size = UDim2.fromScale(1, 1)
+	stashOverlay.Visible = false
+	stashOverlay.ZIndex = 12
+	stashOverlay.Parent = screenGui
+
+	local stashPanel = Instance.new("Frame")
+	stashPanel.Name = "Panel"
+	stashPanel.BackgroundColor3 = Color3.fromRGB(22, 24, 28)
+	stashPanel.BorderSizePixel = 0
+	stashPanel.Position = UDim2.new(0.5, -250, 0.5, -260)
+	stashPanel.Size = UDim2.fromOffset(500, 520)
+	stashPanel.Parent = stashOverlay
+
+	local stashPanelStroke = Instance.new("UIStroke")
+	stashPanelStroke.Color = Color3.fromRGB(120, 185, 145)
+	stashPanelStroke.Thickness = 2
+	stashPanelStroke.Parent = stashPanel
+
+	local stashPanelCorner = Instance.new("UICorner")
+	stashPanelCorner.CornerRadius = UDim.new(0, 10)
+	stashPanelCorner.Parent = stashPanel
+
+	local stashTitle = createLabel(
+		stashPanel,
+		"Title",
+		"Stash",
+		UDim2.fromOffset(12, 10),
+		UDim2.fromOffset(360, 28)
+	)
+	stashTitle.BackgroundTransparency = 1
+	stashTitle.Font = Enum.Font.GothamBold
+	stashTitle.TextSize = 20
+	stashTitle.TextColor3 = Color3.fromRGB(210, 245, 210)
+
+	local stashSubtitle = createLabel(
+		stashPanel,
+		"Subtitle",
+		"Session-only storage. Display affects demand; stash does not.",
+		UDim2.fromOffset(12, 38),
+		UDim2.fromOffset(396, 22)
+	)
+	stashSubtitle.BackgroundTransparency = 1
+	stashSubtitle.TextSize = 12
+	stashSubtitle.TextColor3 = Color3.fromRGB(190, 200, 190)
+
+	local stashClose = createButton(stashPanel, "Close", "Close", UDim2.fromOffset(420, 8), UDim2.fromOffset(68, 24))
+	stashClose.TextSize = 12
+	stashClose.MouseButton1Click:Connect(function()
+		self:closeStash()
+	end)
+
+	stashList = Instance.new("ScrollingFrame")
+	stashList.Name = "StashList"
+	stashList.BackgroundTransparency = 1
+	stashList.BorderSizePixel = 0
+	stashList.Position = UDim2.fromOffset(12, 68)
+	stashList.Size = UDim2.fromOffset(476, 438)
+	stashList.CanvasSize = UDim2.fromOffset(0, 0)
+	stashList.ScrollBarThickness = 6
+	stashList.Parent = stashPanel
+
+	local stashListLayout = Instance.new("UIListLayout")
+	stashListLayout.Padding = UDim.new(0, 6)
+	stashListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	stashListLayout.Parent = stashList
+
+	stashListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		if stashList then
+			stashList.CanvasSize = UDim2.fromOffset(0, stashListLayout.AbsoluteContentSize.Y + 8)
+		end
+	end)
+
 	self:updateShiftSnapshot({ active = false, ended = false })
 end
 
@@ -439,6 +956,10 @@ end
 
 function UIController:getShiftSnapshot()
 	return currentShiftSnapshot
+end
+
+function UIController:getInventorySnapshot()
+	return currentInventorySnapshot
 end
 
 function UIController:isShiftActive(): boolean
@@ -477,6 +998,37 @@ function UIController:closeShiftSelect()
 	if shiftSelectOverlay then
 		shiftSelectOverlay.Visible = false
 	end
+	setShiftDemandPreview(nil)
+end
+
+function UIController:openStash()
+	if not stashOverlay then
+		return false
+	end
+
+	if not stashActionCallback then
+		self:showHubMessage("Stash is not ready yet.")
+		return false
+	end
+
+	stashOverlay.Visible = true
+	refreshStashOverlay()
+	return true
+end
+
+function UIController:closeStash()
+	if stashOverlay then
+		stashOverlay.Visible = false
+	end
+end
+
+function UIController:onStashAction(callback: (string, string) -> ())
+	stashActionCallback = callback
+end
+
+function UIController:setStashActionsEnabled(enabled: boolean)
+	stashActionsEnabled = enabled
+	refreshStashOverlay()
 end
 
 function UIController:onShiftSelectStart(callback: (string) -> ())
@@ -502,8 +1054,10 @@ function UIController:openShiftSelect(options)
 
 	local cur = currencyLabel(currentSnapshot)
 	clearShiftSelectList()
+	setShiftDemandPreview(nil)
 
 	for index, option in options do
+		local shiftId = option.id
 		local card = Instance.new("Frame")
 		card.Name = `Option_{option.id or index}`
 		card.BackgroundColor3 = Color3.fromRGB(34, 32, 42)
@@ -517,7 +1071,7 @@ function UIController:openShiftSelect(options)
 		cardCorner.Parent = card
 
 		local cardStroke = Instance.new("UIStroke")
-		cardStroke.Color = Color3.fromRGB(80, 75, 95)
+		cardStroke.Color = SHIFT_CARD_STROKE_COLOR
 		cardStroke.Thickness = 1
 		cardStroke.Parent = card
 
@@ -554,16 +1108,46 @@ function UIController:openShiftSelect(options)
 			"Stats",
 			formatShiftOptionStats(option, cur),
 			UDim2.fromOffset(10, 78),
-			UDim2.new(1, -120, 0, 32)
+			UDim2.new(1, -112, 0, 32)
 		)
 		statsLabel.BackgroundTransparency = 1
 		statsLabel.TextSize = 11
 		statsLabel.TextColor3 = Color3.fromRGB(160, 200, 160)
 
-		local startButton = createButton(card, "Start", "Start", UDim2.new(1, -100, 1, -34), UDim2.fromOffset(88, 26))
+		local startBottom = SHIFT_CARD_ACTION_RIGHT
+		local startTop = startBottom + SHIFT_CARD_START_HEIGHT
+		local previewBottom = startTop + SHIFT_CARD_ACTION_GAP + SHIFT_CARD_PREVIEW_HEIGHT
+
+		local startButton = createButton(
+			card,
+			"Start",
+			"Start",
+			UDim2.new(1, -(88 + SHIFT_CARD_ACTION_RIGHT), 1, -startTop),
+			UDim2.fromOffset(88, SHIFT_CARD_START_HEIGHT)
+		)
 		startButton.TextSize = 12
 		startButton.BackgroundColor3 = Color3.fromRGB(70, 120, 80)
-		local shiftId = option.id
+
+		local previewButton = createButton(
+			card,
+			"Preview",
+			"?",
+			UDim2.new(1, -(26 + SHIFT_CARD_ACTION_RIGHT), 1, -previewBottom),
+			UDim2.fromOffset(26, SHIFT_CARD_PREVIEW_HEIGHT)
+		)
+		previewButton.TextSize = 14
+		previewButton.BackgroundColor3 = SHIFT_PREVIEW_BUTTON_COLOR
+
+		if type(shiftId) == "string" then
+			shiftPreviewButtons[shiftId] = previewButton
+			shiftPreviewCardStrokes[shiftId] = cardStroke
+		end
+
+		previewButton.MouseButton1Click:Connect(function()
+			if shiftId then
+				setShiftDemandPreview(shiftId)
+			end
+		end)
 		startButton.MouseButton1Click:Connect(function()
 			if self:isShiftActive() then
 				self:showHubMessage("Shift already in progress.")
@@ -579,6 +1163,7 @@ function UIController:openShiftSelect(options)
 		hubToast.Visible = false
 	end
 	shiftSelectOverlay.Visible = true
+	task.defer(refreshShiftSelectLayout)
 	return true
 end
 
@@ -689,6 +1274,7 @@ function UIController:updateSnapshot(snapshot)
 	else
 		self:setPhaseControls(phase)
 	end
+	refreshStashOverlay()
 
 	if phase == "BuyerSkipped" then
 		labels.customer.Text = "Buyer Visit Skipped"
@@ -717,8 +1303,9 @@ function UIController:updateSnapshot(snapshot)
 	if readHint then
 		labels.tell.Text ..= `\n{readHint}`
 	end
-	if snapshot.displayInfluenceLabel and isBuyerVisit then
-		labels.tell.Text ..= `\n{snapshot.displayInfluenceLabel}`
+	local displayInfluenceHelp = if isBuyerVisit then formatDisplayInfluenceHelp(snapshot) else nil
+	if displayInfluenceHelp then
+		labels.tell.Text ..= `\n{displayInfluenceHelp}`
 	end
 	labels.dialogue.Text = compactTerminalDialogue(phase, snapshot)
 	if isBuyerVisit then
@@ -742,14 +1329,10 @@ function UIController:updateSnapshot(snapshot)
 		if snapshot.buyerInterest then
 			table.insert(lines, `Buyer interest: {snapshot.buyerInterest}`)
 		end
-		if snapshot.buyerWants then
-			table.insert(lines, snapshot.buyerWants)
-		end
 	end
 	if isBuyerVisit then
-		if snapshot.buyerWants then
-			table.insert(lines, snapshot.buyerWants)
-		end
+		local matchCount = snapshot.inventoryMatches and #snapshot.inventoryMatches or 0
+		table.insert(lines, `Shelf offers: {matchCount}`)
 	end
 	if snapshot.estimatedLow and snapshot.estimatedHigh and phase ~= "Result" then
 		table.insert(lines, `Estimate: {snapshot.estimatedLow}-{snapshot.estimatedHigh} {cur}`)
@@ -882,6 +1465,7 @@ function UIController:updateShiftSnapshot(snapshot)
 	end
 
 	self:setPhaseControls(currentSnapshot and currentSnapshot.phase or "")
+	refreshStashOverlay()
 	refreshDealRootVisibility()
 end
 
@@ -889,6 +1473,7 @@ function UIController:updateInventorySnapshot(snapshot)
 	currentInventorySnapshot = snapshot
 	refreshInventoryLabel()
 	self:setPhaseControls(currentSnapshot and currentSnapshot.phase or "")
+	refreshStashOverlay()
 	refreshAcceptBuyButton()
 end
 
@@ -974,18 +1559,6 @@ end
 
 function UIController:onNext(callback: () -> ())
 	buttons.next.MouseButton1Click:Connect(callback)
-end
-
-function UIController:onStartShift(callback: (string) -> ())
-	buttons.shiftScrapRush.MouseButton1Click:Connect(function()
-		callback("scrap_rush")
-	end)
-	buttons.shiftCollector.MouseButton1Click:Connect(function()
-		callback("collector_convention")
-	end)
-	buttons.shiftBlackMarket.MouseButton1Click:Connect(function()
-		callback("black_market_night")
-	end)
 end
 
 function UIController:Start() end

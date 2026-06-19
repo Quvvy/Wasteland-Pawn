@@ -77,7 +77,7 @@ Closing Rush / liquidation
 Hit quota or fail
 ```
 
-DisplayShelf items persist across shifts **within the same server session**. Not permanent saves.
+DisplayShelf and StashBin haggled items persist across shifts **within the same server session**. Not permanent saves.
 
 **Target loop (future direction — not fully built):**
 
@@ -205,8 +205,10 @@ Server services own gameplay truth. Client controllers request actions and displ
 | Seller / buyer haggling | **Prototype** |
 | InventoryShelf working stock (shift-scoped) | **Prototype** |
 | DisplayShelf haggled item routing | **Prototype** |
-| Session display persistence | **Prototype** — same server session only |
+| Stash V1 haggled item routing | **Prototype** — session-only |
+| Session display/stash persistence | **Prototype** — same server session only |
 | Display influence on buyer traffic | **Prototype** |
+| Demand Preview V1 (ShiftBoard) | **Prototype** |
 | Buyer visits + matching | **Prototype** |
 | Closing Rush + liquidation | **Prototype** |
 | Deal archetypes + shift `buyerWeights` | **Prototype** |
@@ -214,7 +216,7 @@ Server services own gameplay truth. Client controllers request actions and displ
 | Counter / shelf / customer presentation | **Prototype** |
 | Ctrl+U debug overlay + Studio actions | **Prototype** |
 | Hub pickup props | **Prototype** — client-only decorative |
-| Demand Preview, permanent stash, calendar, relics, unified objects | **Not started** |
+| Permanent stash saves, calendar, relics, unified objects | **Not started** |
 
 Do not casually replace working prototype systems. Improve only when the task requires it.
 
@@ -262,9 +264,9 @@ No large UI polish pass unless explicitly requested.
 
 Follow `docs/ROADMAP.md`. Summary:
 
-1. Playtest hub + shift prototype; Demand Preview V1 (now)
+1. Playtest hub + shift prototype; Scrap Rush / traffic polish (now)
 2. Object model unification **plan**
-3. Haggled display routing (**Prototype**); stash + permanent persistence (**Planned**)
+3. Haggled display/stash routing + Demand Preview (**Prototype**); permanent persistence (**Planned**)
 4. Customer-demand / calendar prototype (shifts as traffic-window analog)
 5. Rare walk-in buyer/seller prototype
 6. Later: calendar events, relics, collection, DataStores, social visits

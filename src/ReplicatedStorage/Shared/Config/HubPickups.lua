@@ -3,6 +3,7 @@ local HubPickups = {
 		{
 			spawnName = "PickupSpawn1",
 			propId = "rusted_can",
+			objectId = "scrap_empty_can_stack",
 			assetName = "RustedCan",
 			displayName = "Rusted Can",
 			placeholderSize = Vector3.new(1.2, 1.4, 1.2),
@@ -11,6 +12,7 @@ local HubPickups = {
 		{
 			spawnName = "PickupSpawn2",
 			propId = "weird_bottle",
+			objectId = "alien_bio_gel",
 			assetName = "WeirdBottle",
 			displayName = "Weird Bottle",
 			placeholderSize = Vector3.new(0.8, 1.6, 0.8),
@@ -19,6 +21,7 @@ local HubPickups = {
 		{
 			spawnName = "PickupSpawn3",
 			propId = "broken_radio",
+			objectId = "tech_handheld_radio",
 			assetName = "BrokenRadio",
 			displayName = "Broken Radio",
 			placeholderSize = Vector3.new(1.6, 0.9, 1.1),
@@ -32,6 +35,15 @@ local HubPickups = {
 function HubPickups.getSpawnDef(spawnName: string)
 	for _, def in HubPickups.SpawnDefs do
 		if def.spawnName == spawnName then
+			return def
+		end
+	end
+	return nil
+end
+
+function HubPickups.getSpawnDefByPropId(propId: string)
+	for _, def in HubPickups.SpawnDefs do
+		if def.propId == propId then
 			return def
 		end
 	end

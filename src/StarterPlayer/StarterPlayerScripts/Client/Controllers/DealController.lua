@@ -120,10 +120,6 @@ function DealController:_bindUi()
 		invokeRemote("StartDeal")
 	end)
 
-	UIController:onStartShift(function(shiftId: string)
-		self:startShiftFlow(shiftId)
-	end)
-
 	UIController:onShiftSelectStart(function(shiftId: string)
 		self:startShiftFlow(shiftId)
 	end)

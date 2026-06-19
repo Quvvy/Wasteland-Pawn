@@ -17,8 +17,8 @@ local heldProp: any = nil
 local spawnedAtPickup: { [string]: Model } = {}
 local consumedPickupSpawns: { [string]: boolean } = {}
 local boundPrompts: { [ProximityPrompt]: boolean } = {}
-local stashPrompt: ProximityPrompt? = nil
 local localFolder: Folder? = nil
+local holdingChangedCallbacks: { any } = {}
 
 local warnedMissing: { [string]: boolean } = {}
 
@@ -81,8 +81,16 @@ local function getOrCreatePrompt(parent: Instance, name: string): ProximityPromp
 	return prompt
 end
 
+local function notifyHoldingChanged()
+	local holding = heldProp ~= nil
+	for _, callback in holdingChangedCallbacks do
+		callback(holding)
+	end
+end
+
 function HubPickupController:_applyPropMetadata(model: Model, def)
 	model:SetAttribute("HubPropId", def.propId)
+	model:SetAttribute("HubObjectId", def.objectId)
 	model:SetAttribute("HubDisplayName", def.displayName)
 	model:SetAttribute("HubAssetName", def.assetName)
 end
@@ -143,18 +151,18 @@ end
 function HubPickupController:_defFromModel(model: Model)
 	local def = {
 		propId = model:GetAttribute("HubPropId"),
+		objectId = model:GetAttribute("HubObjectId"),
 		displayName = model:GetAttribute("HubDisplayName"),
 		assetName = model:GetAttribute("HubAssetName"),
 		placeholderSize = Vector3.new(1, 1, 1),
 		placeholderColor = Color3.fromRGB(140, 140, 140),
 	}
 
-	for _, spawnDef in HubPickups.SpawnDefs do
-		if spawnDef.propId == def.propId then
-			def.placeholderSize = spawnDef.placeholderSize
-			def.placeholderColor = spawnDef.placeholderColor
-			break
-		end
+	local spawnDef = if type(def.propId) == "string" then HubPickups.getSpawnDefByPropId(def.propId) else nil
+	if spawnDef then
+		def.objectId = def.objectId or spawnDef.objectId
+		def.placeholderSize = spawnDef.placeholderSize
+		def.placeholderColor = spawnDef.placeholderColor
 	end
 
 	return def
@@ -165,9 +173,7 @@ function HubPickupController:_isHolding(): boolean
 end
 
 function HubPickupController:_refreshPlacementPrompts()
-	if stashPrompt then
-		stashPrompt.ActionText = "Drop in Stash"
-	end
+	notifyHoldingChanged()
 end
 
 function HubPickupController:_pickUpProp(model: Model, spawnName: string?)
@@ -204,6 +210,23 @@ function HubPickupController:_dropInStash()
 	UIController:setHubHolding(nil)
 	self:_refreshPlacementPrompts()
 	UIController:showHubMessage("Dropped in stash.")
+end
+
+function HubPickupController:isHolding(): boolean
+	return self:_isHolding()
+end
+
+function HubPickupController:dropHeldInStash(): boolean
+	if not self:_isHolding() then
+		return false
+	end
+	self:_dropInStash()
+	return true
+end
+
+function HubPickupController:onHoldingChanged(callback: (boolean) -> ())
+	table.insert(holdingChangedCallbacks, callback)
+	callback(self:_isHolding())
 end
 
 function HubPickupController:_bindPickupPrompt(prompt: ProximityPrompt, model: Model, spawnName: string)
@@ -279,41 +302,6 @@ function HubPickupController:_setupOutdoorPickups(world: Instance)
 	end
 end
 
-function HubPickupController:_bindStashBin(world: Instance)
-	local shop = HubWorld.findChildByNames(world, { "Shop" })
-	local stash = shop
-		and (
-			HubWorld.findChildByNames(shop, { "StashBin", "Stash_Bin", "Stash", "Bin" })
-			or HubWorld.findShopPart(shop, {}, "stash")
-		)
-	if not stash then
-		warnOnce("stash_bin", `HubPickup: StashBin not found. Shop children: {HubWorld.listChildNames(shop)}`)
-		return
-	end
-
-	if stashPrompt then
-		return
-	end
-
-	local promptParent = HubWorld.resolveBasePart(stash)
-	if not promptParent then
-		warnOnce("stash_part", "HubPickup: StashBin has no BasePart for ProximityPrompt")
-		return
-	end
-
-	local prompt = getOrCreatePrompt(promptParent, "StashPrompt")
-	stashPrompt = prompt
-
-	if boundPrompts[prompt] then
-		return
-	end
-	boundPrompts[prompt] = true
-
-	prompt.Triggered:Connect(function()
-		self:_dropInStash()
-	end)
-end
-
 function HubPickupController:_waitAndSetup(world: Instance?)
 	world = world or waitForWorld()
 	if not world then
@@ -322,8 +310,7 @@ function HubPickupController:_waitAndSetup(world: Instance?)
 	end
 
 	self:_setupOutdoorPickups(world)
-	-- DisplayShelf is gameplay-owned; decorative pickups only use pickup and stash prompts.
-	self:_bindStashBin(world)
+	-- DisplayShelf is gameplay-owned; StashController owns the single StashBin prompt.
 	self:_refreshPlacementPrompts()
 end
 

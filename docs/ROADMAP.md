@@ -27,22 +27,25 @@ The current game is a physical-shop shift prototype.
 - matching items to buyers
 - holding working inventory
 - displaying haggled items
-- session display persistence
+- session display/stash persistence
+- session-only haggled item stash
 - display influence on buyer traffic
 - Closing Rush and liquidation
 
 **Next design target:**
 
-- make demand visible before opening the shop (Demand Preview V1)
+- polish demand readability and normal-day traffic feel
 
 **Still intentionally out of scope:**
 
 - permanent saves
-- stash
+- permanent stash saves
 - relics
 - collection log
 - full calendar
 - unified object economy
+
+Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN.md](OBJECT_MODEL_UNIFICATION_PLAN.md). Implementation remains out of scope until the shift loop and demand timing feel solid.
 
 ---
 
@@ -70,26 +73,28 @@ The current game is a physical-shop shift prototype.
 | Item counter props at `CounterItemSpot` | **Prototype** |
 | InventoryShelf presentation | **Prototype** |
 | DisplayShelf haggled item routing (Hold Back → display) | **Prototype** |
-| Session display persistence (same server session) | **Prototype** |
+| Stash V1 for haggled items (session-only) | **Prototype** |
+| Session display/stash persistence (same server session) | **Prototype** |
 | Display influence on buyer traffic | **Prototype** |
+| Demand Preview V1 (ShiftBoard `?` panel) | **Prototype** |
 | Ctrl+U debug overlay + Studio debug actions | **Prototype** |
 
 ---
 
 ## Now
 
-**Goal:** Docs sync, playtest the current loop, and make demand readable before building calendar or persistence systems.
+**Goal:** Playtest the current loop and make demand/traffic feel readable before building calendar or persistence systems.
 
-- [ ] Docs sync / playtest current loop end-to-end
-- [ ] Demand Preview V1 on ShiftBoard (show upcoming buyer/demand hints before shift start)
+- [ ] Playtest shift loop end-to-end with Demand Preview
 - [ ] Scrap Rush normal-day feel pass
 - [ ] Buyer traffic readability (match labels, influence, pacing)
+- [ ] ShiftBoard info polish (preview copy, empty display state)
 
-**Stabilize (still worth tracking):**
+**Stabilize:**
 
-- [ ] InventoryShelf prompt mode: Offer only during BuyerVisit; Hold Back only outside BuyerVisit
-- [ ] Server rejects display items for buyer offers
-- [ ] Rapid phase changes do not leave stale shelf prompts
+- [x] InventoryShelf prompt mode: Offer only during BuyerVisit; Hold Back only outside BuyerVisit
+- [x] Server rejects display items for buyer offers
+- [x] Rapid phase changes do not leave stale shelf prompts
 
 **Avoid:** Calendar systems, DataStores, relics, unified object inventory, or scavenging economy until demand preview and the shift loop feel solid.
 
@@ -99,11 +104,10 @@ The current game is a physical-shop shift prototype.
 
 | Milestone | Status | Notes |
 |-----------|--------|-------|
-| Demand Preview V1 | **Planned** | ShiftBoard shows readable demand/traffic hints before opening |
-| ShiftBoard info popup | **Planned** | Clearer shift/event info without full calendar |
+| ShiftBoard info popup polish | **Planned** | Clearer shift/event info without full calendar |
 | Normal Day / Scrap Rush polish | **Planned** | Reliable baseline traffic feel |
-| Stash routing for haggled items | **Planned** | Server-authoritative; display routing exists; stash does not |
-| Object model unification **plan** | **Planned** | One object ecosystem; hub pickups + haggled items converge later |
+| Stash routing for haggled items | **Prototype** | Server-authoritative, session-only; permanent saves still future |
+| Object model unification plan + metadata helpers | **Prototype** | Plan drafted; `ObjectModel` aligns ids; decorative hub props have informational `objectId` mappings |
 | Calendar Events V1 | **Planned** | After demand preview feels good; shifts as traffic-window analog |
 | Rare walk-in buyer/seller prototype | **Planned** | Sellers stay special; buyers remain main money engine |
 

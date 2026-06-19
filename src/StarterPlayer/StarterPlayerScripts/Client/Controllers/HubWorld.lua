@@ -286,6 +286,15 @@ function HubWorld.findDisplayShelfSlot(shelf: Instance?, slotIndex: number): Bas
 	return HubWorld.findDisplaySlot(shelf, slotIndex, `DisplaySlot{slotIndex}`)
 end
 
+function HubWorld.findStashBin(shop: Instance?): Instance?
+	if not shop then
+		return nil
+	end
+
+	return HubWorld.findChildByNames(shop, { "StashBin", "Stash_Bin", "Stash", "Bin" })
+		or HubWorld.findShopPart(shop, {}, "stash")
+end
+
 function HubWorld.findShopPart(shop: Instance?, names: { string }, pattern: string?): Instance?
 	local found = HubWorld.findChildByNames(shop, names)
 	if found then

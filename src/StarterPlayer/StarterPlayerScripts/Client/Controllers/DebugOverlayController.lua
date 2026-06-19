@@ -15,7 +15,7 @@ local DEBUG_ENABLED = RunService:IsStudio()
 
 local LOG_MAX_LINES = 20
 local SCAN_INTERVAL = 1
-local PROMPT_KEYWORDS = { "prompt", "shelf", "offer", "hold", "display", "return", "inventory" }
+local PROMPT_KEYWORDS = { "prompt", "shelf", "offer", "hold", "display", "return", "inventory", "stash" }
 local LEGACY_PROMPT_NAMES = {
 	ShelfOfferPrompt = true,
 	ShelfHoldPrompt = true,
@@ -335,6 +335,16 @@ local function formatInventorySection(): string
 		end
 	end
 
+	table.insert(lines, `stash: {field(snapshot.stashUsedSlots)}/{field(snapshot.stashMaxSlots)}`)
+	local stashItems = snapshot.stashItems or {}
+	if #stashItems == 0 then
+		table.insert(lines, "stash empty")
+	else
+		for index, entry in ipairs(stashItems) do
+			table.insert(lines, `S{index}. {entry.displayName} ({entry.category}) - paid {field(entry.purchasePrice)}`)
+		end
+	end
+
 	return table.concat(lines, "\n")
 end
 
@@ -384,6 +394,7 @@ function DebugOverlayController:scanWorld()
 	local shop = world and world:FindFirstChild("Shop")
 	local inventoryShelf = HubWorld.findInventoryShelf(shop)
 	local displayShelf = HubWorld.findDisplayShelf(shop)
+	local stashBin = HubWorld.findStashBin(shop)
 
 	local scan = {
 		world = world ~= nil,
@@ -392,6 +403,7 @@ function DebugOverlayController:scanWorld()
 		inventorySlots = {},
 		displayShelf = displayShelf ~= nil,
 		displaySlots = {},
+		stashBin = stashBin ~= nil,
 		counterItemSpot = HubWorld.findCounterItemSpot(shop) ~= nil,
 		customerSpot = HubWorld.findCustomerSpot(shop) ~= nil,
 		openClosedSign = findOpenClosedSign(shop) ~= nil,
@@ -489,6 +501,7 @@ local function formatWorldSection(scan: any): string
 	check("Shop", scan.shop)
 	check("InventoryShelf", scan.inventoryShelf)
 	check("DisplayShelf", scan.displayShelf)
+	check("StashBin", scan.stashBin)
 	check("CounterItemSpot", scan.counterItemSpot)
 	check("CustomerSpot", scan.customerSpot)
 

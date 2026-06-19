@@ -9,16 +9,7 @@ Keep entries short. Add enough context that future us knows what happened.
 
 Issues that can corrupt state, break core gameplay, duplicate items/money, or allow exploits.
 
-### Prompt mode conflict during BuyerVisit
-
-Status: Watch
-Area: InventoryShelf prompts
-Risk: A shelf prompt could trigger both Offer and Hold Back behavior if stale callbacks survive phase changes.
-Notes:
-- BuyerVisit should only show Offer prompts.
-- Outside BuyerVisit should only show Hold Back prompts.
-Possible Fix:
-- Rebuild prompts on phase changes and keep server validation strict.
+No current critical issues tracked.
 
 ---
 
@@ -49,13 +40,23 @@ Possible Fix:
 - Keep client and server gates.
 - Never trust client-side debug UI gating alone.
 
-### Display item sale protection
+### Display/stash item sale protection
 
 Status: Watch
 Area: BuyerVisit / Inventory
-Risk: DisplayShelf items should never be offerable or sellable unless returned to InventoryShelf first.
+Risk: DisplayShelf and stash items should never be offerable or sellable unless returned to InventoryShelf first.
 Possible Fix:
-- Server should reject `SelectInventoryItemForBuyer` for `location == "display"`.
+- Server should reject `SelectInventoryItemForBuyer` unless `location == "inventory"`.
+
+### Stash routing during buyer phases
+
+Status: Watch
+Area: Stash / Remotes
+Risk: Moving items while a buyer offer list is active could stale the UI or offer a moved item.
+Notes:
+- Stash V1 blocks stash/display routing during `BuyerVisit` and `Selling`.
+Possible Fix:
+- Keep route remotes server-authoritative and refresh buyer matches after future routing expansions.
 
 ---
 
@@ -71,14 +72,14 @@ Risk: One huge scrolling debug panel may get hard to read as systems grow.
 Possible Fix:
 - Split into tabs later: Shift, Deal, Inventory, World, Prompts, Actions.
 
-### Session display is not permanent
+### Session display/stash is not permanent
 
 Status: Intentional
-Area: Display / Persistence
-Risk: Players may expect display items to survive rejoin/server reset later.
+Area: Display / Stash / Persistence
+Risk: Players may expect display or stash items to survive rejoin/server reset later.
 Notes:
-- Display items now persist across shifts within the same server session.
-- Rejoin and server reset still clear display. Do not add DataStores yet.
+- Display and stash items now persist across shifts within the same server session.
+- Rejoin and server reset still clear display/stash. Do not add DataStores yet.
 Possible Fix:
 - Add real persistence only after stash/display/collection design is clearer.
 
@@ -88,22 +89,29 @@ Possible Fix:
 
 Systems that may become confusing, too complex, or conflict with the core design.
 
-### Display visible between shifts but not interactive
+### Display/stash between-shift routing is limited
 
 Status: Intentional
-Area: Display / UX
-Risk: Players may try to return displayed items to inventory when no shift is active.
+Area: Display / Stash / UX
+Risk: Players may expect full after-hours inventory management before the shop is open.
 Notes:
 - V1 shows display props after shift end but disables Return to Shelf prompts until the next shift starts.
-- No after-hours inventory or stash in this pass.
+- StashBin overlay allows Stash <-> Display between shifts.
+- Pulling stashed items to InventoryShelf still requires an active shift.
 Possible Fix:
-- Add stash or after-hours routing only when that design is ready.
-
----
+- Add fuller after-hours inventory routing only when that design is ready.
 
 ## Recently Resolved
 
 Move fixed issues here instead of deleting them immediately.
+
+### Legacy shift buttons skipped Demand Preview
+
+Status: Fixed
+Area: ShiftBoard / UI
+Notes:
+- Removed the hidden deal-panel quick-start buttons and old `onStartShift` callback.
+- Client shift start now flows through the ShiftBoard selector path.
 
 ### Display items wiped during shift end
 
@@ -121,6 +129,15 @@ Area: Debug UI / DealService
 Notes:
 - `[WastelandPawn]` DEAL START/DONE/TACTIC Output prints removed.
 - Archetype, pricing, tactic debug, and buyer influence bonus now show in the debug overlay.
+
+### Prompt mode conflict during BuyerVisit
+
+Status: Fixed
+Area: InventoryShelf prompts
+Notes:
+- InventoryShelf prompts now carry a prompt generation and slot index.
+- Stale prompt triggers are ignored when BuyerVisit / normal shelf mode changes.
+- Server validation still rejects non-inventory buyer offers.
 
 ---
 

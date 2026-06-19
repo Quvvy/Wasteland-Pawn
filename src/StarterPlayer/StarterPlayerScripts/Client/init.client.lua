@@ -9,6 +9,7 @@ local controllerModules = {
 	Controllers:WaitForChild("ItemPresentationController"),
 	Controllers:WaitForChild("InventoryShelfPresentationController"),
 	Controllers:WaitForChild("DisplayShelfPresentationController"),
+	Controllers:WaitForChild("StashController"),
 	Controllers:WaitForChild("HubPickupController"),
 	Controllers:WaitForChild("CameraController"),
 }

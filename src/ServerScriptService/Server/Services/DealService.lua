@@ -228,6 +228,18 @@ function DealService:Start()
 	bind("ReturnDisplayItemToInventory", function(player, instanceId)
 		return self:returnDisplayItemToInventory(player, instanceId)
 	end)
+	bind("StashInventoryItem", function(player, instanceId)
+		return self:stashInventoryItem(player, instanceId)
+	end)
+	bind("ReturnStashedItemToInventory", function(player, instanceId)
+		return self:returnStashedItemToInventory(player, instanceId)
+	end)
+	bind("MoveDisplayItemToStash", function(player, instanceId)
+		return self:moveDisplayItemToStash(player, instanceId)
+	end)
+	bind("MoveStashedItemToDisplay", function(player, instanceId)
+		return self:moveStashedItemToDisplay(player, instanceId)
+	end)
 	bind("KeepItem", function(player, instanceId)
 		return self:keepItem(player, instanceId)
 	end)
@@ -867,6 +879,14 @@ function DealService:_refreshBuyerMatchesIfNeeded(player: Player, deal)
 	end
 end
 
+function DealService:_stashRoutingBlocked(player: Player): string?
+	local deal = activeDeals[player]
+	if deal and (deal.phase == "BuyerVisit" or deal.phase == "Selling") then
+		return "Finish buyer first"
+	end
+	return nil
+end
+
 local function rollBuyerForVisit(_player: Player, rng: Random, shift, displayItems)
 	local baseWeights = shift and shift.buyerWeights
 	local adjustedWeights, influenceByBuyerId = DisplayInfluence.applyBuyerWeightBonuses(baseWeights, displayItems)
@@ -916,6 +936,8 @@ function DealService:setInventoryItemHeldBack(player: Player, instanceId: any, h
 	end
 	if entry.location == "display" then
 		return { ok = false, error = "Item is on display" }
+	elseif entry.location == "stash" then
+		return { ok = false, error = "Item is stashed" }
 	end
 
 	if not InventoryService:setItemHeldBack(player, instanceId, heldBack) then
@@ -950,6 +972,8 @@ function DealService:displayInventoryItem(player: Player, instanceId: any)
 	end
 	if entry.location == "display" then
 		return { ok = false, error = "Item is on display" }
+	elseif entry.location == "stash" then
+		return { ok = false, error = "Item is stashed" }
 	end
 	if entry.location ~= "inventory" then
 		return { ok = false, error = "Item not in inventory" }
@@ -996,6 +1020,131 @@ function DealService:returnDisplayItemToInventory(player: Player, instanceId: an
 	end
 
 	self:_refreshBuyerMatchesIfNeeded(player, deal)
+	return { ok = true }
+end
+
+function DealService:stashInventoryItem(player: Player, instanceId: any)
+	local shift = ShiftService:getShift(player)
+	if not shift or not shift.active or shift.ended then
+		return { ok = false, error = "No active shift" }
+	end
+	if type(instanceId) ~= "string" then
+		return { ok = false, error = "Invalid item" }
+	end
+
+	local blocked = self:_stashRoutingBlocked(player)
+	if blocked then
+		return { ok = false, error = blocked }
+	end
+
+	local entry = InventoryService:getOwnedItem(player, instanceId)
+	if not entry then
+		return { ok = false, error = "Item not found" }
+	end
+	if entry.location == "display" then
+		return { ok = false, error = "Item is on display" }
+	elseif entry.location == "stash" then
+		return { ok = false, error = "Item is stashed" }
+	end
+	if entry.location ~= "inventory" then
+		return { ok = false, error = "Item not in inventory" }
+	end
+	if not InventoryService:canAddToStash(player) then
+		return { ok = false, error = "Stash full" }
+	end
+
+	if not InventoryService:moveInventoryItemToStash(player, instanceId) then
+		return { ok = false, error = "Could not stash item" }
+	end
+
+	return { ok = true }
+end
+
+function DealService:returnStashedItemToInventory(player: Player, instanceId: any)
+	local shift = ShiftService:getShift(player)
+	if not shift or not shift.active or shift.ended then
+		return { ok = false, error = "No active shift" }
+	end
+	if type(instanceId) ~= "string" then
+		return { ok = false, error = "Invalid item" }
+	end
+
+	local blocked = self:_stashRoutingBlocked(player)
+	if blocked then
+		return { ok = false, error = blocked }
+	end
+
+	local entry = InventoryService:getOwnedItem(player, instanceId)
+	if not entry then
+		return { ok = false, error = "Item not found" }
+	end
+	if entry.location ~= "stash" then
+		return { ok = false, error = "Item not in stash" }
+	end
+	if not InventoryService:canAdd(player) then
+		return { ok = false, error = "Inventory full" }
+	end
+
+	if not InventoryService:returnItemFromStash(player, instanceId) then
+		return { ok = false, error = "Could not return item" }
+	end
+
+	return { ok = true }
+end
+
+function DealService:moveDisplayItemToStash(player: Player, instanceId: any)
+	if type(instanceId) ~= "string" then
+		return { ok = false, error = "Invalid item" }
+	end
+
+	local blocked = self:_stashRoutingBlocked(player)
+	if blocked then
+		return { ok = false, error = blocked }
+	end
+
+	local entry = InventoryService:getOwnedItem(player, instanceId)
+	if not entry then
+		return { ok = false, error = "Item not found" }
+	end
+	if entry.location ~= "display" then
+		return { ok = false, error = "Item not on display" }
+	end
+	if not InventoryService:canAddToStash(player) then
+		return { ok = false, error = "Stash full" }
+	end
+
+	if not InventoryService:moveDisplayItemToStash(player, instanceId) then
+		return { ok = false, error = "Could not stash item" }
+	end
+
+	return { ok = true }
+end
+
+function DealService:moveStashedItemToDisplay(player: Player, instanceId: any)
+	if type(instanceId) ~= "string" then
+		return { ok = false, error = "Invalid item" }
+	end
+
+	local blocked = self:_stashRoutingBlocked(player)
+	if blocked then
+		return { ok = false, error = blocked }
+	end
+
+	local entry = InventoryService:getOwnedItem(player, instanceId)
+	if not entry then
+		return { ok = false, error = "Item not found" }
+	end
+	if entry.location ~= "stash" then
+		return { ok = false, error = "Item not in stash" }
+	end
+	if not InventoryService:canAddToDisplay(player) then
+		return { ok = false, error = "Display full" }
+	end
+
+	if not InventoryService:moveStashItemToDisplay(player, instanceId) then
+		return { ok = false, error = "Could not display item" }
+	end
+
 	return { ok = true }
 end
 
@@ -1109,6 +1258,8 @@ function DealService:selectInventoryItemForBuyer(player: Player, instanceId: any
 	end
 	if entry.location == "display" then
 		return { ok = false, error = "Item is on display" }
+	elseif entry.location == "stash" then
+		return { ok = false, error = "Item is stashed" }
 	end
 	if entry.location ~= "inventory" then
 		return { ok = false, error = "Item not in inventory" }
@@ -1146,7 +1297,7 @@ function DealService:_buildSaleDealFromInventory(entry, visitDeal)
 		dealArchetypeId = entry.dealArchetypeId,
 		dealArchetypeName = entry.dealArchetypeName,
 		item = {
-			id = entry.itemId,
+			id = entry.itemId or entry.objectId,
 			displayName = entry.displayName,
 			category = entry.category,
 			traits = entry.traits or {},

@@ -63,14 +63,16 @@ AGENTS.md                       Agent brief for Cursor / Codex
 - **Buyer visits and matching** — category/traits → match labels and payout bonuses
 - **Working inventory** — limited InventoryShelf slots per shift (server-authoritative; resets each shift)
 - **DisplayShelf haggled item display** — Hold Back routes bought items to display slots
-- **Session display persistence** — DisplayShelf items persist across shifts during the same server session (not permanent saves)
+- **Stash V1** — server-authoritative, session-only haggled item storage via StashBin
+- **Session display/stash persistence** — DisplayShelf and stash items persist across shifts during the same server session (not permanent saves)
 - **Display influence** — displayed categories/traits bias buyer traffic roll weights
+- **Demand Preview V1** — ShiftBoard `?` preview shows likely buyers, good categories/traits, and display effects per shift (**Prototype**)
 - **Physical presentation** — customer rigs at `CustomerSpot`, item props at `CounterItemSpot`, shelf props
 - **Deal archetypes** — weighted deal shapes (scam traps, jackpots, buyer setups, etc.)
 - **Ctrl+U Studio debug overlay** — shift/deal/inventory diagnostics and Studio debug actions
 - **Hub pickup props** — client-only decorative pick up / place / stash (session-only; **not** economy or saves)
 
-**Not built yet:** DataStore saves, permanent stash, collection log, relics, full calendar/events, unified scavenging + haggled item economy, shop upgrades.
+**Not built yet:** DataStore saves, permanent stash saves, collection log, relics, full calendar/events (dates, timers), unified scavenging + haggled item economy, shop upgrades.
 
 **Design warning:** scavenging and haggling must eventually feed **one** object economy — not two competing money loops. See [GDD](docs/GDD.md#two-economy-problem).
 

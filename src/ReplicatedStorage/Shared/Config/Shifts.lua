@@ -18,8 +18,10 @@ local shiftList = {
 		traitWeights = {},
 		buyerWeights = {
 			desperate_mechanic = 3,
-			cheap_scavenger = 2,
-			robot_appraiser = 1,
+			cheap_scavenger = 3,
+			robot_appraiser = 2,
+			rich_collector = 1,
+			alien_tourist = 1,
 		},
 		description = "A short beginner shift. Flip whatever walks in.",
 		modifierText = "Steady flips. Low risk, low ceiling.",
