@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Shifts = require(Shared.Config.Shifts)
+local TrafficCalendar = require(Shared.Config.TrafficCalendar)
 local Remotes = require(Shared.Net.Remotes)
 
 local DataService = require(script.Parent.DataService)
@@ -11,6 +12,7 @@ local InventoryService = require(script.Parent.InventoryService)
 local ShiftService = {}
 
 local playerShifts: { [Player]: any } = {}
+local playerTraffic: { [Player]: { boardIndex: number, completedWindows: number } } = {}
 local PHASE_BUYING = "Buying"
 local PHASE_CLOSING_RUSH = "ClosingRush"
 local PHASE_ENDED = "Ended"
@@ -40,7 +42,7 @@ local function getResultTitle(shift): string
 	return "Shift Failed"
 end
 
-local function copyShiftOption(shift)
+local function copyShiftOption(shift, trafficEntry)
 	return {
 		id = shift.id,
 		displayName = shift.displayName,
@@ -52,6 +54,9 @@ local function copyShiftOption(shift)
 		closingRushBuyerLimit = shift.closingRushBuyerLimit,
 		description = shift.description,
 		modifierText = shift.modifierText,
+		trafficLabel = trafficEntry and trafficEntry.label or nil,
+		trafficDescription = trafficEntry and trafficEntry.description or nil,
+		windowIndex = trafficEntry and trafficEntry.windowIndex or nil,
 	}
 end
 
@@ -60,6 +65,7 @@ function ShiftService:Init()
 
 	Players.PlayerRemoving:Connect(function(player)
 		playerShifts[player] = nil
+		playerTraffic[player] = nil
 	end)
 end
 
@@ -70,18 +76,46 @@ function ShiftService:Start()
 	end
 
 	local getShiftOptions = Remotes.get("GetShiftOptions") :: RemoteFunction
-	getShiftOptions.OnServerInvoke = function()
+	getShiftOptions.OnServerInvoke = function(player)
 		return {
 			ok = true,
-			options = self:getShiftOptions(),
+			options = self:getShiftOptions(player),
+			traffic = self:getTrafficSnapshot(player),
 		}
 	end
 end
 
-function ShiftService:getShiftOptions()
+function ShiftService:_getTrafficState(player: Player)
+	local state = playerTraffic[player]
+	if not state then
+		state = {
+			boardIndex = 1,
+			completedWindows = 0,
+		}
+		playerTraffic[player] = state
+	end
+	return state
+end
+
+function ShiftService:getTrafficSnapshot(player: Player)
+	local state = self:_getTrafficState(player)
+	return TrafficCalendar.buildSnapshot(state.boardIndex, state.completedWindows)
+end
+
+function ShiftService:_advanceTrafficBoard(player: Player)
+	local state = self:_getTrafficState(player)
+	state.boardIndex = TrafficCalendar.nextBoardIndex(state.boardIndex)
+	state.completedWindows += 1
+end
+
+function ShiftService:getShiftOptions(player: Player)
+	local trafficState = self:_getTrafficState(player)
 	local options = {}
-	for _, shift in Shifts.getAll() do
-		table.insert(options, copyShiftOption(shift))
+	for _, trafficEntry in TrafficCalendar.getBoardShiftEntries(trafficState.boardIndex) do
+		local shift = Shifts.get(trafficEntry.shiftId)
+		if shift then
+			table.insert(options, copyShiftOption(shift, trafficEntry))
+		end
 	end
 	return options
 end
@@ -96,9 +130,17 @@ function ShiftService:startShift(player: Player, shiftId: string?)
 		}
 	end
 
-	local shift = Shifts.get(shiftId or "scrap_rush")
+	local requestedShiftId = shiftId or TrafficCalendar.DEFAULT_SHIFT_ID
+	local shift = Shifts.get(requestedShiftId)
 	if not shift then
 		return { ok = false, error = "Unknown shift" }
+	end
+	if not TrafficCalendar.isShiftAvailable(self:_getTrafficState(player).boardIndex, shift.id) then
+		return {
+			ok = false,
+			error = "Traffic window not available",
+			traffic = self:getTrafficSnapshot(player),
+		}
 	end
 
 	local inventorySlots = shift.inventorySlots or 3
@@ -135,6 +177,7 @@ function ShiftService:startShift(player: Player, shiftId: string?)
 		description = shift.description,
 		modifierText = shift.modifierText,
 		lastDealProfit = nil,
+		trafficAdvanced = false,
 	}
 
 	local snapshot = self:buildSnapshot(player)
@@ -384,6 +427,9 @@ function ShiftService:endShift(player: Player)
 	if not shift then
 		return nil
 	end
+	if shift.ended then
+		return self:buildSnapshot(player)
+	end
 
 	shift.active = false
 	shift.ended = true
@@ -392,6 +438,10 @@ function ShiftService:endShift(player: Player)
 	shift.success = shift.shiftProfit >= shift.targetProfit
 	shift.grade = getGrade(shift)
 	shift.resultTitle = getResultTitle(shift)
+	if not shift.trafficAdvanced then
+		shift.trafficAdvanced = true
+		self:_advanceTrafficBoard(player)
+	end
 
 	InventoryService:pushSnapshot(player)
 	self:_pushState(player)
@@ -434,6 +484,7 @@ function ShiftService:buildSnapshot(player: Player)
 		description = shift.description,
 		modifierText = shift.modifierText,
 		lastDealProfit = shift.lastDealProfit,
+		traffic = self:getTrafficSnapshot(player),
 	}
 end
 

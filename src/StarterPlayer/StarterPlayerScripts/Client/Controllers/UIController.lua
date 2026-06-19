@@ -185,6 +185,41 @@ local function formatShiftOptionStats(option, cur: string): string
 	return `Target: {option.targetProfit or 0} {cur} | Sellers: {sellerCount} | Slots: {option.inventorySlots or 3} | Buyer every {buyerEvery}`
 end
 
+local function formatShiftCardModifier(option): string
+	local modifier = option.modifierText or ""
+	if type(option.trafficLabel) == "string" and option.trafficLabel ~= "" then
+		return if modifier ~= "" then `{option.trafficLabel}: {modifier}` else option.trafficLabel
+	end
+	return modifier
+end
+
+local function formatTrafficBoardText(traffic): string
+	if type(traffic) ~= "table" then
+		return "Session traffic windows. Tap ? for demand preview."
+	end
+
+	local boardName = traffic.boardName or "Traffic Window"
+	local boardSubtitle = traffic.boardSubtitle
+	local lines = {
+		`Now: {boardName}`,
+	}
+	if type(boardSubtitle) == "string" and boardSubtitle ~= "" then
+		table.insert(lines, boardSubtitle)
+	end
+
+	local upcomingNames = {}
+	for _, board in traffic.upcomingBoards or {} do
+		if type(board.boardName) == "string" and board.boardName ~= "" then
+			table.insert(upcomingNames, board.boardName)
+		end
+	end
+
+	if #upcomingNames > 0 then
+		table.insert(lines, `Next: {table.concat(upcomingNames, ", ")}`)
+	end
+	return table.concat(lines, "\n")
+end
+
 local SHIFT_PREVIEW_HINT = "Tap ? on a shift to see likely demand."
 local SHIFT_PREVIEW_MIN_HEIGHT = 28
 local SHIFT_PREVIEW_MAX_HEIGHT = 150
@@ -197,6 +232,7 @@ local SHIFT_CARD_ACTION_RIGHT = 10
 local SHIFT_CARD_START_HEIGHT = 26
 local SHIFT_CARD_PREVIEW_HEIGHT = 22
 local SHIFT_CARD_ACTION_GAP = 4
+local SHIFT_SELECT_LIST_TOP = 104
 local shiftPreviewExpanded = false
 local selectedShiftPreviewId: string? = nil
 local shiftPreviewButtons: { [string]: TextButton } = {}
@@ -308,7 +344,7 @@ local function refreshShiftSelectLayout()
 		math.min(desiredPreviewHeight, SHIFT_PREVIEW_MAX_HEIGHT)
 	)
 	local previewBottomMargin = 8
-	local listTop = 68
+	local listTop = SHIFT_SELECT_LIST_TOP
 	local listGap = 8
 
 	shiftSelectPreviewLabel.Size = UDim2.new(1, -16, 0, textHeight + 4)
@@ -789,7 +825,7 @@ function UIController:Init()
 	labels.shiftSelectTitle = createLabel(
 		shiftSelectPanel,
 		"Title",
-		"Shift Board",
+		"Traffic Board",
 		UDim2.fromOffset(12, 10),
 		UDim2.fromOffset(396, 28)
 	)
@@ -801,12 +837,12 @@ function UIController:Init()
 	labels.shiftSelectSubtitle = createLabel(
 		shiftSelectPanel,
 		"Subtitle",
-		"Pick a shift. Tap ? for demand preview.",
+		"Session traffic windows. Tap ? for demand preview.",
 		UDim2.fromOffset(12, 38),
-		UDim2.fromOffset(396, 22)
+		UDim2.fromOffset(396, 58)
 	)
 	labels.shiftSelectSubtitle.BackgroundTransparency = 1
-	labels.shiftSelectSubtitle.TextSize = 13
+	labels.shiftSelectSubtitle.TextSize = 12
 	labels.shiftSelectSubtitle.TextColor3 = Color3.fromRGB(190, 190, 200)
 
 	buttons.shiftSelectClose = createButton(shiftSelectPanel, "Close", "Close", UDim2.fromOffset(340, 8), UDim2.fromOffset(68, 24))
@@ -819,8 +855,8 @@ function UIController:Init()
 	shiftSelectList.Name = "OptionList"
 	shiftSelectList.BackgroundTransparency = 1
 	shiftSelectList.BorderSizePixel = 0
-	shiftSelectList.Position = UDim2.fromOffset(12, 68)
-	shiftSelectList.Size = UDim2.fromOffset(396, 300)
+	shiftSelectList.Position = UDim2.fromOffset(12, SHIFT_SELECT_LIST_TOP)
+	shiftSelectList.Size = UDim2.fromOffset(396, 264)
 	shiftSelectList.CanvasSize = UDim2.fromOffset(0, 0)
 	shiftSelectList.ScrollBarThickness = 6
 	shiftSelectList.Parent = shiftSelectPanel
@@ -1035,7 +1071,7 @@ function UIController:onShiftSelectStart(callback: (string) -> ())
 	shiftSelectStartCallback = callback
 end
 
-function UIController:openShiftSelect(options)
+function UIController:openShiftSelect(options, traffic)
 	if self:isShiftActive() then
 		self:showHubMessage("Shift already in progress. Finish or end it first.")
 		return false
@@ -1055,6 +1091,8 @@ function UIController:openShiftSelect(options)
 	local cur = currencyLabel(currentSnapshot)
 	clearShiftSelectList()
 	setShiftDemandPreview(nil)
+	labels.shiftSelectTitle.Text = "Traffic Board"
+	labels.shiftSelectSubtitle.Text = formatTrafficBoardText(traffic)
 
 	for index, option in options do
 		local shiftId = option.id
@@ -1084,7 +1122,7 @@ function UIController:openShiftSelect(options)
 		local modifierLabel = createLabel(
 			card,
 			"Modifier",
-			option.modifierText or "",
+			formatShiftCardModifier(option),
 			UDim2.fromOffset(10, 28),
 			UDim2.new(1, -20, 0, 18)
 		)
@@ -1095,7 +1133,7 @@ function UIController:openShiftSelect(options)
 		local descLabel = createLabel(
 			card,
 			"Description",
-			option.description or "",
+			option.trafficDescription or option.description or "",
 			UDim2.fromOffset(10, 46),
 			UDim2.new(1, -20, 0, 32)
 		)

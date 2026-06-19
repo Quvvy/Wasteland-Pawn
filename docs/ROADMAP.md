@@ -30,11 +30,12 @@ The current game is a physical-shop shift prototype.
 - session display/stash persistence
 - session-only haggled item stash
 - display influence on buyer traffic
+- session-only Traffic Board V1
 - Closing Rush and liquidation
 
 **Next design target:**
 
-- polish demand readability and normal-day traffic feel
+- playtest Traffic Board V1 and traffic-window pacing
 
 **Still intentionally out of scope:**
 
@@ -42,7 +43,7 @@ The current game is a physical-shop shift prototype.
 - permanent stash saves
 - relics
 - collection log
-- full calendar
+- real-time calendar
 - unified object economy
 
 Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN.md](OBJECT_MODEL_UNIFICATION_PLAN.md). Implementation remains out of scope until the shift loop and demand timing feel solid.
@@ -65,8 +66,8 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 | Deal archetypes (weighted generation) | **Prototype** |
 | Archetype legibility (evidence-style clues) | **Prototype** |
 | Shift balance pass (`buyerWeights`, tuned shifts) | **Prototype** |
-| Physical shop hub — ShiftBoard shift start | **Prototype** |
-| Shift select overlay (from ShiftBoard) | **Prototype** |
+| Physical shop hub — Traffic Board shift start | **Prototype** |
+| Traffic-window overlay (from board prompt) | **Prototype** |
 | OpenClosedSign (client visual) | **Prototype** |
 | Hub pickup props (pick up / place / stash) | **Prototype** — decorative only; see GDD |
 | Customer counter presentation (`CustomerPresentationController`, cloned visitor rigs) | **Prototype** |
@@ -76,19 +77,20 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 | Stash V1 for haggled items (session-only) | **Prototype** |
 | Session display/stash persistence (same server session) | **Prototype** |
 | Display influence on buyer traffic | **Prototype** |
-| Demand Preview V1 (ShiftBoard `?` panel) | **Prototype** |
+| Demand Preview V1 (Traffic Board `?` panel) | **Prototype** |
+| Traffic Board V1 (session-only traffic windows) | **Prototype** |
 | Ctrl+U debug overlay + Studio debug actions | **Prototype** |
 
 ---
 
 ## Now
 
-**Goal:** Playtest the current loop and make demand/traffic feel readable before building calendar or persistence systems.
+**Goal:** Playtest the current loop with Traffic Board V1 before building real-time calendar or persistence systems.
 
-- [ ] Playtest shift loop end-to-end with Demand Preview
-- [ ] Scrap Rush normal-day feel pass
+- [ ] Playtest shift loop end-to-end through the rotating Traffic Board
+- [ ] Confirm Scrap Rush works as the always-available normal-day fallback
+- [ ] Check special event rotation pacing after shift end
 - [ ] Buyer traffic readability (match labels, influence, pacing)
-- [ ] ShiftBoard info polish (preview copy, empty display state)
 
 **Stabilize:**
 
@@ -96,7 +98,7 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 - [x] Server rejects display items for buyer offers
 - [x] Rapid phase changes do not leave stale shelf prompts
 
-**Avoid:** Calendar systems, DataStores, relics, unified object inventory, or scavenging economy until demand preview and the shift loop feel solid.
+**Avoid:** real-time calendar systems, DataStores, relics, unified object inventory, or scavenging economy until Traffic Board pacing feels solid.
 
 ---
 
@@ -104,11 +106,11 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 
 | Milestone | Status | Notes |
 |-----------|--------|-------|
-| ShiftBoard info popup polish | **Planned** | Clearer shift/event info without full calendar |
-| Normal Day / Scrap Rush polish | **Planned** | Reliable baseline traffic feel |
+| Traffic Board V1 | **Prototype** | Session-only rotating traffic windows; not real-time calendar |
+| Normal Day / Scrap Rush polish | **Prototype** | Scrap Rush remains available on every board |
 | Stash routing for haggled items | **Prototype** | Server-authoritative, session-only; permanent saves still future |
 | Object model unification plan + metadata helpers | **Prototype** | Plan drafted; `ObjectModel` aligns ids; decorative hub props have informational `objectId` mappings |
-| Calendar Events V1 | **Planned** | After demand preview feels good; shifts as traffic-window analog |
+| Calendar Events V1 | **Planned** | Later real-time/date system after Traffic Board proves useful |
 | Rare walk-in buyer/seller prototype | **Planned** | Sellers stay special; buyers remain main money engine |
 
 ---

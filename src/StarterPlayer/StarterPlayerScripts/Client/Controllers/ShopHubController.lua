@@ -179,7 +179,7 @@ function ShopHubController:_onShiftStartPromptTriggered(_prompt: ProximityPrompt
 		return
 	end
 
-	local opened = UIController:openShiftSelect(result.options)
+	local opened = UIController:openShiftSelect(result.options, result.traffic)
 	if not opened then
 		UIController:showHubMessage("Could not open shift selection.")
 	end

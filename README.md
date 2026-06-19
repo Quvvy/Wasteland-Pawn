@@ -4,7 +4,7 @@
 
 Run a sketchy pawn shop in a neon cursed flea market: find strange objects, figure out what they might be worth, and sell to the buyers who actually want them. The long-term game is **when** you open, **what** you keep, and **who** you sell to.
 
-The **current prototype** is a physical-shop shift loop — start at the ShiftBoard, haggle with sellers, hold items in limited working inventory, route haggled items to the display shelf, match buyers, and survive Closing Rush. That is playable today; calendar events, permanent stash, and relics are future direction.
+The **current prototype** is a physical-shop shift loop — start at the Traffic Board, haggle with sellers, hold items in limited working inventory, route haggled items to the display shelf, match buyers, and survive Closing Rush. That is playable today; real-time calendar events, permanent stash, and relics are future direction.
 
 > *"I bought a cursed traffic cone for 40 scraps and sold it to an alien tourist for ridiculous profit because it was a perfect match."*
 
@@ -57,7 +57,8 @@ AGENTS.md                       Agent brief for Cursor / Codex
 
 ## Current prototype features
 
-- **Physical shop hub** — ShiftBoard prompt, shift select overlay, open/closed sign
+- **Physical shop hub** — Traffic Board prompt, traffic-window overlay, open/closed sign
+- **Traffic Board V1** — session-only rotating traffic windows; Scrap Rush stays available as the normal-day fallback
 - **Shift loop** — profit targets, seller visits, buyer visits, Closing Rush, liquidation
 - **Seller haggling** — tactic-based negotiation (heat, tells, inspect)
 - **Buyer visits and matching** — category/traits → match labels and payout bonuses
@@ -66,13 +67,13 @@ AGENTS.md                       Agent brief for Cursor / Codex
 - **Stash V1** — server-authoritative, session-only haggled item storage via StashBin
 - **Session display/stash persistence** — DisplayShelf and stash items persist across shifts during the same server session (not permanent saves)
 - **Display influence** — displayed categories/traits bias buyer traffic roll weights
-- **Demand Preview V1** — ShiftBoard `?` preview shows likely buyers, good categories/traits, and display effects per shift (**Prototype**)
+- **Demand Preview V1** — Traffic Board `?` preview shows likely buyers, good categories/traits, and display effects per shift (**Prototype**)
 - **Physical presentation** — customer rigs at `CustomerSpot`, item props at `CounterItemSpot`, shelf props
 - **Deal archetypes** — weighted deal shapes (scam traps, jackpots, buyer setups, etc.)
 - **Ctrl+U Studio debug overlay** — shift/deal/inventory diagnostics and Studio debug actions
 - **Hub pickup props** — client-only decorative pick up / place / stash (session-only; **not** economy or saves)
 
-**Not built yet:** DataStore saves, permanent stash saves, collection log, relics, full calendar/events (dates, timers), unified scavenging + haggled item economy, shop upgrades.
+**Not built yet:** DataStore saves, permanent stash saves, collection log, relics, real-time calendar/events (dates, timers), unified scavenging + haggled item economy, shop upgrades.
 
 **Design warning:** scavenging and haggling must eventually feed **one** object economy — not two competing money loops. See [GDD](docs/GDD.md#two-economy-problem).
 

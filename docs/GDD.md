@@ -118,7 +118,7 @@ Repeat
 
 What players can do in the **current repo**:
 
-1. Walk to **ShiftBoard** in the physical shop hub and start a shift.
+1. Walk to the **Traffic Board** in the physical shop hub and pick an available traffic window.
 2. **Seller visits** bring weird items; player haggles, inspects, buys, or passes.
 3. Bought items enter **limited working inventory** on the InventoryShelf (3 slots; resets each shift).
 4. Player may **Hold Back** an item to the DisplayShelf or move items through a session-only StashBin.
@@ -136,7 +136,7 @@ Separately (decorative only): **hub pickup props** can be picked up outside, pla
 ### Prototype loop diagram
 
 ```text
-ShiftBoard → Start Shift
+Traffic Board → Start Traffic Window
     ↓
 Buying Phase: Seller → Haggle/Buy/Pass → InventoryShelf
     ↓
@@ -270,7 +270,11 @@ Displayed categories and traits apply weight bonuses to buyer visit rolls (`Disp
 
 ### Demand Preview — **Prototype**
 
-ShiftBoard shift select shows a `?` demand preview per shift: likely buyers, good categories/traits, current display appeal, and which buyers the display may attract. Informational only — does not change rolls. Not a calendar.
+Traffic Board shift select shows a `?` demand preview per shift: likely buyers, good categories/traits, current display appeal, and which buyers the display may attract. Informational only — does not change rolls.
+
+### Traffic Board V1 — **Prototype**
+
+Session-only rotating traffic windows wrap the existing shift configs. Scrap Rush is available every board as the normal-day fallback; Collector Convention and Black Market Night rotate as event-like opportunities. The board advances after each completed shift. This is not a real-time calendar, not global, and not persistent.
 
 ### Counter and shelf presentation — **Prototype**
 
@@ -300,7 +304,7 @@ Per-shift `dealArchetypeWeights` and `buyerWeights` in [Shifts.lua](../src/Repli
 
 ### Shop hub — **Prototype**
 
-- **ShiftBoard** `ProximityPrompt` opens shift selection overlay; starts shift via existing remotes.
+- **Traffic Board** uses the existing `ShiftBoard` part / `ProximityPrompt` to open the traffic-window overlay; starts shifts via existing remotes.
 - **OpenClosedSign** updates OPEN/CLOSED from shift state (client visual).
 - **CustomerSpot** exists as a future presentation marker (no NPC pathfinding).
 - Physical hierarchy expected under `Workspace.World` (Outside, Shop, JunkLot, DisplayShelf, StashBin, etc.).
@@ -343,7 +347,7 @@ Workspace
 
 ### Current — **Prototype**
 
-Shift start from physical board, client sign, decorative hub props, deal UI during active shift, InventoryShelf/DisplayShelf/Stash routing, session display/stash persistence, counter and visitor presentation, Studio debug overlay.
+Traffic-window start from physical board, client sign, decorative hub props, deal UI during active shift, InventoryShelf/DisplayShelf/Stash routing, session display/stash persistence, counter and visitor presentation, Studio debug overlay.
 
 ### Future — **Planned / future direction**
 
@@ -353,7 +357,7 @@ Open/close shop as core verb; stash/display for **all** objects; calendar board;
 
 ## Shifts (prototype implementation)
 
-**Status:** **Prototype** — code and config still use the word *shift*. Long-term, shifts are an analog of **shop-open / event traffic windows**, not a permanent menu of three static modes.
+**Status:** **Prototype** — code and config still use the word *shift*. Traffic Board V1 now rotates the available shift windows in the current session. Long-term, shifts are an analog of **shop-open / event traffic windows**, not a permanent menu of three static modes.
 
 | Phase | What happens |
 |-------|----------------|
@@ -369,9 +373,9 @@ Open/close shop as core verb; stash/display for **all** objects; calendar board;
 | **Collector Convention** | Hold for match; more traps/bad stock; collector-biased buyers |
 | **Black Market Night** | Scam/jackpot heavy; volatile buyers; highest target |
 
-### Future role — **Future direction**
+### Current traffic-board role — **Prototype**
 
-Scrap Rush ≈ normal day traffic. Collector Convention ≈ collectible demand event. Black Market Night ≈ high-volatility event. A **calendar** replaces static menu picks over time.
+Scrap Rush ≈ normal day traffic and is available every board. Collector Convention ≈ collectible demand event. Black Market Night ≈ high-volatility event. Traffic Board V1 rotates these windows after shift end; a real-time **calendar** can replace this later.
 
 ---
 
@@ -440,7 +444,7 @@ Future design must use **slot limits** on stash and display so players curate, n
 
 **Future direction:** buyers are the **main money engine** during open shop hours.
 
-**Prototype today:** buyer visits, matching labels/bonuses, **display influence** on buyer traffic roll weights, and **Demand Preview** on the ShiftBoard before starting a shift. Preview is approximate — not a calendar or guarantee.
+**Prototype today:** buyer visits, matching labels/bonuses, **display influence** on buyer traffic roll weights, **Demand Preview**, and Traffic Board V1 before starting a shift. Preview is approximate — not a calendar or guarantee.
 
 Buyer types: scavengers, mechanics, collectors, black market dealers, alien tourists, robot appraisers, cultists, military buyers, desperate weirdos.
 
@@ -458,9 +462,9 @@ Future: sellers are **rarer and more exciting** — nervous traveler with suspic
 
 ## Calendar and events (planned)
 
-**Status:** **Planned** — not in repo.
+**Status:** **Planned** — not in repo as real-time dates/timers. Traffic Board V1 is a session-only prototype wrapper around existing shifts.
 
-Player should not pick three static shifts forever. A schedule drives demand:
+Player should not pick three static shifts forever. Traffic Board V1 is the first prototype step; later, a schedule drives demand:
 
 Normal Day · Scrap Rush · Collector Convention · Black Market Night · Repair Fair · Estate Sale · Alien Caravan · Cult Auction · Vault Opening · …
 
@@ -619,15 +623,16 @@ If not → wait.
 | Layer | Status |
 |-------|--------|
 | Shift haggle loop | **Prototype** — playable |
-| Shop hub + ShiftBoard | **Prototype** |
+| Shop hub + Traffic Board | **Prototype** |
 | InventoryShelf + DisplayShelf + Stash routing | **Prototype** |
 | Session display/stash persistence | **Prototype** — same server session only |
 | Display influence on buyer traffic | **Prototype** |
-| Demand Preview V1 (ShiftBoard) | **Prototype** |
+| Demand Preview V1 (Traffic Board) | **Prototype** |
+| Traffic Board V1 | **Prototype** — session-only rotating traffic windows |
 | Counter / shelf / customer presentation | **Prototype** |
 | Ctrl+U debug overlay + Studio actions | **Prototype** |
 | Hub pickup props | **Prototype** — decorative only |
-| Calendar / event schedule | **Planned** — not built |
+| Real-time calendar / event schedule | **Planned** — not built |
 | Permanent stash saves / DataStores / relics | **Not started** |
 
 See [ROADMAP.md](ROADMAP.md) for milestone order and [Current Scope Snapshot](ROADMAP.md#current-scope-snapshot).
@@ -676,7 +681,8 @@ See [ROADMAP.md](ROADMAP.md) for milestone order and [Current Scope Snapshot](RO
 | **Stash** | Session-only haggled item storage; not demand influence or permanent save (**Prototype**) |
 | **Session display/stash persistence** | Display and stash items survive shift end in same server session; not permanent (**Prototype**) |
 | **Display influence** | Displayed categories/traits bias buyer visit roll weights (**Prototype**) |
-| **Demand Preview** | ShiftBoard `?` panel: likely buyers, good stock, display match hints (**Prototype**) |
+| **Demand Preview** | Traffic Board `?` panel: likely buyers, good stock, display match hints (**Prototype**) |
+| **Traffic Board** | Session-only rotating set of available shift windows; not dates/timers (**Prototype**) |
 | **Seller visit** | Buying opportunity during a shift |
 | **Buyer visit** | Selling opportunity; pick inventory item |
 | **Closing Rush** | Final cashout after sellers exhausted |
@@ -684,7 +690,7 @@ See [ROADMAP.md](ROADMAP.md) for milestone order and [Current Scope Snapshot](RO
 | **Buyer match** | Fit between item and buyer preferences |
 | **Deal archetype** | Authored deal shape at generation time |
 | **Hub prop** | Client-only decorative pickup (**Prototype**) |
-| **Shop open** | Future core verb; ShiftBoard is prototype entry (**Planned**) |
+| **Shop open** | Future core verb; Traffic Board is prototype entry (**Planned**) |
 | **Calendar event** | Scheduled demand window with dates/timers (**Planned**) |
 | **Relic** | Displayable/activatable shop modifier (**Future direction**) |
 

@@ -108,10 +108,18 @@ Move fixed issues here instead of deleting them immediately.
 ### Legacy shift buttons skipped Demand Preview
 
 Status: Fixed
-Area: ShiftBoard / UI
+Area: Traffic Board / UI
 Notes:
 - Removed the hidden deal-panel quick-start buttons and old `onStartShift` callback.
-- Client shift start now flows through the ShiftBoard selector path.
+- Client shift start now flows through the Traffic Board selector path.
+
+### Traffic window bypass via stale start paths
+
+Status: Fixed
+Area: Traffic Board / ShiftService
+Notes:
+- No old quick-start buttons or `onStartShift` handler remain in the client.
+- `StartShift` now rejects known shifts that are not available on the current traffic board.
 
 ### Display items wiped during shift end
 
