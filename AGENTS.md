@@ -4,9 +4,11 @@ You are working on **Wasteland Pawn**, a Roblox game built with Luau and Rojo.
 
 **Vision:** a weird wasteland **shopkeeping** game — acquire objects, learn value, decide sell / stash / display / hold, open the shop during the right traffic or event, sell to matching buyers.
 
-**Current repo reality:** a **shift-based prototype** (sellers, shift inventory, buyers, Closing Rush) wrapped in a physical **shop hub**. That loop is playable DNA, not the final structure.
+**Current repo reality:** a **shift-based prototype** (sellers, working inventory, display routing, buyers, Closing Rush) wrapped in a physical **shop hub**. That loop is playable DNA, not the final structure.
 
 Haggling is the **resolution layer**. **Object routing** (what to keep, who to sell to, when to open) is the bigger game.
+
+**Design voice:** Physical world. Fast decisions. The shop is real. The UI is a tool.
 
 ---
 
@@ -17,7 +19,8 @@ Before making changes, read:
 1. `AGENTS.md` (this file)
 2. `README.md`
 3. `docs/GDD.md` (design source of truth, v0.3)
-4. `docs/ROADMAP.md`
+4. `docs/ROADMAP.md` (milestones and [current scope snapshot](docs/ROADMAP.md#current-scope-snapshot))
+5. `docs/known_issues.md` (bugs and risks — when touching fragile systems)
 
 If a request conflicts with GDD or Roadmap, call that out before implementing.
 
@@ -67,11 +70,14 @@ Not a realistic pawn sim or tycoon.
 ```text
 Start shift at ShiftBoard
 Buy weird items from sellers (haggle)
-Hold in limited shift inventory
-Match items to buyers (haggle)
+Hold in limited InventoryShelf working stock
+(Optional) Hold Back → DisplayShelf
+Match items to buyers (haggle); display influences buyer traffic
 Closing Rush / liquidation
 Hit quota or fail
 ```
+
+DisplayShelf items persist across shifts **within the same server session**. Not permanent saves.
 
 **Target loop (future direction — not fully built):**
 
@@ -123,8 +129,8 @@ Unless a milestone has actually merged:
 * global synchronized events
 * unified object inventory (hub props + haggled items)
 * relics / shop modifiers
-* persistent stash or display for haggled items
-* meaningful shop decoration affecting demand
+* permanent stash or DataStore display saves
+* meaningful shop decoration affecting demand beyond current display influence
 
 ## Sellers still matter
 
@@ -197,13 +203,18 @@ Server services own gameplay truth. Client controllers request actions and displ
 | System | Status |
 |--------|--------|
 | Seller / buyer haggling | **Prototype** |
-| Shift inventory (3 slots, shift-scoped) | **Prototype** |
+| InventoryShelf working stock (shift-scoped) | **Prototype** |
+| DisplayShelf haggled item routing | **Prototype** |
+| Session display persistence | **Prototype** — same server session only |
+| Display influence on buyer traffic | **Prototype** |
 | Buyer visits + matching | **Prototype** |
 | Closing Rush + liquidation | **Prototype** |
 | Deal archetypes + shift `buyerWeights` | **Prototype** |
 | Shop hub (ShiftBoard, overlay, sign) | **Prototype** |
+| Counter / shelf / customer presentation | **Prototype** |
+| Ctrl+U debug overlay + Studio actions | **Prototype** |
 | Hub pickup props | **Prototype** — client-only decorative |
-| Calendar, persistence, relics, unified objects | **Not started** |
+| Demand Preview, permanent stash, calendar, relics, unified objects | **Not started** |
 
 Do not casually replace working prototype systems. Improve only when the task requires it.
 
@@ -251,12 +262,12 @@ No large UI polish pass unless explicitly requested.
 
 Follow `docs/ROADMAP.md`. Summary:
 
-1. Stabilize hub + shift prototype (now)
+1. Playtest hub + shift prototype; Demand Preview V1 (now)
 2. Object model unification **plan**
-3. Haggled item → stash/display prototype (server-authoritative)
+3. Haggled display routing (**Prototype**); stash + permanent persistence (**Planned**)
 4. Customer-demand / calendar prototype (shifts as traffic-window analog)
 5. Rare walk-in buyer/seller prototype
-6. Later: calendar events, relics, collection, persistence, social visits
+6. Later: calendar events, relics, collection, DataStores, social visits
 
 Do not skip ahead unless explicitly asked.
 

@@ -16,6 +16,36 @@ Haggling resolves deals. The bigger game is **object routing**: when to sell, wh
 
 ---
 
+## Current Scope Snapshot
+
+The current game is a physical-shop shift prototype.
+
+**Built enough to test:**
+
+- buying from sellers
+- buyer visits
+- matching items to buyers
+- holding working inventory
+- displaying haggled items
+- session display persistence
+- display influence on buyer traffic
+- Closing Rush and liquidation
+
+**Next design target:**
+
+- make demand visible before opening the shop (Demand Preview V1)
+
+**Still intentionally out of scope:**
+
+- permanent saves
+- stash
+- relics
+- collection log
+- full calendar
+- unified object economy
+
+---
+
 ## Done / mostly working (current repo)
 
 | Area | Status |
@@ -24,7 +54,7 @@ Haggling resolves deals. The bigger game is **object routing**: when to sell, wh
 | Buyer haggling (tactics, heat, tells) | **Prototype** |
 | Item traits & categories | **Implemented** (configs) |
 | Buyer matching (score, labels, bonuses) | **Prototype** |
-| Shift inventory (limited slots, shift-scoped) | **Prototype** |
+| Shift inventory — InventoryShelf working stock | **Prototype** |
 | Buyer visits (pick item from inventory) | **Prototype** |
 | Payout summaries | **Prototype** |
 | Closing Rush + liquidation | **Prototype** |
@@ -37,35 +67,31 @@ Haggling resolves deals. The bigger game is **object routing**: when to sell, wh
 | OpenClosedSign (client visual) | **Prototype** |
 | Hub pickup props (pick up / place / stash) | **Prototype** — decorative only; see GDD |
 | Customer counter presentation (`CustomerPresentationController`, cloned visitor rigs) | **Prototype** |
+| Item counter props at `CounterItemSpot` | **Prototype** |
+| InventoryShelf presentation | **Prototype** |
+| DisplayShelf haggled item routing (Hold Back → display) | **Prototype** |
+| Session display persistence (same server session) | **Prototype** |
+| Display influence on buyer traffic | **Prototype** |
+| Ctrl+U debug overlay + Studio debug actions | **Prototype** |
 
 ---
 
 ## Now
 
-**Goal:** Stabilize the physical shop + shift prototype and make normal customer traffic feel good before building calendar or persistence systems.
+**Goal:** Docs sync, playtest the current loop, and make demand readable before building calendar or persistence systems.
 
-- [ ] Playtest shift start from ShiftBoard end-to-end
-- [ ] Playtest Closing Rush pacing and liquidation clarity
-- [ ] Verify buyer matching still matters across shift types
-- [ ] Playtest customer counter presentation at `CustomerSpot` (visitor rigs + labels)
-- [ ] Shop open / close flow polish (beyond client sign text)
-- [ ] Make Scrap Rush feel like a reliable “normal day” traffic baseline
-- [ ] Keep hub pickup props clearly separate from shift economy in playtests
+- [ ] Docs sync / playtest current loop end-to-end
+- [ ] Demand Preview V1 on ShiftBoard (show upcoming buyer/demand hints before shift start)
+- [ ] Scrap Rush normal-day feel pass
+- [ ] Buyer traffic readability (match labels, influence, pacing)
 
-**Inventory shelf prompt mode (BuyerVisit vs Hold Back):**
+**Stabilize (still worth tracking):**
 
-- [ ] BuyerVisit starts
-- [ ] InventoryShelf item shows exactly one prompt: `Offer <Item Name>`
-- [ ] Pressing prompt starts Selling and moves item to CounterItemSpot
-- [ ] No Hold Back / Display action fires during BuyerVisit
-- [ ] Outside BuyerVisit, same item shows exactly one prompt: `Hold Back`
-- [ ] Pressing Hold Back moves item to DisplayShelf
-- [ ] No SelectInventoryItemForBuyer call fires when pressing Hold Back
-- [ ] Rapid phase changes do not leave stale prompts or stale callbacks
-- [ ] Server rejects DisplayInventoryItem during BuyerVisit with clear error
-- [ ] Displayed items still cannot be offered to buyers
+- [ ] InventoryShelf prompt mode: Offer only during BuyerVisit; Hold Back only outside BuyerVisit
+- [ ] Server rejects display items for buyer offers
+- [ ] Rapid phase changes do not leave stale shelf prompts
 
-**Avoid:** Calendar systems, DataStores, relics, unified object inventory, or scavenging economy until hub + shift prototype feels solid.
+**Avoid:** Calendar systems, DataStores, relics, unified object inventory, or scavenging economy until demand preview and the shift loop feel solid.
 
 ---
 
@@ -73,10 +99,12 @@ Haggling resolves deals. The bigger game is **object routing**: when to sell, wh
 
 | Milestone | Status | Notes |
 |-----------|--------|-------|
-| Item counter props at `CounterItemSpot` | **Planned** | Clone from `ReplicatedStorage.Assets.Items`; client-only presentation |
+| Demand Preview V1 | **Planned** | ShiftBoard shows readable demand/traffic hints before opening |
+| ShiftBoard info popup | **Planned** | Clearer shift/event info without full calendar |
+| Normal Day / Scrap Rush polish | **Planned** | Reliable baseline traffic feel |
+| Stash routing for haggled items | **Planned** | Server-authoritative; display routing exists; stash does not |
 | Object model unification **plan** | **Planned** | One object ecosystem; hub pickups + haggled items converge later |
-| Haggled item → stash/display decision prototype | **Planned** | Server-authoritative; not hub-prop decorative layer |
-| Customer-demand-focused shift/calendar prototype | **Planned** | Shifts as prototype of event/traffic windows |
+| Calendar Events V1 | **Planned** | After demand preview feels good; shifts as traffic-window analog |
 | Rare walk-in buyer/seller prototype | **Planned** | Sellers stay special; buyers remain main money engine |
 
 ---
@@ -85,13 +113,15 @@ Haggling resolves deals. The bigger game is **object routing**: when to sell, wh
 
 | Milestone | Status |
 |-----------|--------|
+| DataStore / persistence | **Future direction** |
+| Permanent stash | **Future direction** |
+| Collection log | **Future direction** |
 | Local calendar events | **Future direction** |
 | Global synchronized events (rare) | **Future direction** |
 | Relic / display modifiers | **Future direction** |
 | Storage and display slot upgrades | **Future direction** |
-| Collection log | **Future direction** |
+| Unified object inventory | **Future direction** |
 | Reputation / faction demand | **Future direction** |
-| DataStore / persistence | **Future direction** |
 | Social shop visits | **Future direction** |
 | More weird item content | **Future direction** |
 

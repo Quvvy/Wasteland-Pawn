@@ -120,13 +120,16 @@ What players can do in the **current repo**:
 
 1. Walk to **ShiftBoard** in the physical shop hub and start a shift.
 2. **Seller visits** bring weird items; player haggles, inspects, buys, or passes.
-3. Bought items enter **limited shift inventory** (3 slots; resets each shift).
-4. **Buyer visits** occur; player chooses which held item to offer.
-5. **Buyer matching** affects interest and bonuses.
-6. Player haggles the sale.
-7. Sellers run out; remaining inventory enters **Closing Rush** or shift ends.
-8. Unsold items may **liquidate** at a bad rate (~35%).
-9. Shift result vs profit quota.
+3. Bought items enter **limited working inventory** on the InventoryShelf (3 slots; resets each shift).
+4. Player may **Hold Back** an item to the DisplayShelf instead of offering it during a buyer visit.
+5. **Buyer visits** occur; player chooses which held item to offer.
+6. **Buyer matching** affects interest and bonuses. **Display influence** biases which buyers are more likely to visit based on displayed categories/traits.
+7. Player haggles the sale.
+8. Sellers run out; remaining inventory enters **Closing Rush** or shift ends.
+9. Unsold working-stock items may **liquidate** at a bad rate (~35%). DisplayShelf items are excluded from liquidation.
+10. Shift result vs profit quota.
+
+**Session display persistence:** DisplayShelf items survive shift end within the same server session. Rejoin and server reset clear them. This is not permanent save data.
 
 Separately (decorative only): **hub pickup props** can be picked up outside, placed on display slots, or dropped in the stash bin — they do not affect scraps, shift inventory, or saves.
 
@@ -135,7 +138,9 @@ Separately (decorative only): **hub pickup props** can be picked up outside, pla
 ```text
 ShiftBoard → Start Shift
     ↓
-Buying Phase: Seller → Haggle/Buy/Pass → Shift Inventory
+Buying Phase: Seller → Haggle/Buy/Pass → InventoryShelf
+    ↓
+(Optional) Hold Back → DisplayShelf
     ↓
 Buyer Visit → Choose Item → Sell / Hold / Skip
     ↓
@@ -243,9 +248,31 @@ Buy tactics: Lowball, Split Difference, Point Out Flaw, Pressure, Accept Price, 
 
 Sell tactics: Small Bump, Pitch Value, Hold Firm, Bluff, Accept Offer, Keep / Skip buyer.
 
-### Shift inventory — **Prototype**
+### Shift inventory (InventoryShelf) — **Prototype**
 
-3 slots per shift; server-authoritative; resets each shift; no DataStore.
+3 working-stock slots per shift; server-authoritative; resets each shift; no DataStore.
+
+### DisplayShelf haggled item display — **Prototype**
+
+Server-authoritative routing from InventoryShelf to DisplayShelf via Hold Back. Displayed items are not offerable to buyers until returned to working stock. Client shelf props mirror server `displayItems`.
+
+### Session display persistence — **Prototype**
+
+`location == "display"` items persist across shifts within the same server session. Liquidation only touches working inventory. Rejoin and server reset clear display. Not DataStore persistence.
+
+### Display influence — **Prototype**
+
+Displayed categories and traits apply weight bonuses to buyer visit rolls (`DisplayInfluence.lua`). This biases traffic; it is not a full Demand Preview UI yet.
+
+### Counter and shelf presentation — **Prototype**
+
+- **CounterItemSpot** — item prop during seller haggle and buyer sell phases (`ItemPresentationController`).
+- **InventoryShelf** / **DisplayShelf** — client props and prompts for working stock and display routing.
+- **CustomerSpot** — cloned visitor rigs during visits (`CustomerPresentationController`).
+
+### Studio debug tools — **Prototype**
+
+Ctrl+U debug overlay (shift, deal, inventory, world, prompts) and Studio-gated debug actions (`DebugService`). Not player-facing.
 
 ### Buyer visits + matching — **Prototype**
 
@@ -306,7 +333,7 @@ Workspace
 
 ### Current — **Prototype**
 
-Shift start from physical board, client sign, decorative hub props, deal UI during active shift.
+Shift start from physical board, client sign, decorative hub props, deal UI during active shift, InventoryShelf/DisplayShelf routing, session display persistence, counter and visitor presentation, Studio debug overlay.
 
 ### Future — **Planned / future direction**
 
@@ -365,7 +392,7 @@ Categories and traits live in configs. Item **content** can expand over time.
 
 ## Object ecosystem (planned)
 
-**Status:** **Planned** — not one unified inventory yet.
+**Status:** **Planned** — not one unified inventory yet. Haggled-item display routing exists as an early **Prototype** slice; stash, relics, and hub-prop convergence do not.
 
 Eventually all sources feed one mental model: *"A weird object I found."*
 
@@ -382,24 +409,26 @@ Sources (future): scavenging, walk-in sellers, event rewards, rare customers, ha
 
 ---
 
-## Player decisions: sell / stash / display / activate (planned)
+## Player decisions: sell / stash / display / activate
 
-| Decision | Meaning |
-|----------|---------|
-| **Sell** | Immediate scraps |
-| **Stash** | Save for better event, buyer, or collection |
-| **Display** | Shop identity; possible future demand influence |
-| **Activate** | Relic modifiers (future) |
+| Decision | Status | Meaning |
+|----------|--------|---------|
+| **Sell** | **Prototype** | Immediate scraps via buyer haggle |
+| **Display** (haggled items) | **Prototype** | Route to DisplayShelf; session persistence; influences buyer traffic |
+| **Stash** | **Planned** | Save for better event, buyer, or collection — not built for haggled items |
+| **Activate** | **Future direction** | Relic modifiers |
 
 Future design must use **slot limits** on stash and display so players curate, not hoard infinitely.
 
-**Not implemented** for haggled items or persistent stash.
+**Permanent stash and DataStore saves are not implemented.**
 
 ---
 
 ## Buyers and customer traffic
 
 **Future direction:** buyers are the **main money engine** during open shop hours.
+
+**Prototype today:** buyer visits, matching labels/bonuses, and **display influence** on buyer traffic roll weights. Display influence is not the same as Demand Preview — players do not yet see upcoming demand before opening.
 
 Buyer types: scavengers, mechanics, collectors, black market dealers, alien tourists, robot appraisers, cultists, military buyers, desperate weirdos.
 
@@ -521,7 +550,8 @@ Receipt paper, price tags, stamped labels, clarity over decoration. Shift/deal U
 | System | Status |
 |--------|--------|
 | Collection log | **Future direction** |
-| Shop display (meaningful) | **Planned** |
+| Shop display (haggled items + influence) | **Prototype** |
+| Permanent stash / display saves | **Future direction** |
 | Shop customization (fixed slots) | **Future direction** |
 | DataStore / persistence | **Future direction** |
 | Reputation / factions | **Future direction** |
@@ -549,7 +579,9 @@ Examples (not implemented):
 5. **Do not remove sellers** — make them special, not constant.
 6. **Do not turn this into a tycoon** — no idle generators, employees, rebirth ladders.
 7. **Do not document hub pickups as real economy** — they are client-only decorative prototype.
-8. **Do not imply calendar, relics, unified stash, or persistent display are built** until milestones ship.
+8. **Do not imply calendar, relics, permanent stash, or DataStore saves are built** until milestones ship.
+9. **Do not confuse display influence with Demand Preview** — influence biases buyer rolls; preview UI is not built.
+10. **Do not claim session display persistence is permanent** — rejoin and server reset clear display.
 
 ---
 
@@ -576,10 +608,16 @@ If not → wait.
 |-------|--------|
 | Shift haggle loop | **Prototype** — playable |
 | Shop hub + ShiftBoard | **Prototype** |
+| InventoryShelf + DisplayShelf routing | **Prototype** |
+| Session display persistence | **Prototype** — same server session only |
+| Display influence on buyer traffic | **Prototype** |
+| Counter / shelf / customer presentation | **Prototype** |
+| Ctrl+U debug overlay + Studio actions | **Prototype** |
 | Hub pickup props | **Prototype** — decorative only |
-| Calendar / persistence / relics | **Not started** |
+| Demand Preview / calendar | **Planned** — not built |
+| Permanent stash / DataStores / relics | **Not started** |
 
-See [ROADMAP.md](ROADMAP.md) for milestone order.
+See [ROADMAP.md](ROADMAP.md) for milestone order and [Current Scope Snapshot](ROADMAP.md#current-scope-snapshot).
 
 ---
 
@@ -620,13 +658,18 @@ See [ROADMAP.md](ROADMAP.md) for milestone order.
 | Term | Definition |
 |------|------------|
 | **Shift** | Prototype run: sellers, buyers, inventory cap, quota (**Prototype**) |
+| **InventoryShelf** | Working stock slots; resets each shift (**Prototype**) |
+| **DisplayShelf** | Server-routed display slots for haggled items (**Prototype**) |
+| **Session display persistence** | Display items survive shift end in same server session; not permanent (**Prototype**) |
+| **Display influence** | Displayed categories/traits bias buyer visit roll weights (**Prototype**) |
 | **Seller visit** | Buying opportunity during a shift |
 | **Buyer visit** | Selling opportunity; pick inventory item |
 | **Closing Rush** | Final cashout after sellers exhausted |
-| **Liquidation** | Bad fallback for unsold items (~35%) |
+| **Liquidation** | Bad fallback for unsold working-stock items (~35%) |
 | **Buyer match** | Fit between item and buyer preferences |
 | **Deal archetype** | Authored deal shape at generation time |
 | **Hub prop** | Client-only decorative pickup (**Prototype**) |
+| **Demand Preview** | Pre-shift readable demand/traffic hints (**Planned**) |
 | **Shop open** | Future core verb; ShiftBoard is prototype entry (**Planned**) |
 | **Calendar event** | Demand window affecting buyers/traffic (**Planned**) |
 | **Relic** | Displayable/activatable shop modifier (**Future direction**) |
