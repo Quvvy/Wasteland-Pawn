@@ -31,6 +31,7 @@ The current game is a physical-shop shift prototype.
 - session-only haggled item stash
 - display influence on buyer traffic
 - session-only Traffic Board V1
+- Rare Buyer Walk-In V1
 - Closing Rush and liquidation
 
 **Next design target:**
@@ -79,6 +80,7 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 | Display influence on buyer traffic | **Prototype** |
 | Demand Preview V1 (Traffic Board `?` panel) | **Prototype** |
 | Traffic Board V1 (session-only traffic windows) | **Prototype** |
+| Rare Buyer Walk-In V1 | **Prototype** |
 | Ctrl+U debug overlay + Studio debug actions | **Prototype** |
 
 ---
@@ -111,7 +113,8 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 | Stash routing for haggled items | **Prototype** | Server-authoritative, session-only; permanent saves still future |
 | Object model unification plan + metadata helpers | **Prototype** | Plan drafted; `ObjectModel` aligns ids; decorative hub props have informational `objectId` mappings |
 | Calendar Events V1 | **Planned** | Later real-time/date system after Traffic Board proves useful |
-| Rare walk-in buyer/seller prototype | **Planned** | Sellers stay special; buyers remain main money engine |
+| Rare Buyer Walk-In V1 | **Prototype** | Existing buyers only; session-only, one extra Buying-phase buyer max per shift |
+| Rare walk-in seller prototype | **Planned** | Sellers stay special; buyers remain main money engine |
 
 ---
 

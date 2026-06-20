@@ -2,6 +2,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local RareWalkIns = require(Shared.Config.RareWalkIns)
 local Shifts = require(Shared.Config.Shifts)
 local TrafficCalendar = require(Shared.Config.TrafficCalendar)
 local Remotes = require(Shared.Net.Remotes)
@@ -168,6 +169,10 @@ function ShiftService:startShift(player: Player, shiftId: string?)
 		inventoryMaxSlots = inventorySlots,
 		buyerVisitEvery = buyerVisitEvery,
 		pendingBuyerVisit = false,
+		pendingBuyerVisitKind = nil,
+		pendingRareBuyerId = nil,
+		rareBuyerVisitsSeen = 0,
+		rareBuyerMax = RareWalkIns.getMaxPerShift(shift),
 		dealArchetypeWeights = shift.dealArchetypeWeights,
 		buyerWeights = shift.buyerWeights,
 		closingRushBuyerLimit = closingRushBuyerLimit,
@@ -220,6 +225,8 @@ function ShiftService:queueClosingRushBuyer(player: Player): boolean
 		return false
 	end
 	shift.pendingBuyerVisit = true
+	shift.pendingBuyerVisitKind = "scheduled"
+	shift.pendingRareBuyerId = nil
 	return true
 end
 
@@ -235,6 +242,8 @@ function ShiftService:enterClosingRush(player: Player)
 
 	shift.phase = PHASE_CLOSING_RUSH
 	shift.pendingBuyerVisit = true
+	shift.pendingBuyerVisitKind = "scheduled"
+	shift.pendingRareBuyerId = nil
 	if (shift.closingRushBuyersRemaining or 0) <= 0 then
 		self:liquidateRemainingInventory(player, "No Closing Rush buyers left")
 		return self:endShift(player)
@@ -255,6 +264,8 @@ function ShiftService:recordSellerVisitResolved(player: Player, forceBuyerVisit:
 
 	if forceBuyerVisit or (shift.buyerVisitEvery > 0 and shift.sellerVisitsResolved % shift.buyerVisitEvery == 0) then
 		shift.pendingBuyerVisit = true
+		shift.pendingBuyerVisitKind = "scheduled"
+		shift.pendingRareBuyerId = nil
 	end
 
 	if shift.sellerVisitsResolved >= shift.sellerVisitCount then
@@ -291,6 +302,37 @@ function ShiftService:shouldTriggerBuyerVisit(player: Player): boolean
 	return shift ~= nil and shift.active and not shift.ended and shift.pendingBuyerVisit == true
 end
 
+function ShiftService:canQueueRareBuyerVisit(player: Player): boolean
+	local shift = playerShifts[player]
+	if not shift or not shift.active or shift.ended or shift.phase ~= PHASE_BUYING then
+		return false
+	end
+	if shift.pendingBuyerVisit then
+		return false
+	end
+	if InventoryService:getCount(player) <= 0 then
+		return false
+	end
+	return (shift.rareBuyerVisitsSeen or 0) < (shift.rareBuyerMax or RareWalkIns.MAX_PER_SHIFT)
+end
+
+function ShiftService:queueRareBuyerVisit(player: Player, buyerId: string): boolean
+	if type(buyerId) ~= "string" or buyerId == "" then
+		return false
+	end
+	if not self:canQueueRareBuyerVisit(player) then
+		return false
+	end
+
+	local shift = playerShifts[player]
+	shift.pendingBuyerVisit = true
+	shift.pendingBuyerVisitKind = "rare"
+	shift.pendingRareBuyerId = buyerId
+	shift.rareBuyerVisitsSeen = (shift.rareBuyerVisitsSeen or 0) + 1
+	self:_pushState(player)
+	return true
+end
+
 function ShiftService:beginBuyerVisit(player: Player)
 	local shift = playerShifts[player]
 	if not shift or not shift.active or shift.ended or not shift.pendingBuyerVisit then
@@ -308,6 +350,9 @@ function ShiftService:beginBuyerVisit(player: Player)
 		shift.closingRushBuyersRemaining -= 1
 		shift.closingRushBuyersSeen = (shift.closingRushBuyersSeen or 0) + 1
 	end
+	if not shift.pendingBuyerVisitKind then
+		shift.pendingBuyerVisitKind = "scheduled"
+	end
 
 	self:_pushState(player)
 	return self:buildSnapshot(player)
@@ -320,6 +365,8 @@ function ShiftService:completeBuyerVisit(player: Player)
 	end
 
 	shift.pendingBuyerVisit = false
+	shift.pendingBuyerVisitKind = nil
+	shift.pendingRareBuyerId = nil
 	if shift.phase == PHASE_BUYING then
 		if shift.sellerVisitsResolved >= shift.sellerVisitCount then
 			if InventoryService:getCount(player) > 0 then
@@ -333,6 +380,7 @@ function ShiftService:completeBuyerVisit(player: Player)
 		end
 		if self:canRollClosingRushBuyer(player) then
 			shift.pendingBuyerVisit = true
+			shift.pendingBuyerVisitKind = "scheduled"
 		else
 			self:liquidateRemainingInventory(player, "Closing Rush buyers ran out")
 			return self:endShift(player)
@@ -435,6 +483,8 @@ function ShiftService:endShift(player: Player)
 	shift.ended = true
 	shift.phase = PHASE_ENDED
 	shift.pendingBuyerVisit = false
+	shift.pendingBuyerVisitKind = nil
+	shift.pendingRareBuyerId = nil
 	shift.success = shift.shiftProfit >= shift.targetProfit
 	shift.grade = getGrade(shift)
 	shift.resultTitle = getResultTitle(shift)
@@ -473,6 +523,10 @@ function ShiftService:buildSnapshot(player: Player)
 		inventoryMaxSlots = shift.inventoryMaxSlots,
 		buyerVisitEvery = shift.buyerVisitEvery,
 		pendingBuyerVisit = shift.pendingBuyerVisit,
+		pendingBuyerVisitKind = shift.pendingBuyerVisitKind,
+		pendingRareBuyerId = shift.pendingRareBuyerId,
+		rareBuyerVisitsSeen = shift.rareBuyerVisitsSeen or 0,
+		rareBuyerMax = shift.rareBuyerMax or RareWalkIns.MAX_PER_SHIFT,
 		closingRushBuyerLimit = shift.closingRushBuyerLimit,
 		closingRushBuyersRemaining = shift.closingRushBuyersRemaining,
 		closingRushBuyersSeen = shift.closingRushBuyersSeen,
@@ -504,6 +558,8 @@ function ShiftService:debugSetPendingBuyerVisit(player: Player): boolean
 	end
 
 	shift.pendingBuyerVisit = true
+	shift.pendingBuyerVisitKind = "scheduled"
+	shift.pendingRareBuyerId = nil
 	self:_pushState(player)
 	return true
 end

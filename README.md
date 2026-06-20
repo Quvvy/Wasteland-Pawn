@@ -62,6 +62,7 @@ AGENTS.md                       Agent brief for Cursor / Codex
 - **Shift loop** — profit targets, seller visits, buyer visits, Closing Rush, liquidation
 - **Seller haggling** — tactic-based negotiation (heat, tells, inspect)
 - **Buyer visits and matching** — category/traits → match labels and payout bonuses
+- **Rare Buyer Walk-In V1** — session-only, server-authoritative extra buyer chance during Buying; capped at one per shift
 - **Working inventory** — limited InventoryShelf slots per shift (server-authoritative; resets each shift)
 - **DisplayShelf haggled item display** — Hold Back routes bought items to display slots
 - **Stash V1** — server-authoritative, session-only haggled item storage via StashBin

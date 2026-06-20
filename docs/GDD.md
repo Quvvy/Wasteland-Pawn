@@ -290,6 +290,10 @@ Ctrl+U debug overlay (shift, deal, inventory, world, prompts) and Studio-gated d
 
 Player picks inventory item to offer. Match labels: Bad Match → … → Perfect Match. Bonuses are real cash.
 
+### Rare Buyer Walk-In V1 — **Prototype**
+
+During Buying, a server-authoritative rare buyer check can add one extra buyer visit when the player has working inventory and no scheduled buyer is already waiting. V1 uses existing buyer types, is capped at one rare buyer per shift, and is session-only shift prototype behavior. It is not a real-time calendar event, not global, and not persistent.
+
 ### Closing Rush — **Prototype**
 
 No more sellers; limited final buyers; liquidation fallback; quota after phase ends.
@@ -444,7 +448,7 @@ Future design must use **slot limits** on stash and display so players curate, n
 
 **Future direction:** buyers are the **main money engine** during open shop hours.
 
-**Prototype today:** buyer visits, matching labels/bonuses, **display influence** on buyer traffic roll weights, **Demand Preview**, and Traffic Board V1 before starting a shift. Preview is approximate — not a calendar or guarantee.
+**Prototype today:** buyer visits, rare buyer walk-ins, matching labels/bonuses, **display influence** on buyer traffic roll weights, **Demand Preview**, and Traffic Board V1 before starting a shift. Preview is approximate — not a calendar or guarantee.
 
 Buyer types: scavengers, mechanics, collectors, black market dealers, alien tourists, robot appraisers, cultists, military buyers, desperate weirdos.
 
@@ -629,6 +633,7 @@ If not → wait.
 | Display influence on buyer traffic | **Prototype** |
 | Demand Preview V1 (Traffic Board) | **Prototype** |
 | Traffic Board V1 | **Prototype** — session-only rotating traffic windows |
+| Rare Buyer Walk-In V1 | **Prototype** — existing buyers only; one extra Buying-phase buyer max per shift |
 | Counter / shelf / customer presentation | **Prototype** |
 | Ctrl+U debug overlay + Studio actions | **Prototype** |
 | Hub pickup props | **Prototype** — decorative only |

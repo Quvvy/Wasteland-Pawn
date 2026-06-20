@@ -59,6 +59,8 @@ function DebugService:runAction(player: Player, actionId: any, _payload: any)
 		return self:_giveRandomDisplayItem(player, Items.getRandom(debugRng))
 	elseif actionId == "ForceBuyerVisit" then
 		return DealService:debugForceBuyerVisit(player)
+	elseif actionId == "ForceRareBuyerVisit" then
+		return DealService:debugForceRareBuyerVisit(player)
 	elseif actionId == "SkipToClosingRush" then
 		return self:_skipToClosingRush(player)
 	elseif actionId == "EndShift" then

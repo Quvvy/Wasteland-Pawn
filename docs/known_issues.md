@@ -101,6 +101,17 @@ Notes:
 Possible Fix:
 - Add fuller after-hours inventory routing only when that design is ready.
 
+### Rare buyer pacing may feel noisy
+
+Status: Watch
+Area: Rare Buyer Walk-In / Shift pacing
+Risk: Extra buyers could make shifts feel too generous or interrupt seller rhythm if the chance is too high.
+Notes:
+- V1 is capped at one rare buyer per shift and only checks during Buying when working inventory exists.
+- Rare buyers are session-only prototype behavior, not calendar events or persistence.
+Possible Fix:
+- Tune chance, pools, or per-shift caps after playtesting.
+
 ## Recently Resolved
 
 Move fixed issues here instead of deleting them immediately.

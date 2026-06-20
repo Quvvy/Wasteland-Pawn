@@ -39,6 +39,7 @@ local ACTION_BUTTONS = {
 	{ id = "ClearDisplay", label = "Clear Display" },
 	{ id = "GiveRandomDisplayItem", label = "Give Random Display Item" },
 	{ id = "ForceBuyerVisit", label = "Force Buyer Visit" },
+	{ id = "ForceRareBuyerVisit", label = "Force Rare Buyer" },
 	{ id = "SkipToClosingRush", label = "Skip To Closing Rush" },
 	{ id = "EndShift", label = "End Shift" },
 }
@@ -129,6 +130,20 @@ local function formatListField(value: any): string
 	return table.concat(value, ", ")
 end
 
+local function formatTrafficUpcomingNames(traffic: any): string
+	if type(traffic) ~= "table" or type(traffic.upcomingBoards) ~= "table" then
+		return "-"
+	end
+
+	local names = {}
+	for _, board in traffic.upcomingBoards do
+		if type(board.boardName) == "string" and board.boardName ~= "" then
+			table.insert(names, board.boardName)
+		end
+	end
+	return if #names > 0 then table.concat(names, ", ") else "-"
+end
+
 local function formatInfluenceBonus(bonus: any): string
 	if type(bonus) ~= "number" then
 		return "n/a"
@@ -180,7 +195,7 @@ local function logDealSnapshotEvents(snapshot: any?)
 
 	if phase == "BuyerVisit" and lastLoggedPhase ~= "BuyerVisit" then
 		appendLog(
-			`BUYER VISIT | {field(snapshot.buyerName)} | display influence: {formatInfluenceBonus(snapshot.displayInfluenceBonus)}`
+			`BUYER VISIT | {field(snapshot.buyerName)} | kind={field(snapshot.buyerVisitKind)} | display influence: {formatInfluenceBonus(snapshot.displayInfluenceBonus)}`
 		)
 	end
 
@@ -226,13 +241,24 @@ local function formatShiftSection(): string
 	local phase = snapshot.phase or "?"
 	local profit = `{field(snapshot.shiftProfit)}/{field(snapshot.targetProfit)}`
 	local sellers = `{field(snapshot.dealsCompleted or snapshot.sellerVisitsResolved)}/{field(snapshot.sellerVisitCount or snapshot.dealCount)}`
-	local buyerFlag = if snapshot.pendingBuyerVisit then " | buyer waiting" else ""
+	local buyerFlag = if snapshot.pendingBuyerVisit
+		then ` | {if snapshot.pendingBuyerVisitKind == "rare" then "rare buyer" else "buyer"} waiting`
+		else ""
 
 	local lines = {
 		"=== SHIFT ===",
 		`{name} | {phase} | profit {profit} | sellers {sellers}{buyerFlag}`,
 		`cash: {field(deal and deal.playerCash)} | remaining sellers: {field(snapshot.dealsRemaining)}`,
+		`rare buyers: {field(snapshot.rareBuyerVisitsSeen)}/{field(snapshot.rareBuyerMax)}`,
 	}
+
+	local traffic = snapshot.traffic
+	if type(traffic) == "table" then
+		table.insert(
+			lines,
+			`traffic: {field(traffic.boardName)} | completed windows: {field(traffic.completedWindows)} | next: {formatTrafficUpcomingNames(traffic)}`
+		)
+	end
 
 	if snapshot.phase == "ClosingRush" then
 		table.insert(lines, `closing rush buyers: {field(snapshot.closingRushBuyersRemaining)}`)
@@ -269,6 +295,7 @@ local function formatDealSection(): string
 		)
 	elseif isBuyerFacingPhase(phase) then
 		table.insert(lines, `buyer: {field(snapshot.buyerName)} ({field(snapshot.buyerId)})`)
+		table.insert(lines, `visit kind: {field(snapshot.buyerVisitKind)} | rare: {field(snapshot.rareWalkInBuyer)}`)
 		table.insert(lines, `display influence: {formatInfluenceBonus(snapshot.displayInfluenceBonus)}`)
 		local matchedCats = formatListField(snapshot.displayInfluenceMatchedCategories)
 		local matchedTraits = formatListField(snapshot.displayInfluenceMatchedTraits)
@@ -775,7 +802,7 @@ local function buildOverlay()
 	local scroll = Instance.new("ScrollingFrame")
 	scroll.Name = "ContentScroll"
 	scroll.Position = UDim2.fromOffset(8, 72)
-	scroll.Size = UDim2.new(1, -16, 1, -170)
+	scroll.Size = UDim2.new(1, -16, 1, -216)
 	scroll.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
 	scroll.BackgroundTransparency = 0.2
 	scroll.BorderSizePixel = 0
@@ -802,7 +829,7 @@ local function buildOverlay()
 	actionsLabel.Name = "ActionsTitle"
 	actionsLabel.BackgroundTransparency = 1
 	actionsLabel.AnchorPoint = Vector2.new(0, 1)
-	actionsLabel.Position = UDim2.new(0, 8, 1, -92)
+	actionsLabel.Position = UDim2.new(0, 8, 1, -120)
 	actionsLabel.Size = UDim2.new(1, -16, 0, 18)
 	actionsLabel.Font = Enum.Font.Code
 	actionsLabel.TextSize = 13
@@ -816,7 +843,7 @@ local function buildOverlay()
 	actionsFrame.BackgroundTransparency = 1
 	actionsFrame.AnchorPoint = Vector2.new(0, 1)
 	actionsFrame.Position = UDim2.new(0, 8, 1, -8)
-	actionsFrame.Size = UDim2.new(1, -16, 0, 80)
+	actionsFrame.Size = UDim2.new(1, -16, 0, 108)
 	actionsFrame.Parent = root
 
 	local x = 0

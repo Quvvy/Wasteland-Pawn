@@ -161,6 +161,15 @@ local function formatLiquidationSummary(summary, cur: string): string
 	return `\nLiquidated {summary.itemCount} item(s) at {rate}% value.\nLiquidation cash: {summary.totalCash or 0} {cur} | Profit: {formatSignedAmount(summary.totalProfit)} {cur}`
 end
 
+local function formatNextTrafficSummary(traffic): string
+	if type(traffic) ~= "table" or type(traffic.boardName) ~= "string" or traffic.boardName == "" then
+		return ""
+	end
+
+	local subtitle = if type(traffic.boardSubtitle) == "string" and traffic.boardSubtitle ~= "" then ` - {traffic.boardSubtitle}` else ""
+	return `\nNext traffic: {traffic.boardName}{subtitle}`
+end
+
 local function createLabel(parent: Instance, name: string, text: string, position: UDim2, size: UDim2): TextLabel
 	local label = Instance.new("TextLabel")
 	label.Name = name
@@ -1315,7 +1324,7 @@ function UIController:updateSnapshot(snapshot)
 	refreshStashOverlay()
 
 	if phase == "BuyerSkipped" then
-		labels.customer.Text = "Buyer Visit Skipped"
+		labels.customer.Text = if snapshot.rareWalkInBuyer then "Rare Buyer Skipped" else "Buyer Visit Skipped"
 		labels.dialogue.Text = snapshot.dialogue or "A buyer came looking, but your shelves are empty."
 		labels.item.Text = ""
 		labels.prices.Text = ""
@@ -1334,7 +1343,7 @@ function UIController:updateSnapshot(snapshot)
 	local isBuyerVisit = phase == "BuyerVisit"
 	local isBuyerFacing = isSell or isBuyerVisit
 	labels.customer.Text = if isBuyerFacing
-		then `Buyer: {snapshot.buyerName or "?"}`
+		then `{if snapshot.rareWalkInBuyer then "Rare Buyer" else "Buyer"}: {snapshot.buyerName or "?"}`
 		else `Seller: {snapshot.customerName or "?"}`
 	local readHint = if isBuyerFacing then snapshot.buyerReadHint or snapshot.buyerWants else snapshot.sellerReadHint
 	labels.tell.Text = `Tell: {if isBuyerFacing then snapshot.buyerTell or "?" else snapshot.sellerTell or "?"}`
@@ -1462,9 +1471,12 @@ function UIController:updateShiftSnapshot(snapshot)
 		self:closeShiftSelect()
 		local phase = currentShiftSnapshot.phase or "Buying"
 		local activeDealPhase = currentSnapshot and currentSnapshot.phase
-		local buyerText = if currentShiftSnapshot.pendingBuyerVisit and activeDealPhase ~= "BuyerSkipped"
-			then " | Buyer waiting"
-			else ""
+		local buyerText = ""
+		if currentShiftSnapshot.pendingBuyerVisit and activeDealPhase ~= "BuyerSkipped" then
+			buyerText = if currentShiftSnapshot.pendingBuyerVisitKind == "rare"
+				then " | Rare buyer waiting"
+				else " | Buyer waiting"
+		end
 		if phase == "ClosingRush" then
 			local inventoryCount = currentInventorySnapshot and currentInventorySnapshot.usedSlots or 0
 			local inventoryMax = currentInventorySnapshot and currentInventorySnapshot.maxSlots or currentShiftSnapshot.inventoryMaxSlots or 3
@@ -1472,9 +1484,9 @@ function UIController:updateShiftSnapshot(snapshot)
 			labels.shift.Text = formatClosingRushShiftText(currentShiftSnapshot, cur, inventoryCount, inventoryMax)
 		else
 			local activityText = if activeDealPhase == "BuyerSkipped"
-				then "Buyer Visit Skipped"
+				then if currentSnapshot and currentSnapshot.rareWalkInBuyer then "Rare Buyer Skipped" else "Buyer Visit Skipped"
 				elseif activeDealPhase == "BuyerVisit" or activeDealPhase == "Selling"
-				then "Buyer Visit"
+				then if currentSnapshot and currentSnapshot.rareWalkInBuyer then "Rare Buyer Visit" else "Buyer Visit"
 				else "Buying"
 			labels.shift.Size = UDim2.fromOffset(416, 48)
 			labels.shift.Text =
@@ -1490,7 +1502,7 @@ function UIController:updateShiftSnapshot(snapshot)
 		labels.shift.Text =
 			`Shift: {currentShiftSnapshot.displayName or "?"} | Ended\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Sellers: {currentShiftSnapshot.dealsCompleted or 0} / {currentShiftSnapshot.sellerVisitCount or currentShiftSnapshot.dealCount or 0}`
 		labels.shiftResult.Text =
-			`{resultTitle}\nTarget: {currentShiftSnapshot.targetProfit or 0} {cur} | Profit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} {cur}\nGrade: {grade}{formatLiquidationSummary(currentShiftSnapshot.liquidationSummary, cur)}`
+			`{resultTitle}\nTarget: {currentShiftSnapshot.targetProfit or 0} {cur} | Profit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} {cur}\nGrade: {grade}{formatLiquidationSummary(currentShiftSnapshot.liquidationSummary, cur)}{formatNextTrafficSummary(currentShiftSnapshot.traffic)}`
 		labels.shiftResult.TextColor3 = if currentShiftSnapshot.success or grade == "Close"
 			then Color3.fromRGB(145, 235, 160)
 			else Color3.fromRGB(255, 170, 140)

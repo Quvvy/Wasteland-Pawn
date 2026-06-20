@@ -12,6 +12,7 @@ local NpcTells = require(Shared.Economy.NpcTells)
 local ItemValuation = require(Shared.Economy.ItemValuation)
 local BuyerMatch = require(Shared.Economy.BuyerMatch)
 local DisplayInfluence = require(Shared.Economy.DisplayInfluence)
+local RareWalkIns = require(Shared.Config.RareWalkIns)
 local Remotes = require(Shared.Net.Remotes)
 local TableUtil = require(Shared.Util.TableUtil)
 
@@ -536,6 +537,9 @@ function DealService:_buildSnapshot(player: Player, deal)
 		displayInfluenceBonus = deal.displayInfluenceBonus,
 		displayInfluenceMatchedCategories = deal.displayInfluenceMatchedCategories,
 		displayInfluenceMatchedTraits = deal.displayInfluenceMatchedTraits,
+		buyerVisitKind = deal.buyerVisitKind,
+		rareWalkInBuyer = deal.rareWalkInBuyer == true,
+		buyerVisitLabel = deal.buyerVisitLabel,
 		shift = ShiftService:buildSnapshot(player),
 	}
 
@@ -894,6 +898,25 @@ local function rollBuyerForVisit(_player: Player, rng: Random, shift, displayIte
 	return buyer, influenceByBuyerId
 end
 
+function DealService:_tryQueueRareBuyerVisit(player: Player): boolean
+	if not ShiftService:canQueueRareBuyerVisit(player) then
+		return false
+	end
+
+	local shift = ShiftService:getShift(player)
+	local rng = self:_getRng(player)
+	if not RareWalkIns.shouldTrigger(rng, shift) then
+		return false
+	end
+
+	local buyer = RareWalkIns.rollBuyer(shift, rng, InventoryService:getDisplayItems(player))
+	if not buyer then
+		return false
+	end
+
+	return ShiftService:queueRareBuyerVisit(player, buyer.id)
+end
+
 local function applyDisplayInfluenceFeedback(deal, buyer, influenceByBuyerId)
 	if not buyer then
 		return
@@ -1175,19 +1198,35 @@ function DealService:startBuyerVisit(player: Player)
 
 	local rng = self:_getRng(player)
 	local displayItems = InventoryService:getDisplayItems(player)
-	local buyer, influenceByBuyerId = rollBuyerForVisit(player, rng, shift, displayItems)
+	local buyerVisitKind = if shift and shift.pendingBuyerVisitKind == "rare" then "rare" else "scheduled"
+	local rareWalkInBuyer = buyerVisitKind == "rare"
+	local buyer
+	local influenceByBuyerId
+	if rareWalkInBuyer then
+		buyer = if shift and shift.pendingRareBuyerId then BuyerService:getBuyer(shift.pendingRareBuyerId) else nil
+		local _rareWeights
+		_rareWeights, influenceByBuyerId = RareWalkIns.buildAdjustedBuyerWeights(shift, displayItems)
+	else
+		buyer, influenceByBuyerId = rollBuyerForVisit(player, rng, shift, displayItems)
+	end
 	if not buyer then
 		return { ok = false, error = "No buyers configured" }
 	end
 
 	if InventoryService:getCount(player) <= 0 then
+		local dialogue = if rareWalkInBuyer
+			then `Rare walk-in: {buyer.displayName} came looking, but your shelves are empty.`
+			else `{buyer.displayName} came looking, but your shelves are empty.`
 		local deal = {
 			phase = "BuyerSkipped",
 			buyer = buyer,
 			buyerTell = NpcTells.forBuyer(buyer, nil, rng),
 			buyerReadHint = BuyerMatch.describeBuyer(buyer),
 			buyerWants = BuyerMatch.describeBuyer(buyer),
-			dialogue = `{buyer.displayName} came looking, but your shelves are empty.`,
+			buyerVisitKind = buyerVisitKind,
+			rareWalkInBuyer = rareWalkInBuyer,
+			buyerVisitLabel = if rareWalkInBuyer then "Rare Walk-In" else nil,
+			dialogue = dialogue,
 			dealSummary = {
 				resultText = "Buyer visit skipped. No inventory to offer.",
 			},
@@ -1206,7 +1245,12 @@ function DealService:startBuyerVisit(player: Player)
 		buyerReadHint = BuyerMatch.describeBuyer(buyer),
 		buyerWants = BuyerMatch.describeBuyer(buyer),
 		inventoryMatches = nil,
-		dialogue = `{buyer.openingLine} Choose an item from your shelves.`,
+		buyerVisitKind = buyerVisitKind,
+		rareWalkInBuyer = rareWalkInBuyer,
+		buyerVisitLabel = if rareWalkInBuyer then "Rare Walk-In" else nil,
+		dialogue = if rareWalkInBuyer
+			then `Rare walk-in: {buyer.openingLine} Choose an item from your shelves.`
+			else `{buyer.openingLine} Choose an item from your shelves.`,
 	}
 	applyDisplayInfluenceFeedback(deal, buyer, influenceByBuyerId)
 	deal.inventoryMatches = self:_buildInventoryMatches(player, buyer)
@@ -1354,6 +1398,9 @@ function DealService:_buildSaleDealFromInventory(entry, visitDeal)
 		buyerHeat = 0,
 		buyerHeatMax = HaggleTuning.heatMax,
 		dealSummary = nil,
+		buyerVisitKind = visitDeal.buyerVisitKind,
+		rareWalkInBuyer = visitDeal.rareWalkInBuyer == true,
+		buyerVisitLabel = visitDeal.buyerVisitLabel,
 		dialogue = "",
 	}
 end
@@ -1645,6 +1692,7 @@ function DealService:_scheduleAfterSellerResolution(player: Player, delay: numbe
 	local shift = ShiftService:getShift(player)
 	if shift and not shift.ended then
 		ShiftService:recordSellerVisitResolved(player, forceBuyerVisit)
+		self:_tryQueueRareBuyerVisit(player)
 	end
 
 	if self:_waitForManualAdvance(player, deal) then
@@ -1909,6 +1957,54 @@ function DealService:debugForceBuyerVisit(player: Player)
 	local deal = activeDeals[player]
 	local buyerName = deal and deal.buyer and deal.buyer.displayName or "buyer"
 	return { ok = true, message = `Forced buyer visit: {buyerName}` }
+end
+
+function DealService:debugForceRareBuyerVisit(player: Player)
+	if not RunService:IsStudio() then
+		return { ok = false, error = "Debug actions disabled" }
+	end
+
+	local unsafe = self:debugRejectUnsafePhase(player)
+	if unsafe then
+		return unsafe
+	end
+
+	local shift = ShiftService:getShift(player)
+	if not shift or not shift.active or shift.ended then
+		return { ok = false, error = "No active shift" }
+	end
+	if shift.phase ~= "Buying" then
+		return { ok = false, error = "Rare buyers only appear during Buying" }
+	end
+	if shift.pendingBuyerVisit then
+		return { ok = false, error = "Buyer visit already queued" }
+	end
+	if InventoryService:getCount(player) <= 0 then
+		return { ok = false, error = "No working inventory for rare buyer" }
+	end
+	if (shift.rareBuyerVisitsSeen or 0) >= (shift.rareBuyerMax or RareWalkIns.MAX_PER_SHIFT) then
+		return { ok = false, error = "Rare buyer already appeared" }
+	end
+
+	local buyer = RareWalkIns.rollBuyer(shift, self:_getRng(player), InventoryService:getDisplayItems(player))
+	if not buyer then
+		return { ok = false, error = "No rare buyers configured" }
+	end
+	if not ShiftService:queueRareBuyerVisit(player, buyer.id) then
+		return { ok = false, error = "Could not queue rare buyer" }
+	end
+
+	local result = self:startBuyerVisit(player)
+	if type(result) ~= "table" then
+		return { ok = false, error = "Could not start rare buyer visit" }
+	end
+	if result.ok == false then
+		return result
+	end
+
+	local deal = activeDeals[player]
+	local buyerName = deal and deal.buyer and deal.buyer.displayName or buyer.displayName or "buyer"
+	return { ok = true, message = `Forced rare buyer: {buyerName}` }
 end
 
 function DealService:debugEndShift(player: Player)
