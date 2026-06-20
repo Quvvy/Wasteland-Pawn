@@ -16,7 +16,8 @@ See also: [ROADMAP.md](ROADMAP.md) for milestone tracking.
 - [One sentence vision](#one-sentence-vision)
 - [High concept](#high-concept)
 - [Product thesis and retention discipline](#product-thesis-and-retention-discipline)
-- [Target core loop](#target-core-loop-future-direction)
+- [Open Shop / Close Shop direction](#open-shop--close-shop-direction)
+- [Desired future loop (planned direction)](#desired-future-loop-planned-direction)
 - [Prototype loop](#prototype-loop-implemented)
 - [Core player fantasy](#core-player-fantasy)
 - [Target platform and audience](#target-platform-and-audience)
@@ -25,7 +26,7 @@ See also: [ROADMAP.md](ROADMAP.md) for milestone tracking.
 - [What the game is not](#what-the-game-is-not)
 - [Current prototype systems](#current-prototype-systems)
 - [Shop hub](#shop-hub)
-- [Shifts (prototype implementation)](#shifts-prototype-implementation)
+- [Shifts (shop day prototype — internal: shift)](#shifts-shop-day-prototype--internal-shift)
 - [Deal archetypes](#deal-archetypes)
 - [Items](#items)
 - [Object ecosystem](#object-ecosystem-planned)
@@ -70,9 +71,9 @@ Use these labels in design discussion and implementation plans:
 
 ## One sentence vision
 
-**Wasteland Pawn** is a weird wasteland **shopkeeping** game where players acquire strange objects, learn what they might be worth, decide whether to sell, stash, display, or hold them, then open their shop during the right customer traffic or event to make money.
+**Wasteland Pawn** is a weird wasteland **shopkeeping** game where players acquire strange objects, learn what they might be worth, decide whether to sell, stash, display, or hold them, then **open and close their shop** across days with variable traffic and demand.
 
-The prototype still runs on a **shift loop** (sellers, shift inventory, buyers, Closing Rush). That is current repo DNA, not the final structure.
+The prototype still runs on an internal **shift loop** (sellers, working inventory, buyers, Closing Rush). That is current repo DNA and a stepping stone — not the final open/close shop fantasy.
 
 ---
 
@@ -92,39 +93,109 @@ Long-term fantasy: become the most notorious junk dealer in the wasteland — kn
 
 ## Product thesis and retention discipline
 
-**Design thesis:** Wasteland Pawn should feel like running a strange little shop where every item might become valuable later, every buyer might be an opportunity, and every shift teaches the player how to get better.
+**Design thesis:** Wasteland Pawn is a weird shopkeeping and negotiation game with Roblox retention discipline. The shop is real. The player opens and closes it. Each day should have variables, surprises, and demand conditions. Negotiation resolves deals, but the larger game is deciding what to buy, stash, display, sell, and save for better traffic.
 
-The product direction is **weird shopkeeping / negotiation game with Roblox retention discipline**.
+We are **not** trying to build a static shift picker. We are trying to build a weird pawn shop where opening the shop creates a variable day.
 
-That means retention systems should make the existing fantasy easier to understand, easier to return to, and easier to scale. It does **not** mean turning the game into a generic simulator, idle tycoon, employee manager, passive cash generator, or rebirth-first treadmill.
+The product direction is **weird shopkeeping / negotiation game with Roblox retention discipline** — retention should make the fantasy easier to understand and return to, not turn the game into a generic simulator, idle tycoon, employee manager, passive cash generator, or rebirth-first treadmill.
 
 ### Current repo facts
 
 - The playable loop is a shift prototype with sellers, haggling, working inventory, DisplayShelf, StashBin, buyers, Rare Walk-Ins, Traffic Board, Closing Rush, and liquidation.
-- DisplayShelf and stash items persist only inside the current server session.
-- There is no permanent stash, permanent display save, collection log, real calendar, relic system, or DataStore progression.
+- Persistent Shop State V1 saves scraps, 2 Stash slots, and DisplayShelf items/positions.
+- InventoryShelf working stock remains current-shop-day only. Hub pickups remain decorative and non-persistent.
+- There is no collection log, real calendar, relic system, shop upgrade system, full decoration editor, or broader DataStore progression.
 - Hub pickup props are decorative, client-only, and separate from the server-owned haggled-item economy.
 - `DealService` carries a lot of core loop responsibility and should be watched as features stabilize.
 
 ### Strategic assumptions
 
-- The game does not yet have a strong return loop. Session-only stash/display supports the fantasy in one server session, but cannot carry "save this for the perfect buyer" forever.
-- New players may not understand the first shift fast enough. Onboarding and first-session clarity are as urgent as persistence.
+- The game has its first small return hook: scraps, a tiny permanent stash, and remembered DisplayShelf identity. It still needs stronger long-term goals.
+- New players may not understand the first shop day fast enough. Onboarding and first-session clarity are as urgent as persistence.
 - Mobile and input readability are retention risks for Roblox.
 - Persistence should save a fantasy players already understand. Saving confusion does not fix retention.
 - Technical debt matters, but major refactors should happen in slices after the player loop is clearer.
 
 ### Future recommendations
 
-- First, make the current Traffic Board, Rare Walk-In, and first shift readable without long explanations.
+- First, make the current Traffic Board, Rare Walk-In, and first shop day readable without long explanations.
 - Then add short first-session onboarding that teaches one buy/sell loop through action.
-- Then add minimal permanent scraps and a tiny permanent stash so players can return with a reason to continue.
+- Then test whether Persistent Shop State V1 actually makes players return with a reason to continue.
 - Then add a small collection log that reinforces weird items and memorable sales.
 - Refactor `DealService` in slices as responsibilities become stable; do not keep adding unrelated systems into it.
 
 ---
 
-## Target core loop (future direction)
+## Open Shop / Close Shop direction
+
+**Status:** **Planned direction** — not fully built. The current Traffic Board and internal shift flow are **prototype stepping stones**.
+
+The long-term shop loop should be **Open Shop / Close Shop**, not "select the same shift over and over."
+
+**Player fantasy:**
+
+```text
+Prepare the shop → decide to open → see what kind of day happens
+→ handle sellers, buyers, rare walk-ins, traffic, surprises, and closing pressure
+→ close the shop and review results
+```
+
+Opening the shop starts a **shop day**. A shop day can include:
+
+- normal foot traffic
+- seller quality variance
+- buyer demand variance
+- rare walk-ins
+- event-flavored traffic
+- display-influenced visitors
+- stash/display/inventory preparation paying off
+- Closing Rush pressure
+- liquidation risk
+- receipt / result feedback
+
+**Controlled variance:** variables should create readable decisions, not chaos. Player agency comes from prep (what to display, stash, hold, and sell) and forecast hints — not pure RNG punishment.
+
+**Traffic Board evolution:** today it is a session-only traffic-window picker (**Prototype**). It should evolve into a **forecast and preparation tool** (what traffic may show up, how display/stash matter, what to expect) — not a permanent static mission-select menu.
+
+**Not built yet:** full open/close shop simulation, real-time calendar, daily reset, collection log, relics, shop upgrades, full decoration editor, global events, broader progression saves.
+
+---
+
+## Desired future loop (planned direction)
+
+```text
+Prepare shop
+    ↓
+Open shop
+    ↓
+Traffic / event variables roll
+    ↓
+Sellers and buyers arrive
+    ↓
+Buy / pass / stash / display / sell
+    ↓
+Rare walk-ins or event visitors may appear
+    ↓
+Closing rush / liquidation pressure
+    ↓
+Close shop
+    ↓
+Receipt / results / future opportunity preview
+```
+
+**Not implemented.** The repo does not yet have full open/close shop verbs, real-time calendar events, unified objects, relics, broader progression saves, or server-authoritative hub scavenging.
+
+The older acquisition-first loop below remains useful context for long-term object routing:
+
+```text
+Acquire weird object → understand value → decide sell / stash / display / hold
+→ watch demand → prepare shop → open at right time → sell to right buyer
+→ earn scraps, reputation, collection progress, or shop identity → repeat
+```
+
+---
+
+## Target core loop (future direction — legacy framing)
 
 ```text
 Acquire weird object
@@ -146,37 +217,38 @@ Earn scraps, reputation, collection progress, or shop identity
 Repeat
 ```
 
-**Not implemented.** The repo does not yet have calendar events, persistent stash, unified objects, relics, or server-authoritative hub scavenging.
+**Not implemented.** See [Desired future loop](#desired-future-loop-planned-direction) for the primary open/close shop framing.
 
 ---
 
-## Prototype loop (implemented)
+## Prototype loop (implemented — stepping stone)
 
-What players can do in the **current repo**:
+What players can do in the **current repo**. Code still uses the internal term **shift**; player-facing direction is **shop day**.
 
-1. Walk to the **Traffic Board** in the physical shop hub and pick an available traffic window.
-2. **Seller visits** bring weird items; player haggles, inspects, buys, or passes.
-3. Bought items enter **limited working inventory** on the InventoryShelf (3 slots; resets each shift).
-4. Player may **Hold Back** an item to the DisplayShelf or move items through a session-only StashBin.
-5. **Buyer visits** occur; player chooses which held item to offer.
-6. **Buyer matching** affects interest and bonuses. **Display influence** biases which buyers are more likely to visit based on displayed categories/traits.
-7. Player haggles the sale.
-8. Sellers run out; remaining inventory enters **Closing Rush** or shift ends.
-9. Unsold working-stock items may **liquidate** at a bad rate (~35%). DisplayShelf and stash items are excluded from liquidation.
-10. Shift result vs profit quota.
+1. Walk to the **Traffic Board** (physical `ShiftBoard` part) and review session traffic conditions via the forecast/prep overlay.
+2. Start a **shop day** (internal: shift) from an available traffic window on the current board.
+3. **Seller visits** bring weird items; player haggles, inspects, buys, or passes.
+4. Bought items enter **limited working inventory** on the InventoryShelf (3 slots; resets each shop day).
+5. Player may **Hold Back** to DisplayShelf or move items through StashBin. DisplayShelf and 2 Stash slots persist; InventoryShelf does not.
+6. **Buyer visits** occur; player chooses which held item to offer.
+7. **Buyer matching** and **display influence** affect interest and traffic.
+8. **Rare walk-ins** may add an extra buyer opportunity during Buying (capped per shop day).
+9. Sellers run out; remaining inventory enters **Closing Rush** or the shop day ends.
+10. Unsold working-stock items may **liquidate** (~35%). Display and stash items are excluded.
+11. Shop-day result vs profit quota; Traffic Board may advance after meaningful progress.
 
-**Session display/stash persistence:** DisplayShelf and stash items survive shift end within the same server session. Rejoin and server reset clear them. This is not permanent save data.
+**Persistent Shop State V1:** scraps, 2 Stash slots, and DisplayShelf items/positions survive rejoin. Working InventoryShelf stock remains current-shop-day only.
 
-Separately (decorative only): **hub pickup props** can be picked up outside, placed on display slots, or dropped in the stash bin — they do not affect scraps, shift inventory, or saves.
+Separately (decorative only): **hub pickup props** do not affect scraps, working inventory, or saves.
 
 ### Prototype loop diagram
 
 ```text
-Traffic Board → Start Traffic Window
+Traffic Board (forecast/prep) → Open shop day (internal: shift)
     ↓
 Buying Phase: Seller → Haggle/Buy/Pass → InventoryShelf
     ↓
-(Optional) Hold Back → DisplayShelf
+(Optional) Hold Back → DisplayShelf / StashBin
     ↓
 Buyer Visit → Choose Item → Sell / Hold / Skip
     ↓
@@ -184,7 +256,7 @@ Buyer Visit → Choose Item → Sell / Hold / Skip
     ↓
 Closing Rush → Final buyers / Liquidation
     ↓
-Shift Result
+Close shop day → Result / receipt
 ```
 
 ---
@@ -223,9 +295,9 @@ Core fantasy line:
 | Object routing / timing | Collection |
 | | Strategy-lite economy |
 
-**Prototype genre today:** shift-based item flipping with physical hub wrapper.
+**Prototype genre today:** physical-shop shop-day prototype (internal: shift) with hub wrapper — not a mission-select menu as the long-term fantasy.
 
-**Avoid becoming:** pure tycoon, idle simulator, realistic store-management sim.
+**Avoid becoming:** pure tycoon, idle simulator, realistic store-management sim, static shift picker.
 
 ---
 
@@ -294,11 +366,11 @@ Server-authoritative routing from InventoryShelf to DisplayShelf via Hold Back. 
 
 ### Stash V1 for haggled items — **Prototype**
 
-Server-authoritative, session-only storage for haggled items. Stashed items do not appear in buyer offers, do not influence demand, and are excluded from liquidation. Stash is managed from StashBin and is not permanent save data.
+Server-authoritative storage for haggled items. Persistent Shop State V1 saves 2 Stash slots permanently. Stashed items do not appear in buyer offers, do not influence demand, and are excluded from liquidation. Stash is managed from StashBin.
 
-### Session display/stash persistence — **Prototype**
+### Persistent Shop State V1 — **Prototype**
 
-`location == "display"` and `location == "stash"` items persist across shifts within the same server session. Liquidation only touches working inventory. Rejoin and server reset clear display/stash. Not DataStore persistence.
+`location == "display"` and up to 2 `location == "stash"` items persist through DataStore as Persistent Shop State V1. DisplayShelf slot positions are saved. Liquidation only touches temporary working inventory; permanent-origin items return to their saved display/stash home instead of being automatically liquidated.
 
 ### Display influence — **Prototype**
 
@@ -306,11 +378,15 @@ Displayed categories and traits apply weight bonuses to buyer visit rolls (`Disp
 
 ### Demand Preview — **Prototype**
 
-Traffic Board shift select shows a `?` demand preview per shift: likely buyers, good categories/traits, current display appeal, and which buyers the display may attract. Informational only — does not change rolls.
+Traffic Board overlay shows a `?` demand preview: likely buyers, good categories/traits, current display appeal, and which buyers the display may attract. Informational only — does not change rolls.
 
-### Traffic Board V1 — **Prototype**
+### First Shift Onboarding V1 — **Prototype**
 
-Session-only rotating traffic windows wrap the existing shift configs. Scrap Rush is available every board as the normal-day fallback; Collector Convention and Black Market Night rotate as event-like opportunities. The board advances after each completed shift. This is not a real-time calendar, not global, and not persistent.
+Session-only guidance for a fresh player. Normal-day traffic is recommended, not forced. The first guided lesson uses existing content to show a readable seller item and a clear buyer match, then points toward display/stash as preparation tools. No DataStore onboarding completion exists yet.
+
+### Traffic Board V1 — **Prototype stepping stone**
+
+Session-only rotating traffic conditions wrap internal shift configs. Normal-day traffic is always available as a fallback; collector- and black-market-flavored traffic rotate as event-like opportunities. The board advances after meaningful shop-day progress. This is **not** a real-time calendar, not global, not persistent, and **not** the final open/close shop fantasy — it should evolve into forecast/prep before open shop.
 
 ### Counter and shelf presentation — **Prototype**
 
@@ -340,7 +416,7 @@ Weighted seller/item/value setup via archetypes (Safe Flip, Scam Trap, Desperate
 
 ### Shift balance — **Prototype**
 
-Per-shift `dealArchetypeWeights` and `buyerWeights` in [Shifts.lua](../src/ReplicatedStorage/Shared/Config/Shifts.lua). Scrap Rush / Collector Convention / Black Market Night tuned as traffic-pattern examples.
+Per-shift `dealArchetypeWeights` and `buyerWeights` in [Shifts.lua](../src/ReplicatedStorage/Shared/Config/Shifts.lua). Internal configs (`scrap_rush`, `collector_convention`, `black_market_night`) tuned as traffic-pattern examples.
 
 ### Shop hub — **Prototype**
 
@@ -389,35 +465,37 @@ Workspace
 
 ### Current — **Prototype**
 
-Traffic-window start from physical board, client sign, decorative hub props, deal UI during active shift, InventoryShelf/DisplayShelf/Stash routing, session display/stash persistence, counter and visitor presentation, Studio debug overlay.
+Forecast/prep at Traffic Board, then start a shop day (internal: shift). Client sign, decorative hub props, deal UI while open, InventoryShelf/DisplayShelf/Stash routing, session display/stash persistence, counter and visitor presentation, Studio debug overlay.
 
 ### Future — **Planned / future direction**
 
-Open/close shop as core verb; stash/display for **all** objects; calendar board; relic placement; shop upgrades; customer presentation at counter; rare walk-ins.
+**Open shop / close shop** as core verbs; Traffic Board as forecast/prep (not mission select); stash/display for **all** objects; real-time calendar (**planned**, not built); relic placement; shop upgrades; rare walk-ins.
 
 ---
 
-## Shifts (prototype implementation)
+## Shifts (shop day prototype — internal: shift)
 
-**Status:** **Prototype** — code and config still use the word *shift*. Traffic Board V1 now rotates the available shift windows in the current session. Long-term, shifts are an analog of **shop-open / event traffic windows**, not a permanent menu of three static modes.
+**Status:** **Prototype stepping stone** — code and config still use the word *shift*. Player-facing direction is **shop day**. Traffic Board V1 rotates available traffic conditions in the current session. Long-term, a shop day is opened and closed — not a permanent menu of three static modes to pick forever.
 
 | Phase | What happens |
 |-------|----------------|
-| **Buying** | Seller visits; periodic buyer visits; shift inventory; profit target |
+| **Buying** | Seller visits; periodic buyer visits; working inventory; profit target |
 | **Closing Rush** | No sellers; final buyers; liquidation; quota after phase |
-| **Ended** | Grade, profit vs target, liquidation summary |
+| **Ended** | Grade, profit vs target, liquidation summary; close shop day |
 
-### Current shift examples ([Shifts.lua](../src/ReplicatedStorage/Shared/Config/Shifts.lua))
+### Traffic-pattern examples ([Shifts.lua](../src/ReplicatedStorage/Shared/Config/Shifts.lua))
 
-| Shift | Prototype role |
-|-------|----------------|
-| **Scrap Rush** | Steady, low-risk; practical buyers; forgiving Closing Rush |
-| **Collector Convention** | Hold for match; more traps/bad stock; collector-biased buyers |
-| **Black Market Night** | Scam/jackpot heavy; volatile buyers; highest target |
+Internal config names — **not** player-facing mission picks. They describe traffic patterns behind the board:
+
+| Config (internal) | Traffic-pattern role |
+|-------------------|----------------------|
+| **scrap_rush** | Normal-day baseline; steady, practical traffic |
+| **collector_convention** | Collector-flavored demand; hold-for-match pressure |
+| **black_market_night** | High-volatility, riskier buyers and deals |
 
 ### Current traffic-board role — **Prototype**
 
-Scrap Rush ≈ normal day traffic and is available every board. Collector Convention ≈ collectible demand event. Black Market Night ≈ high-volatility event. Traffic Board V1 rotates these windows after shift end; a real-time **calendar** can replace this later.
+Normal-day traffic is available every board. Collector- and black-market-flavored windows rotate as event-like opportunities. The board advances after meaningful shop-day progress. A real-time **calendar** (**planned**, not built) can deepen this later — it is not the same as Traffic Board V1 today.
 
 ---
 
@@ -471,14 +549,14 @@ Sources (future): scavenging, walk-in sellers, event rewards, rare customers, ha
 
 | Decision | Status | Meaning |
 |----------|--------|---------|
-| **Sell** | **Prototype** | Immediate scraps via buyer haggle |
-| **Display** (haggled items) | **Prototype** | Route to DisplayShelf; session persistence; influences buyer traffic |
-| **Stash** (haggled items) | **Prototype** | Session-only storage via StashBin; no demand influence and no permanent save |
+| **Sell** | **Prototype** | Immediate scraps via buyer haggle during an open shop day |
+| **Display** (haggled items) | **Prototype** | Route to DisplayShelf; session persistence; influences buyer traffic / shop identity |
+| **Stash** (haggled items) | **Prototype** | 2 permanent slots; save for a better future shop day; no demand influence |
 | **Activate** | **Future direction** | Relic modifiers |
 
 Future design must use **slot limits** on stash and display so players curate, not hoard infinitely.
 
-**Permanent stash and DataStore saves are not implemented.**
+**Persistent Shop State V1 is implemented.** Broader permanent inventory, collection, relic, upgrade, and decoration saves are not implemented.
 
 ---
 
@@ -486,11 +564,11 @@ Future design must use **slot limits** on stash and display so players curate, n
 
 **Future direction:** buyers are the **main money engine** during open shop hours.
 
-**Prototype today:** buyer visits, rare buyer walk-ins, matching labels/bonuses, **display influence** on buyer traffic roll weights, **Demand Preview**, and Traffic Board V1 before starting a shift. Preview is approximate — not a calendar or guarantee.
+**Prototype today:** buyer visits, rare walk-ins, matching labels/bonuses, **display influence**, **Demand Preview**, and Traffic Board V1 before opening a shop day (internal: shift). Preview is approximate — not a real-time calendar or guarantee.
 
 Buyer types: scavengers, mechanics, collectors, black market dealers, alien tourists, robot appraisers, cultists, military buyers, desperate weirdos.
 
-**Normal days** should feel like Scrap Rush: reliable traffic, many item types, lower ceiling, good for clearing stock.
+**Normal days** should feel like reliable baseline traffic: many item types, lower ceiling, good for clearing stock.
 
 **Rare buyers** can appear on normal days — *"I've been holding this cursed doll for days; a collector finally walked in."*
 
@@ -504,11 +582,11 @@ Future: sellers are **rarer and more exciting** — nervous traveler with suspic
 
 ## Calendar and events (planned)
 
-**Status:** **Planned** — not in repo as real-time dates/timers. Traffic Board V1 is a session-only prototype wrapper around existing shifts.
+**Status:** **Planned** — not in repo as real-time dates/timers. Traffic Board V1 is a session-only **prototype stepping stone**, not a real calendar.
 
-Player should not pick three static shifts forever. Traffic Board V1 is the first prototype step; later, a schedule drives demand:
+The product should not stay "pick three static modes forever." Traffic Board V1 is the first forecast/prep step; later, a **real-time calendar** (**planned**, not built) can drive demand:
 
-Normal Day · Scrap Rush · Collector Convention · Black Market Night · Repair Fair · Estate Sale · Alien Caravan · Cult Auction · Vault Opening · …
+Normal Day · collector-flavored traffic · black-market-flavored traffic · Repair Fair · Estate Sale · Alien Caravan · Cult Auction · Vault Opening · …
 
 **Good event design = preparation**, not passive waiting:
 
@@ -527,7 +605,7 @@ Collector Convention in 20 minutes.
 
 | Type | Frequency | Examples |
 |------|-----------|----------|
-| **Local / shop calendar** | Frequent | Normal Day, Scrap Rush, Collector Convention, Repair Fair |
+| **Local / shop calendar** (**planned**, not built) | Frequent | Normal Day, collector-flavored traffic, black-market-flavored traffic, Repair Fair |
 | **Global synchronized** | Rare | Alien Caravan, Military Convoy, Vault Opening, Meteor Junkfall |
 
 Global events can boost CCU. **Warning:** the game must not depend on global timers — normal local play must always be worthwhile.
@@ -624,7 +702,7 @@ Jackpot reveal · perfect buyer match · scam caught · Closing Rush save · rar
 
 ## UI direction
 
-Receipt paper, price tags, stamped labels, clarity over decoration. Shift/deal UI is **prototype**; hidden when idle; hub overlays for shift select and holding props.
+Receipt paper, price tags, stamped labels, clarity over decoration. Shift/deal UI is **prototype**; hidden when idle; hub overlays for traffic forecast/prep and holding props.
 
 ---
 
@@ -632,10 +710,10 @@ Receipt paper, price tags, stamped labels, clarity over decoration. Shift/deal U
 
 | System | Status |
 |--------|--------|
-| Permanent scraps + tiny permanent stash | **Planned** |
+| Persistent scraps + 2-slot Stash + saved DisplayShelf | **Prototype** |
 | Collection log | **Planned** |
 | Shop display (haggled items + influence) | **Prototype** |
-| Broader permanent stash / display saves | **Future direction** |
+| Broader permanent inventory / decoration saves | **Future direction** |
 | Shop customization (fixed slots) | **Future direction** |
 | Broader DataStore / persistence | **Future direction** |
 | Reputation / factions | **Future direction** |
@@ -663,12 +741,14 @@ Examples (not implemented):
 5. **Do not remove sellers** — make them special, not constant.
 6. **Do not turn this into a tycoon** — no idle generators, employees, rebirth ladders.
 7. **Do not document hub pickups as real economy** — they are client-only decorative prototype.
-8. **Do not imply calendar, relics, permanent stash, or DataStore saves are built** until milestones ship.
+8. **Do not imply calendar, relics, collection, broader inventory saves, or shop upgrades are built** until milestones ship.
 9. **Do not confuse display influence with Demand Preview** — influence changes rolls during a shift; preview only explains likely demand before opening.
-10. **Do not claim session display/stash persistence is permanent** — rejoin and server reset clear display/stash.
-11. **Do not solve retention by becoming a tycoon-lite game** — no idle cash, employees, rebirth-first ladders, or paid auto-profit.
-12. **Do not expand decorative hub pickups yet** — freeze them until they have a clear relationship to inventory, display, value, or persistence.
-13. **Do not let `DealService` absorb every new system** — slice responsibilities out when a feature boundary stabilizes.
+10. **Do not claim all shop objects are permanent** — Persistent Shop State V1 saves scraps, 2 Stash slots, and DisplayShelf items/positions only.
+11. **Do not describe the long-term game as a static shift picker** — open/close shop days with variable traffic is the direction.
+12. **Do not imply full open/close shop simulation, real-time calendar, or daily reset are built** — Traffic Board V1 is a prototype forecast/prep tool.
+13. **Do not solve retention by becoming a tycoon-lite game** — no idle cash, employees, rebirth-first ladders, or paid auto-profit.
+14. **Do not expand decorative hub pickups yet** — freeze them until they have a clear relationship to inventory, display, value, or persistence.
+15. **Do not let `DealService` absorb every new system** — slice responsibilities out when a feature boundary stabilizes.
 
 ---
 
@@ -693,18 +773,20 @@ If not → wait.
 
 | Layer | Status |
 |-------|--------|
-| Shift haggle loop | **Prototype** — playable |
-| Shop hub + Traffic Board | **Prototype** |
+| Shop day haggle loop (internal: shift) | **Prototype** — playable |
+| Open / close shop day framing | **Planned direction** — not fully built |
+| Shop hub + Traffic Board forecast/prep | **Prototype stepping stone** |
 | InventoryShelf + DisplayShelf + Stash routing | **Prototype** |
-| Session display/stash persistence | **Prototype** — same server session only |
+| Persistent Shop State V1 | **Prototype** — scraps, 2 Stash slots, DisplayShelf items/positions |
 | Display influence on buyer traffic | **Prototype** |
 | Demand Preview V1 (Traffic Board) | **Prototype** |
-| Traffic Board V1 | **Prototype** — session-only rotating traffic windows |
-| Rare Buyer Walk-In V1 | **Prototype** — existing buyers only; one extra Buying-phase buyer max per shift |
+| First Shift Onboarding V1 | **Prototype** — session-only |
+| Traffic Board V1 | **Prototype** — session-only rotating traffic conditions |
+| Rare Buyer Walk-In V1 | **Prototype** — one extra buyer max per shop day |
 | Counter / shelf / customer presentation | **Prototype** |
 | Ctrl+U debug overlay + Studio actions | **Prototype** |
 | Hub pickup props | **Prototype** — decorative only |
-| Permanent scraps + tiny permanent stash | **Planned** |
+| Permanent scraps + tiny permanent stash + DisplayShelf saves | **Prototype** |
 | Real-time calendar / event schedule | **Planned** — not built |
 | Broader permanent saves / relics | **Not started** |
 
@@ -748,23 +830,25 @@ See [ROADMAP.md](ROADMAP.md) for milestone order and [Current Scope Snapshot](RO
 
 | Term | Definition |
 |------|------------|
-| **Shift** | Prototype run: sellers, buyers, inventory cap, quota (**Prototype**) |
-| **InventoryShelf** | Working stock slots; resets each shift (**Prototype**) |
-| **DisplayShelf** | Server-routed display slots for haggled items (**Prototype**) |
-| **Stash** | Session-only haggled item storage; not demand influence or permanent save (**Prototype**) |
-| **Session display/stash persistence** | Display and stash items survive shift end in same server session; not permanent (**Prototype**) |
+| **Shop day** | One open-shop session: sellers, buyers, inventory cap, quota (**Planned** player framing; **Prototype** as internal shift) |
+| **Open shop** | Future core verb: start the shop day and let traffic/deals run (**Planned**) |
+| **Close shop** | Future core verb: end the shop day, review receipt/results (**Planned**) |
+| **Shift** | Internal/code term for prototype shop day (**Prototype**) — sellers, buyers, inventory cap, quota |
+| **InventoryShelf** | Working stock for immediate selling during an open shop day; resets each shop day (**Prototype**) |
+| **DisplayShelf** | Server-routed display slots; traffic influence / shop identity (**Prototype**) |
+| **Stash** | 2 permanent saved slots; save for a better future shop day; not demand influence (**Prototype**) |
+| **Persistent Shop State** | Scraps, Stash, and DisplayShelf items/positions survive rejoin; InventoryShelf and hub pickups do not (**Prototype**) |
 | **Display influence** | Displayed categories/traits bias buyer visit roll weights (**Prototype**) |
 | **Demand Preview** | Traffic Board `?` panel: likely buyers, good stock, display match hints (**Prototype**) |
-| **Traffic Board** | Session-only rotating set of available shift windows; not dates/timers (**Prototype**) |
-| **Seller visit** | Buying opportunity during a shift |
+| **Traffic Board** | Prototype forecast/prep overlay; session-only traffic conditions; evolves toward pre-open forecast (**Prototype stepping stone**) |
+| **Seller visit** | Buying opportunity during an open shop day |
 | **Buyer visit** | Selling opportunity; pick inventory item |
 | **Closing Rush** | Final cashout after sellers exhausted |
 | **Liquidation** | Bad fallback for unsold working-stock items (~35%) |
 | **Buyer match** | Fit between item and buyer preferences |
 | **Deal archetype** | Authored deal shape at generation time |
 | **Hub prop** | Client-only decorative pickup (**Prototype**) |
-| **Shop open** | Future core verb; Traffic Board is prototype entry (**Planned**) |
-| **Calendar event** | Scheduled demand window with dates/timers (**Planned**) |
+| **Real-time calendar** | Scheduled demand with dates/timers (**Planned** — not built) |
 | **Relic** | Displayable/activatable shop modifier (**Future direction**) |
 
 ---

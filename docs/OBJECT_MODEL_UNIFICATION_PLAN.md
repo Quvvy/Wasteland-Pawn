@@ -17,6 +17,14 @@ The current prototype has two separate object shapes:
 
 That split is acceptable for the prototype, but it cannot become the final game. If scavenging props become valuable through a separate path, the game risks becoming two economies: scavenging money vs haggling money. The intended game is one shop economy where objects can come from different sources but route through the same sell / stash / display decisions.
 
+**Shop-day preparation:** object routing supports preparing before and during an open shop day:
+
+- `inventory` — immediate selling during an open shop day
+- `display` — traffic influence / shop identity
+- `stash` — save for a better future shop day; V1 persists 2 haggled-item slots
+
+Traffic Board / internal shift configs are prototype traffic wrappers, not the final open-shop fantasy.
+
 ---
 
 ## Current repo reality
@@ -46,8 +54,8 @@ Important fields today:
 Valid locations today:
 
 - `inventory` - working stock on InventoryShelf; sellable
-- `display` - DisplayShelf; affects demand, not sellable
-- `stash` - session stash; does not affect demand, not sellable
+- `display` - DisplayShelf; affects demand, not sellable; haggled items/slot positions persist in V1
+- `stash` - 2-slot haggled-item stash; does not affect demand, not sellable
 
 ### Hub pickup props
 
@@ -167,7 +175,8 @@ Notes:
 Status: **Prototype**
 
 - Haggled items are server-owned.
-- Display and stash are session-only.
+- DisplayShelf and 2 Stash slots now persist for haggled items through Persistent Shop State V1.
+- InventoryShelf working stock remains temporary.
 - Hub pickups are decorative and client-only.
 - Hub pickups are frozen: keep them working, but do not expand them before object unification has a clear gameplay purpose.
 
@@ -298,8 +307,8 @@ When this plan becomes implementation, preserve these rules:
 
 Do not build these as part of the planning milestone:
 
-- DataStore persistence
-- permanent stash
+- broader DataStore persistence beyond scraps / 2-slot Stash / DisplayShelf
+- permanent working inventory
 - collection log
 - full scavenging economy
 - player trading
@@ -326,7 +335,7 @@ Expected outcome:
 
 - No gameplay change.
 - No new remotes.
-- No DataStores.
+- No object-model migration or hub-pickup persistence.
 - Clearer names and helper boundaries for future object routing.
 
 ---
@@ -337,4 +346,4 @@ Expected outcome:
 - Should `counter` become a real `location`, or stay implicit in `DealService`?
 - Which existing decorative hub prop mappings should survive when object unification begins?
 - Should `heldBack` be removed after all old compatibility paths are gone?
-- Should stash/display session persistence become save persistence before or after calendar events?
+- Persistent Shop State V1 saves haggled Stash/Display. Future work still needs to decide when hub pickups become server-owned objects.

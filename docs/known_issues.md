@@ -86,21 +86,20 @@ Recommended next action:
 Fixed when:
 - New feature work can avoid unrelated `DealService` edits, and at least one stable responsibility has moved behind a small helper or service without changing player behavior.
 
-### Session display/stash is not permanent
+### Persistent shop state is narrow
 
-Status: Intentional
+Status: Improved / Watch
 Area: Display / Stash / Persistence
 Why it matters:
 - The long-term fantasy depends on saving something for the perfect future buyer.
-- Session-only storage cannot support that fantasy forever.
+- Persistent Shop State V1 now supports trust, but it is still not a full progression system.
 Current impact:
-- Display and stash items now persist across shifts within the same server session.
-- Rejoin and server reset still clear display/stash.
-- This is acceptable for the prototype, but it weakens return motivation.
+- Scraps, 2 Stash slots, and DisplayShelf items/positions persist.
+- InventoryShelf working stock, hub pickups, collection goals, relics, upgrades, and broader decoration state do not persist.
 Recommended next action:
-- After first-session clarity, add permanent scraps and a tiny permanent stash before broader persistence.
+- Playtest whether players understand Stash/Display permanence and InventoryShelf temporariness.
 Fixed when:
-- A player can leave, return, and still care about at least one saved item or currency goal.
+- Returning players can explain what is saved, what is temporary, and why they care about at least one saved item or scraps goal.
 
 ---
 
@@ -113,27 +112,93 @@ Systems that may become confusing, too complex, or conflict with the core design
 Status: Open
 Area: Retention / Progression
 Why it matters:
-- Roblox players need a reason to come back that is clearer than "play another shift."
-- The strongest fantasy is saving or preparing for a better buyer later.
+- Roblox players need a reason to come back that is clearer than "play the same shift again."
+- The strongest fantasy is saving prep for a better shop day — stash, display, and traffic timing — not re-selecting the same traffic window.
 Current impact:
-- Traffic Board, display, and session stash create good in-session decisions, but they do not yet create a durable return reason.
+- Traffic Board, DisplayShelf, and 2-slot permanent Stash now create a small durable return reason.
+- The game still lacks collection, reputation, upgrades, or other longer-term goals.
 Recommended next action:
-- Finish readability and onboarding first, then add permanent scraps and a tiny permanent stash.
+- Playtest Persistent Shop State V1, then decide whether the next return hook should be collection log, permanent goals, or shop identity.
 Fixed when:
-- Returning players have a saved goal that makes them want to run another shift, such as a kept item, currency target, or small collection objective.
+- Returning players have a saved goal that makes them want to open another shop day, such as a kept item, currency target, or small collection objective.
 
-### First shift clarity is not proven
+### Shift/traffic selection feels like repeated mission select
 
 Status: Open
+Area: Traffic Board / Product direction
+Why it matters:
+- Current Traffic Board is a prototype picker; product direction is open/close shop days with variable traffic.
+Current impact:
+- Players may feel they are choosing the same static mode repeatedly instead of running a shop.
+Recommended next action:
+- Reframe board as forecast/prep; evolve toward open shop → variable day → close shop.
+Fixed when:
+- Player-facing flow reads as preparing and opening the shop, not picking a mission from a menu.
+
+### Shop-day variance may read as randomness without agency
+
+Status: Watch
+Area: Shop-day variables / Prep
+Why it matters:
+- Variables must tie to readable prep (display/stash/inventory) and forecast hints, not pure RNG punishment.
+Current impact:
+- Traffic conditions and rare walk-ins exist but prep-to-outcome links are still thin.
+Recommended next action:
+- Strengthen Demand Preview and display influence readability before adding more variance layers.
+Fixed when:
+- Players can explain why today felt different and what they could have done differently.
+
+### Open/close shop framing must not overclaim
+
+Status: Intentional
+Area: Docs / UI / Product honesty
+Why it matters:
+- Docs and UI must not imply real-time calendar, full open/close simulation, collection, upgrades, or a full decoration editor are built.
+Current impact:
+- Prototype still uses internal "shift" code; Traffic Board V1 is session-only. Persistent Shop State V1 is real but narrow.
+Recommended next action:
+- Use open/close language for direction; label prototype reality honestly.
+Fixed when:
+- No player-facing surface claims daily reset, calendar, collection, relics, shop upgrades, or full decoration persistence without a shipped milestone.
+
+### Traffic Board could become skip/wait exploit surface
+
+Status: Watch
+Area: Traffic Board / Forecast
+Why it matters:
+- Forecast/prep must not reward waiting out "bad" boards without playing the shop.
+Current impact:
+- Board advances after meaningful progress, but re-roll temptation may grow as options multiply.
+Recommended next action:
+- Tie board advance to shop-day outcomes; avoid free re-rolls without cost.
+Fixed when:
+- Players cannot farm better traffic by stalling without engaging the shop loop.
+
+### First shop-day clarity is not proven
+
+Status: Watch
 Area: Onboarding / First session
 Why it matters:
 - If a new player does not understand where to go, what to buy, or why buyers matter, later retention systems only save confusion.
 Current impact:
-- The prototype has playable systems, but still relies on UI text, debug familiarity, and player patience.
+- First Shift Onboarding V1 now gives a session-only normal-day traffic lesson, but it still needs fresh-player playtesting.
 Recommended next action:
-- Add a short guided first-session path that teaches one buy/sell loop through actions instead of long explanations.
+- Playtest with a fresh player on desktop and mobile-sized screens; tighten only confusing steps.
 Fixed when:
 - A new player can start, buy or pass, sell one item, and understand the result without external explanation.
+
+### Session-only onboarding repeats
+
+Status: Intentional
+Area: Onboarding / Persistence
+Why it matters:
+- First Shift Onboarding V1 does not use DataStores, so a returning player may see the first-lesson guidance again after rejoin or server reset.
+Current impact:
+- This is acceptable for V1 because saving onboarding completion is still out of scope, but it could feel repetitive later.
+Recommended next action:
+- Keep the guidance short and non-blocking until permanent player data exists.
+Fixed when:
+- A future persistence milestone can remember onboarding completion without adding DataStores prematurely.
 
 ### Mobile and onboarding viability
 
@@ -144,9 +209,9 @@ Why it matters:
 Current impact:
 - The current UI works for desktop testing, but mobile comfort and first-shift input flow are not proven.
 Recommended next action:
-- Test the first shift on mobile-sized screens and simplify the highest-friction controls before adding more feature layers.
+- Test the first shop day on mobile-sized screens and simplify the highest-friction controls before adding more feature layers.
 Fixed when:
-- A mobile player can complete the first shift without fighting small buttons, overlapping text, or unclear prompts.
+- A mobile player can complete the first shop day without fighting small buttons, overlapping text, or unclear prompts.
 
 ### Display/stash between-shift routing is limited
 
@@ -159,6 +224,21 @@ Notes:
 - Pulling stashed items to InventoryShelf still requires an active shift.
 Possible Fix:
 - Add fuller after-hours inventory routing only when that design is ready.
+
+### Persistence depends on DataStore availability
+
+Status: Watch
+Area: Persistence / Studio testing
+Why it matters:
+- Persistent Shop State V1 is the first trust-building save layer; silent save loss would be worse than no persistence.
+Current impact:
+- Load/save calls are guarded with `pcall`.
+- If load fails or a future save version is detected, saving is disabled for that session to avoid overwriting unknown data with fallback defaults.
+- Studio tests require API Services enabled to verify real saves.
+Recommended next action:
+- Test fresh load, rejoin, failed API, and Reset Save Data paths before playtests.
+Fixed when:
+- Ctrl+U clearly reports load/save status during Studio testing, and failure modes do not overwrite existing saves or crash the session.
 
 ### Rare buyer pacing may feel noisy
 

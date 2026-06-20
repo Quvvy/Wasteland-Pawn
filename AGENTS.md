@@ -4,9 +4,11 @@ You are working on **Wasteland Pawn**, a Roblox game built with Luau and Rojo.
 
 **Vision:** a weird wasteland **shopkeeping** game — acquire objects, learn value, decide sell / stash / display / hold, open the shop during the right traffic or event, sell to matching buyers.
 
-**Current repo reality:** a **shift-based prototype** (sellers, working inventory, display routing, buyers, Closing Rush) wrapped in a physical **shop hub**. That loop is playable DNA, not the final structure.
+**Current repo reality:** a **shop-day prototype** (internal: shift — sellers, working inventory, display routing, buyers, Closing Rush) wrapped in a physical **shop hub**. That loop is playable DNA, not the final open/close shop structure.
 
-Haggling is the **resolution layer**. **Object routing** (what to keep, who to sell to, when to open) is the bigger game.
+Haggling is the **resolution layer**. **Object routing** (what to keep, who to sell to, when to open/close) is the bigger game.
+
+**Product direction (not fully built):** open and close the shop for variable shop days. Traffic Board / shift is a prototype stepping stone, not a static mission-select menu.
 
 **Design voice:** Physical world. Fast decisions. The shop is real. The UI is a tool.
 
@@ -44,18 +46,19 @@ Use these when discussing or documenting systems:
 
 # Current Priority
 
-**Stabilize the shop hub + shift prototype** before calendar, persistence, relics, or unified object inventory.
+**Stabilize the shop hub + shop-day prototype** (internal: shift) before calendar, persistence, relics, or unified object inventory.
 
 Do not add major new systems unless explicitly asked.
 
 Near-term focus:
 
-* ShiftBoard → shift select → deal flow works end-to-end
+* Traffic Board → prototype shop day start (internal: shift) → deal flow works end-to-end
 * Closing Rush and liquidation are clear
-* Buyer matching matters across shift types
-* Scrap Rush feels like reliable “normal day” traffic
+* Buyer matching matters across traffic conditions
+* Normal-day traffic feels like reliable baseline demand
 * Hub pickup props stay **decorative** — not a second economy
-* Shift results and holding feel understandable
+* Shop-day results and holding feel understandable
+* Traffic Board reads as **forecast/prep**, not static mission select
 
 See `docs/ROADMAP.md` for milestone order.
 
@@ -68,23 +71,29 @@ Not a realistic pawn sim or tycoon.
 **Prototype loop today:**
 
 ```text
-Start shift at ShiftBoard
+Prepare (display/stash/inventory) → Traffic Board forecast/prep
+→ start shop day (internal: shift)
 Buy weird items from sellers (haggle)
 Hold in limited InventoryShelf working stock
-(Optional) Hold Back → DisplayShelf
+(Optional) Hold Back → DisplayShelf / StashBin
 Match items to buyers (haggle); display influences buyer traffic
-Closing Rush / liquidation
+Closing Rush / liquidation → close shop day (internal: shift end)
 Hit quota or fail
 ```
 
-DisplayShelf and StashBin haggled items persist across shifts **within the same server session**. Not permanent saves.
+DisplayShelf and StashBin haggled items persist across shop days **within the same server session**. Not permanent saves.
+
+*Product direction:* open/close shop days with variable traffic — not re-selecting the same static shift forever.
 
 **Target loop (future direction — not fully built):**
 
 ```text
-Acquire object → learn value → sell / stash / display / hold
-→ watch calendar / demand → prepare shop → open at right time
-→ sell to right buyer → scraps / reputation / collection
+Prepare shop → open shop → traffic/event variables roll
+→ sellers and buyers arrive
+→ buy / pass / stash / display / sell
+→ rare walk-ins or event visitors may appear
+→ closing rush / liquidation pressure
+→ close shop → receipt / results / future opportunity preview
 ```
 
 A good feature should support at least one of:
@@ -120,6 +129,14 @@ If scavenging pays better → nobody haggles. If haggling pays better → nobody
 * do not document or extend them as real economy without explicit milestone
 
 Haggled shift items are a **separate** server system.
+
+## Do not drift into mission-select design
+
+* Favor **open shop / close shop / shop day** language in player-facing docs and UI.
+* Traffic Board = prototype **forecast/prep** tool — not a permanent "pick Scrap Rush again" menu.
+* Do not design new features as static mission select.
+* No tycoon-lite unless explicitly requested.
+* Do not claim persistence, real-time calendar, or full open/close sim are built.
 
 ## Do not imply these are built
 
@@ -208,11 +225,11 @@ Server services own gameplay truth. Client controllers request actions and displ
 | Stash V1 haggled item routing | **Prototype** — session-only |
 | Session display/stash persistence | **Prototype** — same server session only |
 | Display influence on buyer traffic | **Prototype** |
-| Demand Preview V1 (ShiftBoard) | **Prototype** |
+| Demand Preview V1 (Traffic Board) | **Prototype** |
 | Buyer visits + matching | **Prototype** |
 | Closing Rush + liquidation | **Prototype** |
 | Deal archetypes + shift `buyerWeights` | **Prototype** |
-| Shop hub (ShiftBoard, overlay, sign) | **Prototype** |
+| Shop hub (Traffic Board, overlay, sign; `ShiftBoard` part name in Studio) | **Prototype** |
 | Counter / shelf / customer presentation | **Prototype** |
 | Ctrl+U debug overlay + Studio actions | **Prototype** |
 | Hub pickup props | **Prototype** — client-only decorative |
@@ -254,7 +271,7 @@ Not cutscenes, quests, or a director system. Archetype names are not shown to pl
 
 **Neon Cursed Flea Market** — dusty outside, warm cluttered glowing shop. Not muddy Fallout clone.
 
-UI: receipt paper, price tags, clarity over decoration. Deal UI hidden when idle; hub overlays for shift select and holding props.
+UI: receipt paper, price tags, clarity over decoration. Deal UI hidden when idle; hub overlays for traffic forecast/prep and holding props.
 
 No large UI polish pass unless explicitly requested.
 
@@ -264,14 +281,14 @@ No large UI polish pass unless explicitly requested.
 
 Follow `docs/ROADMAP.md`. Summary:
 
-1. Playtest hub + shift prototype; Scrap Rush / traffic polish (now)
-2. Object model unification **plan**
-3. Haggled display/stash routing + Demand Preview (**Prototype**); permanent persistence (**Planned**)
-4. Customer-demand / calendar prototype (shifts as traffic-window analog)
-5. Rare walk-in buyer/seller prototype
-6. Later: calendar events, relics, collection, DataStores, social visits
+1. Playtest hub + shop-day prototype; Traffic Board forecast/prep polish (now)
+2. Open/close shop framing in player-facing UX when implemented (not claiming sim built)
+3. Object model unification **plan**
+4. Haggled display/stash routing + Demand Preview (**Prototype**); permanent persistence (**Planned**)
+5. Shop-day variable readability; rare walk-in hardening
+6. Later: real-time calendar events, relics, collection, DataStores, social visits
 
-Do not skip ahead unless explicitly asked.
+Do not skip ahead to full calendar sim unless explicitly asked.
 
 ---
 

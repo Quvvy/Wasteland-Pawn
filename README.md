@@ -4,7 +4,7 @@
 
 Run a sketchy pawn shop in a neon cursed flea market: find strange objects, figure out what they might be worth, and sell to the buyers who actually want them. The long-term game is **when** you open, **what** you keep, and **who** you sell to.
 
-The **current prototype** is a physical-shop shift loop — start at the Traffic Board, haggle with sellers, hold items in limited working inventory, route haggled items to the display shelf, match buyers, and survive Closing Rush. That is playable today; real-time calendar events, permanent stash, and relics are future direction.
+The **current prototype** uses a shift/traffic-board stepping stone — start at the Traffic Board, run a shop day (sellers, buyers, Closing Rush), and review results. The **target direction** is open/close shop days with variable traffic, not picking the same mission from a menu over and over.
 
 > *"I bought a cursed traffic cone for 40 scraps and sold it to an alien tourist for ridiculous profit because it was a perfect match."*
 
@@ -12,9 +12,17 @@ The **current prototype** is a physical-shop shift loop — start at the Traffic
 
 ## Product thesis
 
-Wasteland Pawn should stay a weird shopkeeping / negotiation game with Roblox retention discipline. The goal is to make the fantasy easier to understand, easier to return to, and easier to scale -- not to become a generic simulator, idle tycoon, employee manager, or rebirth treadmill.
+Wasteland Pawn is a weird shopkeeping and negotiation game with Roblox retention discipline. The shop is real. The player opens and closes it. Each day should have variables, surprises, and demand conditions. Negotiation resolves deals, but the larger game is deciding what to buy, stash, display, sell, and save for better traffic.
 
-Strategic risks are tracked in [docs/GDD.md](docs/GDD.md), [docs/ROADMAP.md](docs/ROADMAP.md), and [docs/known_issues.md](docs/known_issues.md): first-shift clarity, weak return loop, mobile/onboarding, session-only stash/display limits, and `DealService` growth.
+We are **not** trying to build a static shift picker. We are trying to build a weird pawn shop where opening the shop creates a variable day.
+
+More detail: [docs/GDD.md](docs/GDD.md), [docs/ROADMAP.md](docs/ROADMAP.md), [docs/known_issues.md](docs/known_issues.md).
+
+## Product direction (planned — not fully built)
+
+- Prepare the shop (inventory, display, stash) → **open shop** → variable day (traffic, sellers, buyers, rare walk-ins, closing pressure) → **close shop** → receipt and results
+- Traffic Board should evolve into a **forecast/prep tool**, not a permanent mission-select menu
+- Real-time calendar, full open/close simulation, and broader progression saves are **not built yet**
 
 ## Design docs
 
@@ -64,23 +72,25 @@ AGENTS.md                       Agent brief for Cursor / Codex
 ## Current prototype features
 
 - **Physical shop hub** — Traffic Board prompt, traffic-window overlay, open/closed sign
-- **Traffic Board V1** — session-only rotating traffic windows; Scrap Rush stays available as the normal-day fallback
-- **Shift loop** — profit targets, seller visits, buyer visits, Closing Rush, liquidation
+- **Traffic Board V1** — session-only forecast/prep prototype; rotating traffic conditions (not a real-time calendar)
+- **First Shift Onboarding V1** — session-only guided first buy/sell lesson
+- **Shop day loop (internal: shift)** — profit targets, seller visits, buyer visits, Closing Rush, liquidation
 - **Seller haggling** — tactic-based negotiation (heat, tells, inspect)
 - **Buyer visits and matching** — category/traits → match labels and payout bonuses
-- **Rare Buyer Walk-In V1** — session-only, server-authoritative extra buyer chance during Buying; capped at one per shift
-- **Working inventory** — limited InventoryShelf slots per shift (server-authoritative; resets each shift)
+- **Rare Buyer Walk-In V1** — session-only extra buyer chance during Buying; capped at one per shop day
+- **Working inventory** — limited InventoryShelf slots per shop day (server-authoritative; resets each day)
 - **DisplayShelf haggled item display** — Hold Back routes bought items to display slots
-- **Stash V1** — server-authoritative, session-only haggled item storage via StashBin
-- **Session display/stash persistence** — DisplayShelf and stash items persist across shifts during the same server session (not permanent saves)
+- **Stash V1** — server-authoritative haggled item storage via StashBin; V1 saves 2 slots permanently
+- **Persistent Shop State V1** — persistent scraps, 2 permanent Stash slots, and saved DisplayShelf items/positions
+- **Session working stock** — InventoryShelf remains current-shop-day stock and does not persist
 - **Display influence** — displayed categories/traits bias buyer traffic roll weights
-- **Demand Preview V1** — Traffic Board `?` preview shows likely buyers, good categories/traits, and display effects per shift (**Prototype**)
+- **Demand Preview V1** — Traffic Board `?` preview for likely buyers, categories/traits, and display effects (**Prototype**)
 - **Physical presentation** — customer rigs at `CustomerSpot`, item props at `CounterItemSpot`, shelf props
 - **Deal archetypes** — weighted deal shapes (scam traps, jackpots, buyer setups, etc.)
 - **Ctrl+U Studio debug overlay** — shift/deal/inventory diagnostics and Studio debug actions
 - **Hub pickup props** — client-only decorative pick up / place / stash (session-only; **not** economy or saves)
 
-**Not built yet:** DataStore saves, permanent stash saves, collection log, relics, real-time calendar/events (dates, timers), unified scavenging + haggled item economy, shop upgrades.
+**Not built yet:** full open/close shop simulation, real-time calendar or daily reset, collection log, relics, shop upgrades, permanent hub pickups, full decoration editor, unified scavenging + haggled item economy.
 
 **Design warning:** scavenging and haggling must eventually feed **one** object economy — not two competing money loops. See [GDD](docs/GDD.md#two-economy-problem).
 
