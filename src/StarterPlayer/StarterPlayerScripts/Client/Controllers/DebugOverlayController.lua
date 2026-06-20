@@ -144,6 +144,21 @@ local function formatTrafficUpcomingNames(traffic: any): string
 	return if #names > 0 then table.concat(names, ", ") else "-"
 end
 
+local function formatTrafficAvailableNames(traffic: any): string
+	if type(traffic) ~= "table" or type(traffic.availableWindows) ~= "table" then
+		return "-"
+	end
+
+	local names = {}
+	for _, window in traffic.availableWindows do
+		local name = window.displayName or window.trafficLabel or window.shiftId
+		if type(name) == "string" and name ~= "" then
+			table.insert(names, name)
+		end
+	end
+	return if #names > 0 then table.concat(names, ", ") else "-"
+end
+
 local function formatInfluenceBonus(bonus: any): string
 	if type(bonus) ~= "number" then
 		return "n/a"
@@ -249,16 +264,25 @@ local function formatShiftSection(): string
 		"=== SHIFT ===",
 		`{name} | {phase} | profit {profit} | sellers {sellers}{buyerFlag}`,
 		`cash: {field(deal and deal.playerCash)} | remaining sellers: {field(snapshot.dealsRemaining)}`,
-		`rare buyers: {field(snapshot.rareBuyerVisitsSeen)}/{field(snapshot.rareBuyerMax)}`,
 	}
 
 	local traffic = snapshot.traffic
 	if type(traffic) == "table" then
 		table.insert(
 			lines,
-			`traffic: {field(traffic.boardName)} | completed windows: {field(traffic.completedWindows)} | next: {formatTrafficUpcomingNames(traffic)}`
+			`traffic: {field(traffic.boardName)} (#{field(traffic.boardIndex)}) | completed windows: {field(traffic.completedWindows)}`
 		)
+		table.insert(lines, `available: {formatTrafficAvailableNames(traffic)}`)
+		table.insert(lines, `next: {formatTrafficUpcomingNames(traffic)}`)
 	end
+	table.insert(
+		lines,
+		`traffic progress: meaningful={field(snapshot.meaningfulProgress)} | advanced={field(snapshot.trafficAdvanced)} | skipped={field(snapshot.trafficAdvanceSkipped)}`
+	)
+	table.insert(
+		lines,
+		`rare walk-in: used={field((snapshot.rareBuyerVisitsSeen or 0) > 0)} | queued={field(snapshot.pendingBuyerVisitKind == "rare")} | pending={field(snapshot.pendingBuyerVisitKind)} | rare id={field(snapshot.pendingRareBuyerId)} | cap {field(snapshot.rareBuyerVisitsSeen)}/{field(snapshot.rareBuyerMax)}`
+	)
 
 	if snapshot.phase == "ClosingRush" then
 		table.insert(lines, `closing rush buyers: {field(snapshot.closingRushBuyersRemaining)}`)

@@ -53,6 +53,8 @@ Valid locations today:
 
 Prototype only. Client-owned and decorative.
 
+Current decision: **freeze, do not expand**. Keep hub pickups if they support the physical shop fantasy, but do not add more decorative object behavior until it has a clear relationship to inventory, display, value, or persistence.
+
 Important fields today:
 
 - `propId`
@@ -167,6 +169,7 @@ Status: **Prototype**
 - Haggled items are server-owned.
 - Display and stash are session-only.
 - Hub pickups are decorative and client-only.
+- Hub pickups are frozen: keep them working, but do not expand them before object unification has a clear gameplay purpose.
 
 No action needed beyond keeping docs honest.
 
@@ -198,7 +201,7 @@ Success:
 
 ### Phase 2 - Hub prop mapping
 
-Status: **Prototype**
+Status: **Prototype** (frozen; do not expand)
 
 Map decorative hub pickups to object definitions without making them sellable.
 
@@ -218,6 +221,7 @@ Rules:
 - Mapping is informational at first.
 - Picking up a hub prop still does not grant money or shift inventory.
 - No buyer matching from hub props yet.
+- Do not add more decorative prop expansion here. New work should wait until hub props have a defined relationship to inventory, display, value, or persistence.
 
 Current implementation:
 
@@ -229,6 +233,7 @@ Success:
 
 - Visual props can reuse object metadata and visuals.
 - Still no second economy.
+- The plan stays ready for future unification without turning decorative props into a parallel game.
 
 ### Phase 3 - Server-owned acquisition prototype
 
@@ -285,7 +290,7 @@ When this plan becomes implementation, preserve these rules:
 - Display influence only uses `location == "display"`.
 - Liquidation only uses `location == "inventory"`.
 - Stash never affects buyer rolls.
-- Hub props remain decorative until explicitly converted to server-owned objects.
+- Hub props remain decorative and frozen until explicitly converted to server-owned objects through a future unification milestone.
 
 ---
 
@@ -330,6 +335,6 @@ Expected outcome:
 
 - Should `trueValue` be stored on all owned objects or only revealed/debug snapshots?
 - Should `counter` become a real `location`, or stay implicit in `DealService`?
-- Should decorative hub props have `objectId` mappings before they become server-owned?
+- Which existing decorative hub prop mappings should survive when object unification begins?
 - Should `heldBack` be removed after all old compatibility paths are gone?
 - Should stash/display session persistence become save persistence before or after calendar events?

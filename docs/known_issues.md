@@ -72,22 +72,81 @@ Risk: One huge scrolling debug panel may get hard to read as systems grow.
 Possible Fix:
 - Split into tabs later: Shift, Deal, Inventory, World, Prompts, Actions.
 
+### DealService responsibility growth
+
+Status: Watch
+Area: DealService / Architecture
+Why it matters:
+- `DealService` sits on buyer visits, seller flow, haggling, payouts, rare walk-ins, and debug-facing state.
+- If unrelated features keep landing there, it becomes hard to change safely.
+Current impact:
+- Work is still possible, but each new feature risks increasing the blast radius of deal-flow edits.
+Recommended next action:
+- Do not rewrite it immediately. When a boundary stabilizes, extract one slice at a time, such as buyer visit scheduling, buyer matching, haggle resolution, payout building, or debug adaptation.
+Fixed when:
+- New feature work can avoid unrelated `DealService` edits, and at least one stable responsibility has moved behind a small helper or service without changing player behavior.
+
 ### Session display/stash is not permanent
 
 Status: Intentional
 Area: Display / Stash / Persistence
-Risk: Players may expect display or stash items to survive rejoin/server reset later.
-Notes:
+Why it matters:
+- The long-term fantasy depends on saving something for the perfect future buyer.
+- Session-only storage cannot support that fantasy forever.
+Current impact:
 - Display and stash items now persist across shifts within the same server session.
-- Rejoin and server reset still clear display/stash. Do not add DataStores yet.
-Possible Fix:
-- Add real persistence only after stash/display/collection design is clearer.
+- Rejoin and server reset still clear display/stash.
+- This is acceptable for the prototype, but it weakens return motivation.
+Recommended next action:
+- After first-session clarity, add permanent scraps and a tiny permanent stash before broader persistence.
+Fixed when:
+- A player can leave, return, and still care about at least one saved item or currency goal.
 
 ---
 
 ## Design Risks
 
 Systems that may become confusing, too complex, or conflict with the core design.
+
+### Weak return loop
+
+Status: Open
+Area: Retention / Progression
+Why it matters:
+- Roblox players need a reason to come back that is clearer than "play another shift."
+- The strongest fantasy is saving or preparing for a better buyer later.
+Current impact:
+- Traffic Board, display, and session stash create good in-session decisions, but they do not yet create a durable return reason.
+Recommended next action:
+- Finish readability and onboarding first, then add permanent scraps and a tiny permanent stash.
+Fixed when:
+- Returning players have a saved goal that makes them want to run another shift, such as a kept item, currency target, or small collection objective.
+
+### First shift clarity is not proven
+
+Status: Open
+Area: Onboarding / First session
+Why it matters:
+- If a new player does not understand where to go, what to buy, or why buyers matter, later retention systems only save confusion.
+Current impact:
+- The prototype has playable systems, but still relies on UI text, debug familiarity, and player patience.
+Recommended next action:
+- Add a short guided first-session path that teaches one buy/sell loop through actions instead of long explanations.
+Fixed when:
+- A new player can start, buy or pass, sell one item, and understand the result without external explanation.
+
+### Mobile and onboarding viability
+
+Status: Watch
+Area: UI / Input / First session
+Why it matters:
+- Roblox retention depends heavily on mobile readability and fast comprehension.
+Current impact:
+- The current UI works for desktop testing, but mobile comfort and first-shift input flow are not proven.
+Recommended next action:
+- Test the first shift on mobile-sized screens and simplify the highest-friction controls before adding more feature layers.
+Fixed when:
+- A mobile player can complete the first shift without fighting small buttons, overlapping text, or unclear prompts.
 
 ### Display/stash between-shift routing is limited
 
@@ -115,6 +174,15 @@ Possible Fix:
 ## Recently Resolved
 
 Move fixed issues here instead of deleting them immediately.
+
+### No-progress shift end advanced Traffic Board
+
+Status: Fixed
+Area: Traffic Board / ShiftService
+Notes:
+- Traffic Board advancement now requires meaningful shift progress.
+- Meaningful progress uses existing shift state: seller progress, Closing Rush buyer progress, profit, or liquidation from working inventory.
+- No-progress shift endings leave the current traffic board in place and expose the skipped advancement only in snapshots/debug.
 
 ### Legacy shift buttons skipped Demand Preview
 
@@ -176,6 +244,13 @@ Update this file when you find:
 - code that should be refactored later
 
 Keep entries short. Use **Watch** or **Risk** unless confirmed. Move fixed issues to **Recently Resolved** instead of deleting them.
+
+For strategic risks, include:
+
+- why it matters
+- current impact
+- recommended next action
+- what would prove it is fixed
 
 Do not:
 

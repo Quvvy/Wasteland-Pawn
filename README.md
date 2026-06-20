@@ -10,6 +10,12 @@ The **current prototype** is a physical-shop shift loop — start at the Traffic
 
 **Design voice:** Physical world. Fast decisions. The shop is real. The UI is a tool. Never let immersion create friction.
 
+## Product thesis
+
+Wasteland Pawn should stay a weird shopkeeping / negotiation game with Roblox retention discipline. The goal is to make the fantasy easier to understand, easier to return to, and easier to scale -- not to become a generic simulator, idle tycoon, employee manager, or rebirth treadmill.
+
+Strategic risks are tracked in [docs/GDD.md](docs/GDD.md), [docs/ROADMAP.md](docs/ROADMAP.md), and [docs/known_issues.md](docs/known_issues.md): first-shift clarity, weak return loop, mobile/onboarding, session-only stash/display limits, and `DealService` growth.
+
 ## Design docs
 
 | Document | Description |

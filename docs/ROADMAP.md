@@ -36,9 +36,11 @@ The current game is a physical-shop shift prototype.
 
 **Next design target:**
 
-- playtest Traffic Board V1 and traffic-window pacing
+- finish Traffic Board + Rare Walk-In readability/hardening
+- improve first-session onboarding and mobile clarity
+- add a real return reason only after the player understands the loop
 
-**Still intentionally out of scope:**
+**Still intentionally out of current phase scope:**
 
 - permanent saves
 - permanent stash saves
@@ -87,12 +89,12 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 
 ## Now
 
-**Goal:** Playtest the current loop with Traffic Board V1 before building real-time calendar or persistence systems.
+**Current phase:** Phase 1 - Readability and first-session clarity.
 
-- [ ] Playtest shift loop end-to-end through the rotating Traffic Board
-- [ ] Confirm Scrap Rush works as the always-available normal-day fallback
-- [ ] Check special event rotation pacing after shift end
-- [ ] Buyer traffic readability (match labels, influence, pacing)
+- [ ] Finish Traffic Board readability and hardening
+- [ ] Make Rare Walk-Ins understandable as extra buyer opportunities
+- [ ] Reduce first-shift confusion before adding more feature layers
+- [ ] Make mobile input and UI viable enough for the first shift
 
 **Stabilize:**
 
@@ -100,21 +102,107 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 - [x] Server rejects display items for buyer offers
 - [x] Rapid phase changes do not leave stale shelf prompts
 
-**Avoid:** real-time calendar systems, DataStores, relics, unified object inventory, or scavenging economy until Traffic Board pacing feels solid.
+**Phase 1 exit criteria:**
+
+- Traffic Board readability is done when a player understands why timing affects buyer quality without reading a long explanation.
+- Rare Walk-In readability is done when a player understands that the extra buyer is an opportunity, not a broken cadence.
+- First-shift clarity is done when a new player can start, buy or pass, and sell one item without external explanation.
+- Mobile viability is done when a mobile player can complete the first shift without fighting the UI.
+
+**Avoid:** real-time calendar systems, DataStores, relics, unified object inventory, or scavenging economy until readability and first-session clarity are proven.
 
 ---
 
-## Next
+## Roadmap phases
 
-| Milestone | Status | Notes |
-|-----------|--------|-------|
-| Traffic Board V1 | **Prototype** | Session-only rotating traffic windows; not real-time calendar |
-| Normal Day / Scrap Rush polish | **Prototype** | Scrap Rush remains available on every board |
-| Stash routing for haggled items | **Prototype** | Server-authoritative, session-only; permanent saves still future |
-| Object model unification plan + metadata helpers | **Prototype** | Plan drafted; `ObjectModel` aligns ids; decorative hub props have informational `objectId` mappings |
-| Calendar Events V1 | **Planned** | Later real-time/date system after Traffic Board proves useful |
-| Rare Buyer Walk-In V1 | **Prototype** | Existing buyers only; session-only, one extra Buying-phase buyer max per shift |
-| Rare walk-in seller prototype | **Planned** | Sellers stay special; buyers remain main money engine |
+A phase is not done because the feature exists. It is done when it reduces player confusion, improves return motivation, or lowers technical risk.
+
+### Phase 1: Readability and first-session clarity
+
+Goals:
+
+- Finish Traffic Board readability.
+- Make Rare Walk-Ins understandable.
+- Reduce first-session confusion.
+- Make Scrap Rush feel like the reliable normal-day baseline.
+- Make mobile input and UI viable.
+
+Exit criteria:
+
+- A new player understands where to go first.
+- A new player understands what a good deal looks like.
+- A new player understands why traffic windows and rare buyers matter.
+- A mobile player can complete the first shift without fighting the UI.
+
+### Phase 2: Onboarding
+
+Goals:
+
+- Teach buying, price judgment, haggling, and selling through guided action.
+- Keep onboarding short and avoid walls of text.
+- Show why a good item may be worth keeping.
+
+Exit criteria:
+
+- A new player completes one buy/sell loop without external explanation.
+- The player sees at least one clear "I could have made more money if I understood this better" moment.
+- The player understands the fantasy before being asked to optimize it.
+
+### Phase 3: Minimal persistence
+
+Goals:
+
+- Add permanent scraps.
+- Add a tiny permanent stash.
+- Save only what supports the core fantasy first.
+- Avoid a giant persistence system before the loop is proven.
+
+Exit criteria:
+
+- The player can leave, return, and still care about at least one saved item or currency goal.
+- The "save this item for the perfect buyer" fantasy starts to work across sessions.
+- Persistence improves return motivation without forcing a full economy rewrite.
+
+### Phase 4: Collection log
+
+Goals:
+
+- Add a small collection log for discovered items, rare buyers, or notable sales.
+- Use it as a lightweight long-term goal.
+- Keep it tied to weird item stories, not bloated completionism.
+
+Exit criteria:
+
+- The player has a simple reason to care about unusual items.
+- The game gains a light long-term progression layer.
+- The collection log reinforces shopkeeping instead of becoming a checklist chore.
+
+### Phase 5: DealService refactor
+
+Goals:
+
+- Stop adding unrelated systems into `DealService`.
+- Refactor in slices, not one giant rewrite.
+- Separate responsibilities only after boundaries are stable.
+
+Possible end-state modules:
+
+- `BuyerVisitScheduler`
+- `BuyerMatcher`
+- `ArchetypeGenerator`
+- `ItemValuationService`
+- `HaggleResolver`
+- `TacticResolver`
+- `PayoutCalculator`
+- `DealSummaryBuilder`
+- `RareBuyerService`
+- `DealDebugAdapter`
+
+Exit criteria:
+
+- New feature work no longer requires unrelated edits inside one giant service.
+- At least one stable responsibility has moved behind a small helper or service without changing player behavior.
+- Debugging buyer visits, haggling, and payouts is easier than before.
 
 ---
 
@@ -122,9 +210,9 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 
 | Milestone | Status |
 |-----------|--------|
-| DataStore / persistence | **Future direction** |
-| Permanent stash | **Future direction** |
-| Collection log | **Future direction** |
+| Permanent scraps + tiny permanent stash | **Planned** |
+| Broader DataStore persistence | **Future direction** |
+| Collection log | **Planned** |
 | Local calendar events | **Future direction** |
 | Global synchronized events (rare) | **Future direction** |
 | Relic / display modifiers | **Future direction** |
@@ -156,6 +244,10 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 - NPC pathfinding as a core system
 - Fallout-clone tone (use *Neon Cursed Flea Market*)
 - Endless haggling math tuning as substitute for design
+- More feature layers before onboarding and return loop are solved
+- Major rewrites before the player loop is validated
+- Decorative object expansion before object unification
+- Monetization that bypasses negotiation, buyer timing, or item judgment
 - **Two separate economies** (scavenging vs haggling competing for money)
 
 ---

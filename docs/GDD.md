@@ -15,6 +15,7 @@ See also: [ROADMAP.md](ROADMAP.md) for milestone tracking.
 - [Implementation status legend](#implementation-status-legend)
 - [One sentence vision](#one-sentence-vision)
 - [High concept](#high-concept)
+- [Product thesis and retention discipline](#product-thesis-and-retention-discipline)
 - [Target core loop](#target-core-loop-future-direction)
 - [Prototype loop](#prototype-loop-implemented)
 - [Core player fantasy](#core-player-fantasy)
@@ -34,6 +35,7 @@ See also: [ROADMAP.md](ROADMAP.md) for milestone tracking.
 - [Calendar and events](#calendar-and-events-planned)
 - [Global events](#global-events-future-direction)
 - [Long playtime and CCU](#long-playtime-and-ccu-future-direction)
+- [Monetization direction](#monetization-direction-future-direction)
 - [Two economy problem](#two-economy-problem)
 - [Haggling philosophy](#haggling-philosophy)
 - [Payout screen](#payout-screen)
@@ -85,6 +87,40 @@ The player runs a sketchy pawn shop in a wasteland flea market.
 - **Buyers** are the main money engine; **sellers** stay important as special acquisition moments.
 
 Long-term fantasy: become the most notorious junk dealer in the wasteland — known for what you keep, what you sell, and when you open.
+
+---
+
+## Product thesis and retention discipline
+
+**Design thesis:** Wasteland Pawn should feel like running a strange little shop where every item might become valuable later, every buyer might be an opportunity, and every shift teaches the player how to get better.
+
+The product direction is **weird shopkeeping / negotiation game with Roblox retention discipline**.
+
+That means retention systems should make the existing fantasy easier to understand, easier to return to, and easier to scale. It does **not** mean turning the game into a generic simulator, idle tycoon, employee manager, passive cash generator, or rebirth-first treadmill.
+
+### Current repo facts
+
+- The playable loop is a shift prototype with sellers, haggling, working inventory, DisplayShelf, StashBin, buyers, Rare Walk-Ins, Traffic Board, Closing Rush, and liquidation.
+- DisplayShelf and stash items persist only inside the current server session.
+- There is no permanent stash, permanent display save, collection log, real calendar, relic system, or DataStore progression.
+- Hub pickup props are decorative, client-only, and separate from the server-owned haggled-item economy.
+- `DealService` carries a lot of core loop responsibility and should be watched as features stabilize.
+
+### Strategic assumptions
+
+- The game does not yet have a strong return loop. Session-only stash/display supports the fantasy in one server session, but cannot carry "save this for the perfect buyer" forever.
+- New players may not understand the first shift fast enough. Onboarding and first-session clarity are as urgent as persistence.
+- Mobile and input readability are retention risks for Roblox.
+- Persistence should save a fantasy players already understand. Saving confusion does not fix retention.
+- Technical debt matters, but major refactors should happen in slices after the player loop is clearer.
+
+### Future recommendations
+
+- First, make the current Traffic Board, Rare Walk-In, and first shift readable without long explanations.
+- Then add short first-session onboarding that teaches one buy/sell loop through action.
+- Then add minimal permanent scraps and a tiny permanent stash so players can return with a reason to continue.
+- Then add a small collection log that reinforces weird items and memorable sales.
+- Refactor `DealService` in slices as responsibilities become stable; do not keep adding unrelated systems into it.
 
 ---
 
@@ -328,6 +364,8 @@ Player can pick up a prop at outdoor spawns, see `Holding: …` UI, place on `Di
 
 Future convergence is planned in [OBJECT_MODEL_UNIFICATION_PLAN.md](OBJECT_MODEL_UNIFICATION_PLAN.md). That plan does not make decorative hub props part of the economy yet.
 
+Current decision: **freeze, do not expand**. Keep hub pickups if they support the physical shop fantasy, but stop expanding them until they have a clear relationship to inventory, display, value, or persistence.
+
 ---
 
 ## Shop hub
@@ -516,6 +554,31 @@ Check upcoming events → Prepare inventory → Acquire / identify objects
 
 ---
 
+## Monetization direction (future direction)
+
+Monetization should support the shop fantasy instead of replacing the game with a paid shortcut.
+
+Good directions:
+
+- shop expansions
+- cosmetic displays
+- premium decoration themes
+- event tickets
+- extra display/stash convenience
+- non-pay-to-win boosts that reduce friction but do not replace skill
+
+Avoid:
+
+- arbitrary cash multipliers
+- paid rebirth advantages
+- paid auto-profit systems
+- skipping the negotiation loop entirely
+- paid systems that make item judgment irrelevant
+
+If monetization makes the best strategy "pay to ignore buyers, timing, and weird item judgment," it is working against the game.
+
+---
+
 ## Two economy problem
 
 **Critical design warning — keep prominent.**
@@ -569,11 +632,12 @@ Receipt paper, price tags, stamped labels, clarity over decoration. Shift/deal U
 
 | System | Status |
 |--------|--------|
-| Collection log | **Future direction** |
+| Permanent scraps + tiny permanent stash | **Planned** |
+| Collection log | **Planned** |
 | Shop display (haggled items + influence) | **Prototype** |
-| Permanent stash / display saves | **Future direction** |
+| Broader permanent stash / display saves | **Future direction** |
 | Shop customization (fixed slots) | **Future direction** |
-| DataStore / persistence | **Future direction** |
+| Broader DataStore / persistence | **Future direction** |
 | Reputation / factions | **Future direction** |
 
 ---
@@ -602,6 +666,9 @@ Examples (not implemented):
 8. **Do not imply calendar, relics, permanent stash, or DataStore saves are built** until milestones ship.
 9. **Do not confuse display influence with Demand Preview** — influence changes rolls during a shift; preview only explains likely demand before opening.
 10. **Do not claim session display/stash persistence is permanent** — rejoin and server reset clear display/stash.
+11. **Do not solve retention by becoming a tycoon-lite game** — no idle cash, employees, rebirth-first ladders, or paid auto-profit.
+12. **Do not expand decorative hub pickups yet** — freeze them until they have a clear relationship to inventory, display, value, or persistence.
+13. **Do not let `DealService` absorb every new system** — slice responsibilities out when a feature boundary stabilizes.
 
 ---
 
@@ -637,8 +704,9 @@ If not → wait.
 | Counter / shelf / customer presentation | **Prototype** |
 | Ctrl+U debug overlay + Studio actions | **Prototype** |
 | Hub pickup props | **Prototype** — decorative only |
+| Permanent scraps + tiny permanent stash | **Planned** |
 | Real-time calendar / event schedule | **Planned** — not built |
-| Permanent stash saves / DataStores / relics | **Not started** |
+| Broader permanent saves / relics | **Not started** |
 
 See [ROADMAP.md](ROADMAP.md) for milestone order and [Current Scope Snapshot](ROADMAP.md#current-scope-snapshot).
 

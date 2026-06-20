@@ -61,6 +61,27 @@ local function copyShiftOption(shift, trafficEntry)
 	}
 end
 
+local function hasMeaningfulProgress(shift): boolean
+	if not shift then
+		return false
+	end
+	if (shift.sellerVisitsResolved or shift.dealsCompleted or 0) > 0 then
+		return true
+	end
+	if (shift.closingRushBuyersSeen or 0) > 0 then
+		return true
+	end
+	if (shift.shiftProfit or 0) ~= 0 then
+		return true
+	end
+	if (shift.lastLiquidationItemCount or 0) > 0 then
+		return true
+	end
+
+	local summary = shift.liquidationSummary
+	return summary ~= nil and (summary.itemCount or 0) > 0
+end
+
 function ShiftService:Init()
 	Remotes.setup()
 
@@ -100,7 +121,20 @@ end
 
 function ShiftService:getTrafficSnapshot(player: Player)
 	local state = self:_getTrafficState(player)
-	return TrafficCalendar.buildSnapshot(state.boardIndex, state.completedWindows)
+	local snapshot = TrafficCalendar.buildSnapshot(state.boardIndex, state.completedWindows)
+	local availableWindows = {}
+	for _, trafficEntry in TrafficCalendar.getBoardShiftEntries(state.boardIndex) do
+		local shift = Shifts.get(trafficEntry.shiftId)
+		table.insert(availableWindows, {
+			shiftId = trafficEntry.shiftId,
+			displayName = shift and shift.displayName or trafficEntry.shiftId,
+			trafficLabel = trafficEntry.label,
+			trafficDescription = trafficEntry.description,
+			windowIndex = trafficEntry.windowIndex,
+		})
+	end
+	snapshot.availableWindows = availableWindows
+	return snapshot
 end
 
 function ShiftService:_advanceTrafficBoard(player: Player)
@@ -183,6 +217,8 @@ function ShiftService:startShift(player: Player, shiftId: string?)
 		modifierText = shift.modifierText,
 		lastDealProfit = nil,
 		trafficAdvanced = false,
+		trafficAdvanceSkipped = false,
+		lastLiquidationItemCount = 0,
 	}
 
 	local snapshot = self:buildSnapshot(player)
@@ -436,6 +472,7 @@ function ShiftService:liquidateRemainingInventory(player: Player, reason: string
 
 	shift.shiftProfit += totalProfit
 	shift.lastDealProfit = totalProfit
+	shift.lastLiquidationItemCount = #items
 	shift.liquidationSummary = {
 		reason = reason or "Liquidated after close",
 		rate = Shifts.LiquidationRate,
@@ -489,8 +526,14 @@ function ShiftService:endShift(player: Player)
 	shift.grade = getGrade(shift)
 	shift.resultTitle = getResultTitle(shift)
 	if not shift.trafficAdvanced then
-		shift.trafficAdvanced = true
-		self:_advanceTrafficBoard(player)
+		shift.meaningfulProgress = hasMeaningfulProgress(shift)
+		if shift.meaningfulProgress then
+			shift.trafficAdvanced = true
+			shift.trafficAdvanceSkipped = false
+			self:_advanceTrafficBoard(player)
+		else
+			shift.trafficAdvanceSkipped = true
+		end
 	end
 
 	InventoryService:pushSnapshot(player)
@@ -538,6 +581,9 @@ function ShiftService:buildSnapshot(player: Player)
 		description = shift.description,
 		modifierText = shift.modifierText,
 		lastDealProfit = shift.lastDealProfit,
+		meaningfulProgress = hasMeaningfulProgress(shift),
+		trafficAdvanced = shift.trafficAdvanced == true,
+		trafficAdvanceSkipped = shift.trafficAdvanceSkipped == true,
 		traffic = self:getTrafficSnapshot(player),
 	}
 end

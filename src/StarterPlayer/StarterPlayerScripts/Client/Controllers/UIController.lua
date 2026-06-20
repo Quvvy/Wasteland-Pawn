@@ -202,18 +202,49 @@ local function formatShiftCardModifier(option): string
 	return modifier
 end
 
-local function formatTrafficBoardText(traffic): string
+local function formatTrafficBoardTitle(traffic): string
+	if type(traffic) == "table" and type(traffic.boardName) == "string" and traffic.boardName ~= "" then
+		return `Traffic Board: {traffic.boardName}`
+	end
+	return "Traffic Board"
+end
+
+local function collectTrafficWindowNames(rows): ({ string }, boolean)
+	local names = {}
+	local hasScrapRush = false
+	for _, row in rows or {} do
+		local name = row.displayName or row.trafficLabel or row.shiftId or row.id
+		if type(name) == "string" and name ~= "" then
+			table.insert(names, name)
+		end
+		local shiftId = row.shiftId or row.id
+		if shiftId == "scrap_rush" then
+			hasScrapRush = true
+		end
+	end
+	return names, hasScrapRush
+end
+
+local function formatTrafficBoardText(traffic, options): string
 	if type(traffic) ~= "table" then
 		return "Session traffic windows. Tap ? for demand preview."
 	end
 
-	local boardName = traffic.boardName or "Traffic Window"
 	local boardSubtitle = traffic.boardSubtitle
-	local lines = {
-		`Now: {boardName}`,
-	}
+	local lines = {}
 	if type(boardSubtitle) == "string" and boardSubtitle ~= "" then
 		table.insert(lines, boardSubtitle)
+	end
+
+	local availableNames, hasScrapRush = collectTrafficWindowNames(traffic.availableWindows)
+	if #availableNames == 0 then
+		availableNames, hasScrapRush = collectTrafficWindowNames(options)
+	end
+	if #availableNames > 0 then
+		table.insert(lines, `Available: {table.concat(availableNames, ", ")}`)
+	end
+	if hasScrapRush then
+		table.insert(lines, "Scrap Rush is reliable normal-day traffic.")
 	end
 
 	local upcomingNames = {}
@@ -224,7 +255,7 @@ local function formatTrafficBoardText(traffic): string
 	end
 
 	if #upcomingNames > 0 then
-		table.insert(lines, `Next: {table.concat(upcomingNames, ", ")}`)
+		table.insert(lines, `Up next: {upcomingNames[1]}`)
 	end
 	return table.concat(lines, "\n")
 end
@@ -317,6 +348,9 @@ end
 local function formatDisplayInfluenceHelp(snapshot): string?
 	if not snapshot or (snapshot.displayInfluenceBonus or 0) <= 0 then
 		return nil
+	end
+	if snapshot.rareWalkInBuyer then
+		return "Attracted by your display."
 	end
 
 	local matched = {}
@@ -1100,8 +1134,8 @@ function UIController:openShiftSelect(options, traffic)
 	local cur = currencyLabel(currentSnapshot)
 	clearShiftSelectList()
 	setShiftDemandPreview(nil)
-	labels.shiftSelectTitle.Text = "Traffic Board"
-	labels.shiftSelectSubtitle.Text = formatTrafficBoardText(traffic)
+	labels.shiftSelectTitle.Text = formatTrafficBoardTitle(traffic)
+	labels.shiftSelectSubtitle.Text = formatTrafficBoardText(traffic, options)
 
 	for index, option in options do
 		local shiftId = option.id
@@ -1324,7 +1358,7 @@ function UIController:updateSnapshot(snapshot)
 	refreshStashOverlay()
 
 	if phase == "BuyerSkipped" then
-		labels.customer.Text = if snapshot.rareWalkInBuyer then "Rare Buyer Skipped" else "Buyer Visit Skipped"
+		labels.customer.Text = if snapshot.rareWalkInBuyer then "Rare Walk-In Skipped" else "Buyer Visit Skipped"
 		labels.dialogue.Text = snapshot.dialogue or "A buyer came looking, but your shelves are empty."
 		labels.item.Text = ""
 		labels.prices.Text = ""
@@ -1343,7 +1377,7 @@ function UIController:updateSnapshot(snapshot)
 	local isBuyerVisit = phase == "BuyerVisit"
 	local isBuyerFacing = isSell or isBuyerVisit
 	labels.customer.Text = if isBuyerFacing
-		then `{if snapshot.rareWalkInBuyer then "Rare Buyer" else "Buyer"}: {snapshot.buyerName or "?"}`
+		then `{if snapshot.rareWalkInBuyer then "Rare Walk-In" else "Buyer"}: {snapshot.buyerName or "?"}`
 		else `Seller: {snapshot.customerName or "?"}`
 	local readHint = if isBuyerFacing then snapshot.buyerReadHint or snapshot.buyerWants else snapshot.sellerReadHint
 	labels.tell.Text = `Tell: {if isBuyerFacing then snapshot.buyerTell or "?" else snapshot.sellerTell or "?"}`
@@ -1474,7 +1508,7 @@ function UIController:updateShiftSnapshot(snapshot)
 		local buyerText = ""
 		if currentShiftSnapshot.pendingBuyerVisit and activeDealPhase ~= "BuyerSkipped" then
 			buyerText = if currentShiftSnapshot.pendingBuyerVisitKind == "rare"
-				then " | Rare buyer waiting"
+				then " | Rare Walk-In waiting"
 				else " | Buyer waiting"
 		end
 		if phase == "ClosingRush" then
@@ -1484,9 +1518,9 @@ function UIController:updateShiftSnapshot(snapshot)
 			labels.shift.Text = formatClosingRushShiftText(currentShiftSnapshot, cur, inventoryCount, inventoryMax)
 		else
 			local activityText = if activeDealPhase == "BuyerSkipped"
-				then if currentSnapshot and currentSnapshot.rareWalkInBuyer then "Rare Buyer Skipped" else "Buyer Visit Skipped"
+				then if currentSnapshot and currentSnapshot.rareWalkInBuyer then "Rare Walk-In Skipped" else "Buyer Visit Skipped"
 				elseif activeDealPhase == "BuyerVisit" or activeDealPhase == "Selling"
-				then if currentSnapshot and currentSnapshot.rareWalkInBuyer then "Rare Buyer Visit" else "Buyer Visit"
+				then if currentSnapshot and currentSnapshot.rareWalkInBuyer then "Rare Walk-In" else "Buyer Visit"
 				else "Buying"
 			labels.shift.Size = UDim2.fromOffset(416, 48)
 			labels.shift.Text =
