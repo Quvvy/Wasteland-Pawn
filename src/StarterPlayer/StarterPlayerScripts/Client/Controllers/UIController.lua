@@ -34,8 +34,10 @@ local stashActionCallback: ((string, string) -> ())?
 local currentSnapshot: any = nil
 local currentShiftSnapshot: any = nil
 local currentInventorySnapshot: any = nil
+local currentOnboardingSnapshot: any = nil
 local tacticButtonsEnabled = true
 local stashActionsEnabled = true
+local dealPanelForceHidden = false
 
 local TACTIC_RESULT_DISPLAY = {
 	price_drop = "Price dropped",
@@ -76,46 +78,35 @@ end
 
 local function formatInventorySummary(inventory): string
 	if not inventory then
-		return "Inventory: 0/3"
+		return "Shelf: 0/3"
 	end
 
-	local usedSlots = inventory.usedSlots or 0
-	local maxSlots = inventory.maxSlots or 3
+	local shelfUsed = inventory.shelfUsedSlots or inventory.displayUsedSlots or 0
+	local shelfMax = inventory.shelfMaxSlots or inventory.displayMaxSlots or 3
+	local shelfBySlot = InventorySnapshot.indexShelfItemsBySlot(inventory.shelfItems or inventory.displayItems)
 	local lines = {
-		`Inventory: {usedSlots}/{maxSlots}`,
+		`Shelf: {shelfUsed}/{shelfMax}`,
 	}
-	for slotIndex = 1, maxSlots do
-		local item = inventory.items and inventory.items[slotIndex]
+	for slotIndex = 1, shelfMax do
+		local item = shelfBySlot[slotIndex]
 		if item then
-			local heldTag = if item.heldBack then " [Held Back]" else ""
-			table.insert(lines, `{slotIndex}. {item.displayName} ({item.category}) - paid {item.purchasePrice}{heldTag}`)
+			table.insert(lines, `{slotIndex}. {item.displayName} ({item.category}) - paid {item.purchasePrice}`)
 		end
 	end
-	if usedSlots <= 0 then
+	if shelfUsed <= 0 then
 		table.insert(lines, "Shelf: empty")
-	elseif usedSlots < maxSlots then
-		table.insert(lines, `Open slots: {maxSlots - usedSlots}`)
+	elseif shelfUsed < shelfMax then
+		table.insert(lines, `Open slots: {shelfMax - shelfUsed}`)
 	end
 
-	local displayMax = inventory.displayMaxSlots or 3
-	local displayUsed = inventory.displayUsedSlots or 0
-	local displayBySlot = InventorySnapshot.indexDisplayItemsBySlot(inventory.displayItems)
-	table.insert(lines, `Display: {displayUsed}/{displayMax}`)
-	for slotIndex = 1, displayMax do
-		local item = displayBySlot[slotIndex]
-		if item then
-			table.insert(lines, `D{slotIndex}. {item.displayName} ({item.category})`)
-		end
-	end
-
-	local appeal = inventory.displayAppealSummary
+	local appeal = inventory.shelfAppealSummary or inventory.displayAppealSummary
 	if appeal and appeal ~= "" then
-		table.insert(lines, `Display Appeal: {appeal}`)
+		table.insert(lines, `Shelf appeal: {appeal}`)
 	end
 
-	local stashUsed = inventory.stashUsedSlots or 0
-	local stashMax = inventory.stashMaxSlots or 6
-	table.insert(lines, `Stash: {stashUsed}/{stashMax}`)
+	local storageUsed = inventory.stashUsedSlots or 0
+	local storageMax = inventory.stashMaxSlots or 2
+	table.insert(lines, `Storage: {storageUsed}/{storageMax}`)
 
 	return table.concat(lines, "\n")
 end
@@ -126,8 +117,8 @@ end
 
 local function formatClosingRushShiftText(snapshot, cur: string, inventoryCount: number, inventoryMax: number): string
 	return table.concat({
-		`Shift: {snapshot.displayName or "?"} | Closing Rush | Buyers left: {snapshot.closingRushBuyersRemaining or 0}`,
-		`Profit: {formatSignedAmount(snapshot.shiftProfit)} / {snapshot.targetProfit or 0} {cur} | Inventory: {inventoryCount}/{inventoryMax}`,
+		`Shop Day: {snapshot.displayName or "?"} | Closing Rush | Buyers left: {snapshot.closingRushBuyersRemaining or 0}`,
+		`Profit: {formatSignedAmount(snapshot.shiftProfit)} / {snapshot.targetProfit or 0} {cur} | Shelf: {inventoryCount}/{inventoryMax}`,
 		`Unsold items liquidate at {liquidationRatePercent()}% value.`,
 	}, "\n")
 end
@@ -170,6 +161,26 @@ local function formatNextTrafficSummary(traffic): string
 	return `\nNext traffic: {traffic.boardName}{subtitle}`
 end
 
+local function formatShopDayResultSummary(snapshot): string
+	local shopDay = snapshot and snapshot.shopDay
+	if type(shopDay) ~= "table" then
+		return ""
+	end
+
+	local forecast = shopDay.forecastLine
+	if type(forecast) ~= "string" or forecast == "" then
+		forecast = table.concat({
+			shopDay.buyerDemandShortLabel or shopDay.buyerDemandLabel or "Demand",
+			shopDay.sellerFlowShortLabel or shopDay.sellerFlowLabel or "Sellers",
+			shopDay.riskLabel or "Risk",
+		}, " | ")
+	end
+
+	local displayHelped = if shopDay.displayHelped then "yes" else "no"
+	local rareWalkIn = if (snapshot.rareBuyerVisitsSeen or 0) > 0 then "yes" else "no"
+	return `\nShop day: {forecast}\nDisplay helped: {displayHelped} | Rare Walk-In: {rareWalkIn}`
+end
+
 local function createLabel(parent: Instance, name: string, text: string, position: UDim2, size: UDim2): TextLabel
 	local label = Instance.new("TextLabel")
 	label.Name = name
@@ -192,6 +203,22 @@ local function formatShiftOptionStats(option, cur: string): string
 	local sellerCount = option.sellerVisitCount or option.dealCount or 0
 	local buyerEvery = option.buyerVisitEvery or 2
 	return `Target: {option.targetProfit or 0} {cur} | Sellers: {sellerCount} | Slots: {option.inventorySlots or 3} | Buyer every {buyerEvery}`
+end
+
+local function formatShopDayForecastCard(option): string
+	local forecast = option and option.shopDayForecast
+	if type(forecast) ~= "table" then
+		return "Forecast: normal shop day"
+	end
+
+	local lines = {}
+	if type(forecast.forecastLine) == "string" and forecast.forecastLine ~= "" then
+		table.insert(lines, `Forecast: {forecast.forecastLine}`)
+	end
+	if type(forecast.displayLine) == "string" and forecast.displayLine ~= "" then
+		table.insert(lines, forecast.displayLine)
+	end
+	return if #lines > 0 then table.concat(lines, "\n") else "Forecast: normal shop day"
 end
 
 local function formatShiftCardModifier(option): string
@@ -225,13 +252,19 @@ local function collectTrafficWindowNames(rows): ({ string }, boolean)
 	return names, hasScrapRush
 end
 
-local function formatTrafficBoardText(traffic, options): string
+local function formatTrafficBoardText(traffic, options, onboarding): string
 	if type(traffic) ~= "table" then
-		return "Session traffic windows. Tap ? for demand preview."
+		local hint = onboarding and onboarding.active and onboarding.hint
+		return if type(hint) == "string" and hint ~= ""
+			then `{hint}\nTap ? for demand preview.`
+			else "Session traffic windows. Tap ? for demand preview."
 	end
 
 	local boardSubtitle = traffic.boardSubtitle
 	local lines = {}
+	if onboarding and onboarding.active and type(onboarding.hint) == "string" and onboarding.hint ~= "" then
+		table.insert(lines, onboarding.hint)
+	end
 	if type(boardSubtitle) == "string" and boardSubtitle ~= "" then
 		table.insert(lines, boardSubtitle)
 	end
@@ -260,7 +293,7 @@ local function formatTrafficBoardText(traffic, options): string
 	return table.concat(lines, "\n")
 end
 
-local SHIFT_PREVIEW_HINT = "Tap ? on a shift to see likely demand."
+local SHIFT_PREVIEW_HINT = "Tap ? on a traffic window to see likely demand."
 local SHIFT_PREVIEW_MIN_HEIGHT = 28
 local SHIFT_PREVIEW_MAX_HEIGHT = 150
 local SHIFT_PREVIEW_LIST_MIN_HEIGHT = 140
@@ -299,7 +332,7 @@ local function formatDemandPreviewText(preview: any?): string
 		return SHIFT_PREVIEW_HINT
 	end
 
-	local lines = { preview.displayName or "Shift" }
+	local lines = { preview.displayName or "Traffic window" }
 
 	if preview.likelyBuyers and #preview.likelyBuyers > 0 then
 		table.insert(lines, `Likely buyers: {joinNames(preview.likelyBuyers, "displayName")}`)
@@ -317,17 +350,17 @@ local function formatDemandPreviewText(preview: any?): string
 	end
 
 	if preview.hasDisplayItems and preview.displayAppealSummary and preview.displayAppealSummary ~= "" then
-		table.insert(lines, `Your display: {preview.displayAppealSummary}`)
+		table.insert(lines, `Your shelf: {preview.displayAppealSummary}`)
 	else
-		table.insert(lines, "Your display: empty")
+		table.insert(lines, "Your shelf: empty")
 	end
 
 	if not preview.hasDisplayItems then
-		table.insert(lines, "Display effect: none yet")
+		table.insert(lines, "Items on your shelf attract buyers.")
 	elseif preview.displayEffects and #preview.displayEffects > 0 then
-		table.insert(lines, `Display effect: {joinNames(preview.displayEffects, "displayName")} may be more likely`)
+		table.insert(lines, `Shelf appeal: {joinNames(preview.displayEffects, "displayName")} may be more likely`)
 	else
-		table.insert(lines, "Display effect: no strong match here")
+		table.insert(lines, "Shelf appeal: no strong match here")
 	end
 
 	return table.concat(lines, "\n")
@@ -361,7 +394,19 @@ local function formatDisplayInfluenceHelp(snapshot): string?
 		return `Display helped: {table.concat(matched, " / ")}`
 	end
 
-	return snapshot.displayInfluenceLabel or "Display helped attract this buyer."
+	return snapshot.displayInfluenceLabel or "Shelf appeal helped attract this buyer."
+end
+
+local function getOnboardingHint(snapshot): string?
+	local onboarding = snapshot and snapshot.onboarding or currentOnboardingSnapshot
+	if type(onboarding) ~= "table" or onboarding.active ~= true then
+		return nil
+	end
+	local hint = onboarding.hint
+	if type(hint) == "string" and hint ~= "" then
+		return hint
+	end
+	return nil
 end
 
 local function measurePreviewTextHeight(text: string): number
@@ -455,8 +500,21 @@ local function refreshDealRootVisibility()
 	if not dealRoot then
 		return
 	end
+	if dealPanelForceHidden then
+		dealRoot.Visible = false
+		return
+	end
 	local snap = currentShiftSnapshot
 	dealRoot.Visible = snap ~= nil and snap.active == true
+end
+
+function UIController:setDealPanelForceHidden(hidden: boolean)
+	dealPanelForceHidden = hidden
+	refreshDealRootVisibility()
+end
+
+function UIController:isDealPanelForceHidden(): boolean
+	return dealPanelForceHidden
 end
 
 local function createButton(parent: Instance, name: string, text: string, position: UDim2, size: UDim2): TextButton
@@ -619,76 +677,57 @@ local function refreshStashOverlay()
 	local inventory = currentInventorySnapshot or {}
 	local activeShift = currentShiftSnapshot ~= nil and currentShiftSnapshot.active == true and currentShiftSnapshot.ended ~= true
 	local locked = isStashRouteLocked()
-	local stashFull = (inventory.stashUsedSlots or 0) >= (inventory.stashMaxSlots or 6)
-	local displayFull = (inventory.displayUsedSlots or 0) >= (inventory.displayMaxSlots or 3)
-	local shelfFull = (inventory.usedSlots or 0) >= (inventory.maxSlots or 3)
+	local storageFull = (inventory.stashUsedSlots or 0) >= (inventory.stashMaxSlots or 2)
+	local shelfFull = (inventory.shelfUsedSlots or inventory.displayUsedSlots or 0) >= (inventory.shelfMaxSlots or inventory.displayMaxSlots or 3)
 	local lockedLabel = if locked then "Finish buyer first" else nil
 	local order = 1
 
-	order = addStashSectionHeader(`Working Stock ({inventory.usedSlots or 0}/{inventory.maxSlots or 3})`, order)
-	local stockItems = inventory.items or {}
-	if #stockItems == 0 then
-		order = addStashEmptyRow("No working stock on the shelf.", order)
+	order = addStashSectionHeader(`Shelf ({inventory.shelfUsedSlots or inventory.displayUsedSlots or 0}/{inventory.shelfMaxSlots or inventory.displayMaxSlots or 3})`, order)
+	local shelfItems = inventory.shelfItems or inventory.displayItems or {}
+	local shelfBySlot = InventorySnapshot.indexShelfItemsBySlot(shelfItems)
+	local hasShelfItems = false
+	for slotIndex = 1, inventory.shelfMaxSlots or inventory.displayMaxSlots or 3 do
+		if shelfBySlot[slotIndex] then
+			hasShelfItems = true
+			break
+		end
+	end
+	if not hasShelfItems then
+		order = addStashEmptyRow("No items on the Shelf.", order)
 	else
-		for _, entry in stockItems do
-			local enabled = activeShift and not locked and not stashFull and stashActionsEnabled
-			local disabledLabel = lockedLabel or (if not activeShift then "Open shift" elseif stashFull then "Stash full" else "Stash")
-			order = addStashItemRow(entry, {
-				{
-					name = "Stash",
-					label = "Stash",
-					disabledLabel = disabledLabel,
-					enabled = enabled,
-					remoteName = "StashInventoryItem",
-				},
-			}, order)
+		for slotIndex = 1, inventory.shelfMaxSlots or inventory.displayMaxSlots or 3 do
+			local entry = shelfBySlot[slotIndex]
+			if entry then
+				local enabled = not locked and not storageFull and stashActionsEnabled
+				local disabledLabel = lockedLabel or (if storageFull then "Storage full" else "To Storage")
+				order = addStashItemRow(entry, {
+					{
+						name = "Storage",
+						label = "To Storage",
+						disabledLabel = disabledLabel,
+						enabled = enabled,
+						remoteName = "MoveDisplayItemToStash",
+					},
+				}, order)
+			end
 		end
 	end
 
-	order = addStashSectionHeader(`Stash ({inventory.stashUsedSlots or 0}/{inventory.stashMaxSlots or 6})`, order)
-	local stashItems = inventory.stashItems or {}
-	if #stashItems == 0 then
-		order = addStashEmptyRow("Nothing stashed.", order)
+	order = addStashSectionHeader(`Storage ({inventory.stashUsedSlots or 0}/{inventory.stashMaxSlots or 2})`, order)
+	local storageItems = inventory.stashItems or {}
+	if #storageItems == 0 then
+		order = addStashEmptyRow("Nothing in Storage.", order)
 	else
-		for _, entry in stashItems do
-			local displayEnabled = not locked and not displayFull and stashActionsEnabled
-			local shelfEnabled = activeShift and not locked and not shelfFull and stashActionsEnabled
-			local displayDisabled = lockedLabel or (if displayFull then "Display full" else "Display")
-			local shelfDisabled = lockedLabel or (if not activeShift then "Open shift" elseif shelfFull then "Shelf full" else "To Shelf")
+		for _, entry in storageItems do
+			local shelfEnabled = not locked and not shelfFull and stashActionsEnabled
+			local shelfDisabled = lockedLabel or (if shelfFull then "Shelf full" else "To Shelf")
 			order = addStashItemRow(entry, {
-				{
-					name = "Display",
-					label = "Display",
-					disabledLabel = displayDisabled,
-					enabled = displayEnabled,
-					remoteName = "MoveStashedItemToDisplay",
-				},
 				{
 					name = "ToShelf",
 					label = "To Shelf",
 					disabledLabel = shelfDisabled,
 					enabled = shelfEnabled,
-					remoteName = "ReturnStashedItemToInventory",
-				},
-			}, order)
-		end
-	end
-
-	order = addStashSectionHeader(`Display ({inventory.displayUsedSlots or 0}/{inventory.displayMaxSlots or 3})`, order)
-	local displayItems = inventory.displayItems or {}
-	if #displayItems == 0 then
-		order = addStashEmptyRow("DisplayShelf is empty.", order)
-	else
-		for _, entry in displayItems do
-			local enabled = not locked and not stashFull and stashActionsEnabled
-			local disabledLabel = lockedLabel or (if stashFull then "Stash full" else "Stash")
-			order = addStashItemRow(entry, {
-				{
-					name = "Stash",
-					label = "Stash",
-					disabledLabel = disabledLabel,
-					enabled = enabled,
-					remoteName = "MoveDisplayItemToStash",
+					remoteName = "MoveStashedItemToDisplay",
 				},
 			}, order)
 		end
@@ -737,7 +776,7 @@ function UIController:Init()
 	labels.title.TextSize = 17
 	labels.title.Font = Enum.Font.GothamBold
 
-	labels.shift = createLabel(root, "Shift", "Choose a shift to begin.", UDim2.fromOffset(12, 38), UDim2.fromOffset(416, 48))
+	labels.shift = createLabel(root, "Shift", "Open the Traffic Board to begin a shop day.", UDim2.fromOffset(12, 38), UDim2.fromOffset(416, 48))
 	labels.shift.Font = Enum.Font.GothamBold
 	labels.shift.TextColor3 = Color3.fromRGB(255, 235, 175)
 
@@ -775,11 +814,11 @@ function UIController:Init()
 	labels.result = createLabel(root, "Result", "", UDim2.fromOffset(12, 474), UDim2.fromOffset(416, 86))
 	labels.result.Visible = false
 
-	labels.inventory = createLabel(root, "Inventory", "Inventory: 0/3", UDim2.fromOffset(12, 562), UDim2.fromOffset(416, 68))
+	labels.inventory = createLabel(root, "Inventory", "Shelf: 0/3", UDim2.fromOffset(12, 562), UDim2.fromOffset(416, 68))
 	labels.inventory.TextColor3 = Color3.fromRGB(210, 240, 210)
 	labels.inventory.Visible = false
 
-	labels.shiftResult = createLabel(root, "ShiftResult", "", UDim2.fromOffset(12, 562), UDim2.fromOffset(416, 68))
+	labels.shiftResult = createLabel(root, "ShiftResult", "", UDim2.fromOffset(12, 562), UDim2.fromOffset(416, 132))
 	labels.shiftResult.Font = Enum.Font.GothamBold
 	labels.shiftResult.Visible = false
 
@@ -808,7 +847,7 @@ function UIController:Init()
 	buttons.findAnother = createButton(root, "FindAnother", "Skip Buyer", UDim2.fromOffset(148, 668), UDim2.fromOffset(120, 26))
 	buttons.keep = createButton(root, "Keep", "Keep Item", UDim2.fromOffset(276, 668), UDim2.fromOffset(100, 26))
 	buttons.next = createButton(root, "Next", "Next Customer", UDim2.fromOffset(276, 668), UDim2.fromOffset(152, 26))
-	buttons.closeShift = createButton(root, "CloseShift", "Liquidate & Close", UDim2.fromOffset(12, 668), UDim2.fromOffset(120, 26))
+	buttons.closeShift = createButton(root, "CloseShift", "Close Shop", UDim2.fromOffset(12, 668), UDim2.fromOffset(120, 26))
 	buttons.closeShift.TextSize = 12
 
 	buttons.offerSlot1 = createButton(root, "OfferSlot1", "Offer 1", UDim2.fromOffset(12, 634), UDim2.fromOffset(132, 30))
@@ -979,7 +1018,7 @@ function UIController:Init()
 	local stashTitle = createLabel(
 		stashPanel,
 		"Title",
-		"Stash",
+		"Storage",
 		UDim2.fromOffset(12, 10),
 		UDim2.fromOffset(360, 28)
 	)
@@ -991,13 +1030,15 @@ function UIController:Init()
 	local stashSubtitle = createLabel(
 		stashPanel,
 		"Subtitle",
-		"Session-only storage. Display affects demand; stash does not.",
+		"Storage saves up to 2 items between visits. Your Shelf is public stock — buyers buy from the Shelf.",
 		UDim2.fromOffset(12, 38),
-		UDim2.fromOffset(396, 22)
+		UDim2.fromOffset(396, 42)
 	)
 	stashSubtitle.BackgroundTransparency = 1
 	stashSubtitle.TextSize = 12
 	stashSubtitle.TextColor3 = Color3.fromRGB(190, 200, 190)
+	stashSubtitle.TextWrapped = true
+	stashSubtitle.TextYAlignment = Enum.TextYAlignment.Top
 
 	local stashClose = createButton(stashPanel, "Close", "Close", UDim2.fromOffset(420, 8), UDim2.fromOffset(68, 24))
 	stashClose.TextSize = 12
@@ -1009,8 +1050,8 @@ function UIController:Init()
 	stashList.Name = "StashList"
 	stashList.BackgroundTransparency = 1
 	stashList.BorderSizePixel = 0
-	stashList.Position = UDim2.fromOffset(12, 68)
-	stashList.Size = UDim2.fromOffset(476, 438)
+	stashList.Position = UDim2.fromOffset(12, 88)
+	stashList.Size = UDim2.fromOffset(476, 418)
 	stashList.CanvasSize = UDim2.fromOffset(0, 0)
 	stashList.ScrollBarThickness = 6
 	stashList.Parent = stashPanel
@@ -1086,7 +1127,7 @@ function UIController:openStash()
 	end
 
 	if not stashActionCallback then
-		self:showHubMessage("Stash is not ready yet.")
+		self:showHubMessage("Storage is not ready yet.")
 		return false
 	end
 
@@ -1114,36 +1155,39 @@ function UIController:onShiftSelectStart(callback: (string) -> ())
 	shiftSelectStartCallback = callback
 end
 
-function UIController:openShiftSelect(options, traffic)
+function UIController:openShiftSelect(options, traffic, onboarding)
 	if self:isShiftActive() then
-		self:showHubMessage("Shift already in progress. Finish or end it first.")
+		self:showHubMessage("Shop is already open. Close it first.")
 		return false
 	end
 
 	if not options or #options == 0 then
-		self:showHubMessage("No shift options available.")
+		self:showHubMessage("No traffic windows available.")
 		return false
 	end
 
 	if not shiftSelectStartCallback then
-		self:showHubMessage("Shift start is not ready yet. Try again.")
+		self:showHubMessage("Open Shop is not ready yet. Try again.")
 		warn("UIController: shiftSelectStartCallback missing")
 		return false
 	end
 
 	local cur = currencyLabel(currentSnapshot)
+	currentOnboardingSnapshot = onboarding
 	clearShiftSelectList()
 	setShiftDemandPreview(nil)
 	labels.shiftSelectTitle.Text = formatTrafficBoardTitle(traffic)
-	labels.shiftSelectSubtitle.Text = formatTrafficBoardText(traffic, options)
+	labels.shiftSelectSubtitle.Text = formatTrafficBoardText(traffic, options, onboarding)
 
 	for index, option in options do
 		local shiftId = option.id
+		local recommended = option.recommended == true
+			or (onboarding and onboarding.active and shiftId == onboarding.recommendedShiftId)
 		local card = Instance.new("Frame")
 		card.Name = `Option_{option.id or index}`
 		card.BackgroundColor3 = Color3.fromRGB(34, 32, 42)
 		card.BorderSizePixel = 0
-		card.Size = UDim2.new(1, -4, 0, 118)
+		card.Size = UDim2.new(1, -4, 0, 138)
 		card.LayoutOrder = index
 		card.Parent = shiftSelectList
 
@@ -1156,16 +1200,24 @@ function UIController:openShiftSelect(options, traffic)
 		cardStroke.Thickness = 1
 		cardStroke.Parent = card
 
-		local nameLabel = createLabel(card, "Name", option.displayName or "Shift", UDim2.fromOffset(10, 6), UDim2.new(1, -120, 0, 22))
+		local displayName = option.displayName or "Shop Day"
+		if recommended then
+			displayName ..= "  Recommended"
+		end
+		local nameLabel = createLabel(card, "Name", displayName, UDim2.fromOffset(10, 6), UDim2.new(1, -120, 0, 22))
 		nameLabel.BackgroundTransparency = 1
 		nameLabel.Font = Enum.Font.GothamBold
 		nameLabel.TextSize = 15
 		nameLabel.TextColor3 = Color3.fromRGB(255, 235, 175)
 
+		local modifierText = formatShiftCardModifier(option)
+		if recommended and type(option.recommendedText) == "string" then
+			modifierText = option.recommendedText
+		end
 		local modifierLabel = createLabel(
 			card,
 			"Modifier",
-			formatShiftCardModifier(option),
+			modifierText,
 			UDim2.fromOffset(10, 28),
 			UDim2.new(1, -20, 0, 18)
 		)
@@ -1178,18 +1230,29 @@ function UIController:openShiftSelect(options, traffic)
 			"Description",
 			option.trafficDescription or option.description or "",
 			UDim2.fromOffset(10, 46),
-			UDim2.new(1, -20, 0, 32)
+			UDim2.new(1, -20, 0, 28)
 		)
 		descLabel.BackgroundTransparency = 1
 		descLabel.TextSize = 12
 		descLabel.TextColor3 = Color3.fromRGB(210, 210, 210)
 
+		local forecastLabel = createLabel(
+			card,
+			"Forecast",
+			formatShopDayForecastCard(option),
+			UDim2.fromOffset(10, 74),
+			UDim2.new(1, -112, 0, 34)
+		)
+		forecastLabel.BackgroundTransparency = 1
+		forecastLabel.TextSize = 11
+		forecastLabel.TextColor3 = Color3.fromRGB(180, 215, 190)
+
 		local statsLabel = createLabel(
 			card,
 			"Stats",
 			formatShiftOptionStats(option, cur),
-			UDim2.fromOffset(10, 78),
-			UDim2.new(1, -112, 0, 32)
+			UDim2.fromOffset(10, 110),
+			UDim2.new(1, -112, 0, 22)
 		)
 		statsLabel.BackgroundTransparency = 1
 		statsLabel.TextSize = 11
@@ -1202,12 +1265,12 @@ function UIController:openShiftSelect(options, traffic)
 		local startButton = createButton(
 			card,
 			"Start",
-			"Start",
+			"Open Shop",
 			UDim2.new(1, -(88 + SHIFT_CARD_ACTION_RIGHT), 1, -startTop),
 			UDim2.fromOffset(88, SHIFT_CARD_START_HEIGHT)
 		)
-		startButton.TextSize = 12
-		startButton.BackgroundColor3 = Color3.fromRGB(70, 120, 80)
+		startButton.TextSize = 11
+		startButton.BackgroundColor3 = if recommended then Color3.fromRGB(95, 125, 75) else Color3.fromRGB(70, 120, 80)
 
 		local previewButton = createButton(
 			card,
@@ -1231,7 +1294,7 @@ function UIController:openShiftSelect(options, traffic)
 		end)
 		startButton.MouseButton1Click:Connect(function()
 			if self:isShiftActive() then
-				self:showHubMessage("Shift already in progress.")
+				self:showHubMessage("Shop is already open.")
 				return
 			end
 			if shiftSelectStartCallback and shiftId then
@@ -1254,13 +1317,13 @@ local function refreshAcceptBuyButton()
 	local inventory = currentInventorySnapshot or (snapshot and snapshot.inventory)
 	local inventoryFull = phase == "Haggling"
 		and inventory
-		and (inventory.usedSlots or 0) >= (inventory.maxSlots or 3)
+		and (inventory.shelfUsedSlots or inventory.displayUsedSlots or 0) >= (inventory.shelfMaxSlots or inventory.displayMaxSlots or 3)
 	local canAccept = tacticButtonsEnabled and phase == "Haggling" and not inventoryFull
 
 	buttons.acceptBuy.Active = canAccept
 	buttons.acceptBuy.AutoButtonColor = canAccept
 	buttons.acceptBuy.BackgroundTransparency = if canAccept then 0 else 0.45
-	buttons.acceptBuy.Text = if inventoryFull then "Inventory Full" else "Accept Price"
+	buttons.acceptBuy.Text = if inventoryFull then "Shelf Full" else "Accept Price"
 end
 
 function UIController:setTacticButtonsEnabled(enabled: boolean)
@@ -1312,10 +1375,12 @@ function UIController:setPhaseControls(phase: string)
 	buttons.keep.Text = if buyerVisit then "Skip Buyer" else "Keep Item"
 	buttons.closeShift.Visible = hasShift and closingRush and not sell
 	local buyerSkipped = phase == "BuyerSkipped"
-	local inventoryCount = currentInventorySnapshot and currentInventorySnapshot.usedSlots or 0
+	local shelfCount = currentInventorySnapshot
+		and (currentInventorySnapshot.shelfUsedSlots or currentInventorySnapshot.displayUsedSlots)
+		or 0
 	local sellersRemaining = (currentShiftSnapshot and currentShiftSnapshot.dealsRemaining or 0) > 0
 	local closingRushBuyersAvailable = closingRush
-		and inventoryCount > 0
+		and shelfCount > 0
 		and ((currentShiftSnapshot and currentShiftSnapshot.closingRushBuyersRemaining or 0) > 0
 			or currentShiftSnapshot.pendingBuyerVisit == true)
 	buttons.next.Visible = hasShift
@@ -1344,6 +1409,11 @@ function UIController:updateSnapshot(snapshot)
 
 	local phase = snapshot.phase or "Haggling"
 	local cur = currencyLabel(snapshot)
+	if snapshot.onboarding then
+		currentOnboardingSnapshot = snapshot.onboarding
+	elseif snapshot.shift and snapshot.shift.onboarding then
+		currentOnboardingSnapshot = snapshot.shift.onboarding
+	end
 	if snapshot.inventory then
 		currentInventorySnapshot = snapshot.inventory
 	end
@@ -1389,6 +1459,10 @@ function UIController:updateSnapshot(snapshot)
 		labels.tell.Text ..= `\n{displayInfluenceHelp}`
 	end
 	labels.dialogue.Text = compactTerminalDialogue(phase, snapshot)
+	local onboardingHint = getOnboardingHint(snapshot)
+	if onboardingHint and not string.find(labels.dialogue.Text, onboardingHint, 1, true) then
+		labels.dialogue.Text ..= `\n{onboardingHint}`
+	end
 	if isBuyerVisit then
 		labels.item.Text = "Choose an item to offer."
 	else
@@ -1499,6 +1573,9 @@ end
 
 function UIController:updateShiftSnapshot(snapshot)
 	currentShiftSnapshot = snapshot or { active = false, ended = false }
+	if currentShiftSnapshot.onboarding then
+		currentOnboardingSnapshot = currentShiftSnapshot.onboarding
+	end
 	local cur = currencyLabel(currentSnapshot)
 
 	if currentShiftSnapshot.active then
@@ -1512,10 +1589,15 @@ function UIController:updateShiftSnapshot(snapshot)
 				else " | Buyer waiting"
 		end
 		if phase == "ClosingRush" then
-			local inventoryCount = currentInventorySnapshot and currentInventorySnapshot.usedSlots or 0
-			local inventoryMax = currentInventorySnapshot and currentInventorySnapshot.maxSlots or currentShiftSnapshot.inventoryMaxSlots or 3
+			local shelfCount = currentInventorySnapshot
+				and (currentInventorySnapshot.shelfUsedSlots or currentInventorySnapshot.displayUsedSlots)
+				or 0
+			local shelfMax = currentInventorySnapshot
+				and (currentInventorySnapshot.shelfMaxSlots or currentInventorySnapshot.displayMaxSlots)
+				or currentShiftSnapshot.inventoryMaxSlots
+				or 3
 			labels.shift.Size = UDim2.fromOffset(416, 54)
-			labels.shift.Text = formatClosingRushShiftText(currentShiftSnapshot, cur, inventoryCount, inventoryMax)
+			labels.shift.Text = formatClosingRushShiftText(currentShiftSnapshot, cur, shelfCount, shelfMax)
 		else
 			local activityText = if activeDealPhase == "BuyerSkipped"
 				then if currentSnapshot and currentSnapshot.rareWalkInBuyer then "Rare Walk-In Skipped" else "Buyer Visit Skipped"
@@ -1524,7 +1606,7 @@ function UIController:updateShiftSnapshot(snapshot)
 				else "Buying"
 			labels.shift.Size = UDim2.fromOffset(416, 48)
 			labels.shift.Text =
-				`Shift: {currentShiftSnapshot.displayName or "?"} | Buying | {activityText}\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Sellers: {currentShiftSnapshot.dealsCompleted or 0} / {currentShiftSnapshot.sellerVisitCount or currentShiftSnapshot.dealCount or 0}{buyerText}`
+				`Shop Day: {currentShiftSnapshot.displayName or "?"} | Open | {activityText}\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Sellers: {currentShiftSnapshot.dealsCompleted or 0} / {currentShiftSnapshot.sellerVisitCount or currentShiftSnapshot.dealCount or 0}{buyerText}`
 		end
 		refreshInventoryLabel()
 		labels.shiftResult.Visible = false
@@ -1532,18 +1614,19 @@ function UIController:updateShiftSnapshot(snapshot)
 		labels.shift.Size = UDim2.fromOffset(416, 48)
 		local grade = currentShiftSnapshot.grade or (if currentShiftSnapshot.success then "Success" else "Bust")
 		local resultTitle = currentShiftSnapshot.resultTitle
-			or (if currentShiftSnapshot.success then "Shift Complete" else "Shift Failed")
+			or (if currentShiftSnapshot.success then "Shop Day Complete" else "Shop Day Failed")
 		labels.shift.Text =
-			`Shift: {currentShiftSnapshot.displayName or "?"} | Ended\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Sellers: {currentShiftSnapshot.dealsCompleted or 0} / {currentShiftSnapshot.sellerVisitCount or currentShiftSnapshot.dealCount or 0}`
+			`Shop Closed: {currentShiftSnapshot.displayName or "?"}\nProfit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} / {currentShiftSnapshot.targetProfit or 0} {cur} | Sellers: {currentShiftSnapshot.dealsCompleted or 0} / {currentShiftSnapshot.sellerVisitCount or currentShiftSnapshot.dealCount or 0}`
 		labels.shiftResult.Text =
-			`{resultTitle}\nTarget: {currentShiftSnapshot.targetProfit or 0} {cur} | Profit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} {cur}\nGrade: {grade}{formatLiquidationSummary(currentShiftSnapshot.liquidationSummary, cur)}{formatNextTrafficSummary(currentShiftSnapshot.traffic)}`
+			`Shop Closed\n{resultTitle}\nTarget: {currentShiftSnapshot.targetProfit or 0} {cur} | Profit: {formatSignedAmount(currentShiftSnapshot.shiftProfit)} {cur}\nGrade: {grade}{formatShopDayResultSummary(currentShiftSnapshot)}{formatLiquidationSummary(currentShiftSnapshot.liquidationSummary, cur)}{formatNextTrafficSummary(currentShiftSnapshot.traffic)}`
 		labels.shiftResult.TextColor3 = if currentShiftSnapshot.success or grade == "Close"
 			then Color3.fromRGB(145, 235, 160)
 			else Color3.fromRGB(255, 170, 140)
 		labels.shiftResult.Visible = true
 	else
 		labels.shift.Size = UDim2.fromOffset(416, 48)
-		labels.shift.Text = "Choose a shift to begin."
+		local hint = getOnboardingHint(currentShiftSnapshot)
+		labels.shift.Text = hint or "Open the Traffic Board to begin a shop day."
 		labels.shiftResult.Visible = false
 		refreshInventoryLabel()
 	end

@@ -17,6 +17,32 @@ No current critical issues tracked.
 
 Issues that hurt testing, confuse players, or create inconsistent behavior.
 
+### Hybrid Counter Presentation — missing Studio anchors
+
+Status: Watch
+Area: Counter presentation / Camera
+Risk: Without `DealCameraSpot` and `CounterLookAt` under `Workspace.World.Shop`, client falls back to legacy deal UI and normal camera.
+Notes:
+- Optional look targets (`SellShelfLookAt`, `DisplayShelfLookAt`, `StorageLookAt`) are silent fallbacks.
+- For buyer-visit shelf framing, place `SellShelfLookAt` near `Workspace.World.Shop.Shelf` (canonical public shelf). Client falls back to `Shelf` / `ShelfSlot1` geometry when look targets are missing.
+- For storage camera assist, place `StorageLookAt` (or legacy `StashBinLookAt`) near the Storage bin. Client falls back to `StorageBin` / `StashBin` geometry when the anchor is missing.
+- Optional `PlayerCounterSpot` improves explore-mode shopkeeper camera framing (player centered at counter); falls back to live character position when missing.
+- Ctrl+U debug overlay can toggle **Legacy Deal UI** for A/B testing in Studio.
+Possible Fix:
+- Place required presentation anchors in Studio; use debug world scan to verify.
+
+### Shopkeeper camera + player movement
+
+Status: Watch
+Area: Camera / Controls
+Risk: Scriptable shopkeeper camera with movement enabled may feel disorienting for some players.
+Notes:
+- Mouse pan is intentionally conservative (small yaw/pitch clamps).
+- Buyer visit uses dedicated `BuyerVisit` camera mode (wider pan, shelf bias) so public shelf items stay in frame.
+- Camera restores `Custom` on shop close, fallback, error, and respawn.
+Possible Fix:
+- Tune `ClientPresentation` pan values after PC playtest.
+
 ---
 
 ## Low
@@ -33,25 +59,41 @@ Things where a client might be able to call a remote incorrectly, duplicate stat
 
 Status: Watch
 Area: Debug tools / Remotes
-Risk: Debug actions could become dangerous if accidentally enabled outside Studio.
+Risk: Debug actions could become dangerous if allowlist or server gates regress.
 Notes:
-- `DebugRunAction` must remain server-gated with `RunService:IsStudio()`.
+- `DebugAccess.lua` is server-only (`Server/Config/DebugAccess.lua`). Never replicate `Users` to clients.
+- `DebugGetAccess` returns derived permissions for the caller only; `DebugRunAction` checks `DebugAccess.canRunDebugAction` on every action.
+- `EnabledInLive` never grants public access — live DevTools require `Users[player.UserId]`.
+- `StudioBypass` applies only when `RunService:IsStudio()`.
+- Owner role sees hidden economy fields; tester role does not (`canViewHiddenEconomy`).
+- `SetScraps` is owner-only, self-only, number-only, clamped `0..999_999`.
 Possible Fix:
-- Keep client and server gates.
-- Never trust client-side debug UI gating alone.
+- Keep server write gates on every debug path (DebugService + InventoryService + DataService + DealService + ShiftService).
+- Never trust client-side DevTools UI gating alone.
 
-### Display/stash item sale protection
+### Live DevTools overlay V1
+
+Status: Fixed
+Area: Debug UI
+Notes:
+- Ctrl+U opens a tabbed DevTools panel for allowlisted users (`DebugGetAccess` bootstrap).
+- Non-allowlisted players get no overlay and no Ctrl+U handler.
+- Panel supports drag (viewport clamp), resize, collapse, and tabs: Overview, Shop Day, Shelf, Deal, Persistence, Camera, Actions, Log.
+- Dangerous actions are role-gated; testers get operational read-only state without hidden economy math.
+
+### Shelf / Storage item sale protection
+
+Status: Fixed (Public Shelves V1)
+Area: BuyerVisit / Shelf
+Risk: Storage items should never be offerable; only public Shelf items should be sellable.
+Notes:
+- Server accepts `SelectInventoryItemForBuyer` only when `location == "display"` (player-facing: Shelf).
+- Storage (`stash`) is rejected.
+
+### Storage routing during buyer phases
 
 Status: Watch
-Area: BuyerVisit / Inventory
-Risk: DisplayShelf and stash items should never be offerable or sellable unless returned to InventoryShelf first.
-Possible Fix:
-- Server should reject `SelectInventoryItemForBuyer` unless `location == "inventory"`.
-
-### Stash routing during buyer phases
-
-Status: Watch
-Area: Stash / Remotes
+Area: Storage / Remotes
 Risk: Moving items while a buyer offer list is active could stale the UI or offer a moved item.
 Notes:
 - Stash V1 blocks stash/display routing during `BuyerVisit` and `Selling`.
@@ -66,11 +108,10 @@ Code that works now but may become painful later.
 
 ### Debug overlay can grow too large
 
-Status: Open
+Status: Fixed (Live DevTools V1)
 Area: Debug UI
-Risk: One huge scrolling debug panel may get hard to read as systems grow.
-Possible Fix:
-- Split into tabs later: Shift, Deal, Inventory, World, Prompts, Actions.
+Notes:
+- DevTools panel uses tabs (Overview, Shop Day, Shelf, Deal, Persistence, Camera, Actions, Log) instead of one scrolling dump.
 
 ### DealService responsibility growth
 
@@ -129,9 +170,9 @@ Area: Traffic Board / Product direction
 Why it matters:
 - Current Traffic Board is a prototype picker; product direction is open/close shop days with variable traffic.
 Current impact:
-- Players may feel they are choosing the same static mode repeatedly instead of running a shop.
+- Open Shop / Shop Day Variables V1 improves player-facing copy and adds compact server-owned forecasts, but the board can still feel menu-like until playtests prove players read it as preparation.
 Recommended next action:
-- Reframe board as forecast/prep; evolve toward open shop → variable day → close shop.
+- Playtest whether Open Shop, Shop Closed, and compact forecast/result copy make the board feel like preparation instead of mission select.
 Fixed when:
 - Player-facing flow reads as preparing and opening the shop, not picking a mission from a menu.
 
@@ -142,9 +183,9 @@ Area: Shop-day variables / Prep
 Why it matters:
 - Variables must tie to readable prep (display/stash/inventory) and forecast hints, not pure RNG punishment.
 Current impact:
-- Traffic conditions and rare walk-ins exist but prep-to-outcome links are still thin.
+- Shop Day Variables V1 lightly changes buyer demand and seller flow using visible forecasts, while risk remains informational. The system still needs playtesting to prove it feels fair instead of random.
 Recommended next action:
-- Strengthen Demand Preview and display influence readability before adding more variance layers.
+- Watch whether players can connect forecast lines, DisplayShelf choices, buyer visits, and the Shop Closed summary without seeing hidden weight math.
 Fixed when:
 - Players can explain why today felt different and what they could have done differently.
 
@@ -213,17 +254,18 @@ Recommended next action:
 Fixed when:
 - A mobile player can complete the first shop day without fighting small buttons, overlapping text, or unclear prompts.
 
-### Display/stash between-shift routing is limited
+### Shelf / Storage between-shift routing
 
-Status: Intentional
-Area: Display / Stash / UX
-Risk: Players may expect full after-hours inventory management before the shop is open.
+Status: Intentional (Public Shelves V1)
+Area: Shelf / Storage / UX
+Risk: Players may expect full after-hours management before the shop is open.
 Notes:
-- V1 shows display props after shift end but disables Return to Shelf prompts until the next shift starts.
-- StashBin overlay allows Stash <-> Display between shifts.
-- Pulling stashed items to InventoryShelf still requires an active shift.
+- Public Shelf props remain visible after shift end; world prompts disable until the next shift starts.
+- A client bug previously cleared shelf props on close; fixed in DisplayShelfPresentationController (props persist, prompts only).
+- Storage overlay allows Shelf ↔ Storage between shifts.
+- Buys land directly on the Shelf; there is no separate working-stock shelf in V1.
 Possible Fix:
-- Add fuller after-hours inventory routing only when that design is ready.
+- Add fuller after-hours routing only when that design is ready.
 
 ### Persistence depends on DataStore availability
 
@@ -233,12 +275,13 @@ Why it matters:
 - Persistent Shop State V1 is the first trust-building save layer; silent save loss would be worse than no persistence.
 Current impact:
 - Load/save calls are guarded with `pcall`.
+- Stash/display route changes now request an immediate save, and player leave cleanup defers inventory clearing until after save attempts.
 - If load fails or a future save version is detected, saving is disabled for that session to avoid overwriting unknown data with fallback defaults.
 - Studio tests require API Services enabled to verify real saves.
 Recommended next action:
 - Test fresh load, rejoin, failed API, and Reset Save Data paths before playtests.
 Fixed when:
-- Ctrl+U clearly reports load/save status during Studio testing, and failure modes do not overwrite existing saves or crash the session.
+- Ctrl+U clearly reports load/save status during Studio and live read-only testing, and failure modes do not overwrite existing saves or crash the session.
 
 ### Rare buyer pacing may feel noisy
 
@@ -254,6 +297,30 @@ Possible Fix:
 ## Recently Resolved
 
 Move fixed issues here instead of deleting them immediately.
+
+### Stash/display could save empty on leave
+
+Status: Fixed
+Area: Persistence / InventoryService / DataService
+Notes:
+- Inventory cleanup could race the final save provider and make the save path see an empty shop.
+- InventoryService now saves before cleanup, defers clearing the player inventory, and stash/display route changes request immediate saves.
+
+### Onboarding documented but not active in runtime
+
+Status: Fixed
+Area: Onboarding / ShiftService / DealService / UI
+Notes:
+- The current checkout had First Shift Onboarding V1 described in docs, but no runtime onboarding hooks.
+- Session-only onboarding state now recommends Scrap Rush, uses the existing Nervous Rookie / Copper Wire Bundle / Safe Flip lesson, and queues a normal scheduled buyer after the first purchase.
+
+### Live Ctrl+U debug overlay was unavailable
+
+Status: Superseded (Live DevTools V1)
+Area: Debug UI
+Notes:
+- Ctrl+U now opens allowlist-gated DevTools via `DebugGetAccess` (owners `86845593`, `87696934` in V1 config).
+- See **Live DevTools overlay V1** under Security / Exploit Risks.
 
 ### No-progress shift end advanced Traffic Board
 

@@ -1,4 +1,47 @@
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+
 local HubWorld = {}
+
+local spotRaycastParams: RaycastParams? = nil
+
+local function getSpotRaycastParams(extraExclude: Instance?): RaycastParams
+	if spotRaycastParams and not extraExclude then
+		return spotRaycastParams
+	end
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local exclude: { Instance } = {}
+	local world = Workspace:FindFirstChild("World")
+	if world then
+		local visitorFolder = world:FindFirstChild("HubVisitorLocal")
+		if visitorFolder then
+			table.insert(exclude, visitorFolder)
+		end
+	end
+	local player = Players.LocalPlayer
+	if player and player.Character then
+		table.insert(exclude, player.Character)
+	end
+	if extraExclude then
+		table.insert(exclude, extraExclude)
+	end
+	params.FilterDescendantsInstances = exclude
+	if not extraExclude then
+		spotRaycastParams = params
+	end
+	return params
+end
+
+function HubWorld.getSpotStandingCFrame(part: BasePart): CFrame
+	local cf = part.CFrame
+	local markerBottomY = cf.Position.Y - part.Size.Y * 0.5
+	local origin = cf.Position + Vector3.new(0, 4, 0)
+	local hit = Workspace:Raycast(origin, Vector3.new(0, -40, 0), getSpotRaycastParams(part))
+	local floorY = if hit then hit.Position.Y else markerBottomY
+	return CFrame.new(cf.Position.X, floorY, cf.Position.Z) * cf.Rotation
+end
 
 local function normalize(name: string): string
 	return string.lower((string.gsub(name, "[%s_%-]", "")))
@@ -209,6 +252,230 @@ function HubWorld.findCounterItemSpot(shop: Instance?): BasePart?
 	return HubWorld.resolveBasePart(found)
 end
 
+local DEAL_CAMERA_SPOT_NAMES = {
+	"DealCameraSpot",
+	"ShopCameraSpot",
+	"Deal_Camera_Spot",
+	"Shop_Camera_Spot",
+}
+
+function HubWorld.findDealCameraSpot(shop: Instance?): BasePart?
+	if not shop then
+		return nil
+	end
+	local found = HubWorld.findShopPart(shop, DEAL_CAMERA_SPOT_NAMES, "dealcameraspot")
+	if not found then
+		found = HubWorld.findShopPart(shop, DEAL_CAMERA_SPOT_NAMES, "shopcameraspot")
+	end
+	return HubWorld.resolveBasePart(found)
+end
+
+local COUNTER_LOOK_AT_NAMES = {
+	"CounterLookAt",
+	"Counter_Look_At",
+}
+
+function HubWorld.findCounterLookAt(shop: Instance?): BasePart?
+	if not shop then
+		return nil
+	end
+	local found = HubWorld.findShopPart(shop, COUNTER_LOOK_AT_NAMES, "counterlookat")
+	return HubWorld.resolveBasePart(found)
+end
+
+local CUSTOMER_ENTRY_SPOT_NAMES = {
+	"CustomerEntrySpot",
+	"Customer_Entry_Spot",
+}
+
+function HubWorld.findCustomerEntrySpot(shop: Instance?): BasePart?
+	if not shop then
+		return nil
+	end
+	local found = HubWorld.findShopPart(shop, CUSTOMER_ENTRY_SPOT_NAMES, "customerentryspot")
+	return HubWorld.resolveBasePart(found)
+end
+
+local CUSTOMER_COUNTER_SPOT_NAMES = {
+	"CustomerCounterSpot",
+	"Customer_Counter_Spot",
+}
+
+function HubWorld.findCustomerCounterSpot(shop: Instance?): BasePart?
+	if not shop then
+		return nil
+	end
+	local found = HubWorld.findShopPart(shop, CUSTOMER_COUNTER_SPOT_NAMES, "customercounterspot")
+	if found then
+		return HubWorld.resolveBasePart(found)
+	end
+	return HubWorld.findCustomerSpot(shop)
+end
+
+local CUSTOMER_EXIT_SPOT_NAMES = {
+	"CustomerExitSpot",
+	"Customer_Exit_Spot",
+}
+
+function HubWorld.findCustomerExitSpot(shop: Instance?): BasePart?
+	if not shop then
+		return nil
+	end
+	local found = HubWorld.findShopPart(shop, CUSTOMER_EXIT_SPOT_NAMES, "customerexitspot")
+	return HubWorld.resolveBasePart(found)
+end
+
+local SELL_SHELF_LOOK_AT_NAMES = {
+	"SellShelfLookAt",
+	"InventoryShelfLookAt",
+	"Sell_Shelf_Look_At",
+}
+
+function HubWorld.findSellShelfLookAt(shop: Instance?): BasePart?
+	if not shop then
+		return nil
+	end
+	local found = HubWorld.findShopPart(shop, SELL_SHELF_LOOK_AT_NAMES, "sellshelflookat")
+	if not found then
+		found = HubWorld.findShopPart(shop, SELL_SHELF_LOOK_AT_NAMES, "inventoryshelflookat")
+	end
+	local part = HubWorld.resolveBasePart(found)
+	if part then
+		return part
+	end
+
+	local shelf = HubWorld.findShelf(shop)
+	if not shelf then
+		return nil
+	end
+	if shelf:IsA("Model") then
+		local model = shelf :: Model
+		if model.PrimaryPart then
+			return model.PrimaryPart
+		end
+	end
+	local slot1 = HubWorld.findShelfSlot(shelf, 1)
+	if slot1 then
+		return slot1
+	end
+	return HubWorld.resolveBasePart(shelf)
+end
+
+local DISPLAY_SHELF_LOOK_AT_NAMES = {
+	"DisplayShelfLookAt",
+	"Display_Shelf_Look_At",
+}
+
+function HubWorld.findDisplayShelfLookAt(shop: Instance?): BasePart?
+	if not shop then
+		return nil
+	end
+	local found = HubWorld.findShopPart(shop, DISPLAY_SHELF_LOOK_AT_NAMES, "displayshelflookat")
+	return HubWorld.resolveBasePart(found)
+end
+
+local STORAGE_LOOK_AT_NAMES = {
+	"StorageLookAt",
+	"StorageBinLookAt",
+	"Storage_Look_At",
+	"StashLookAt",
+	"StashBinLookAt",
+	"Stash_Look_At",
+}
+
+function HubWorld.findStorageLookAt(shop: Instance?): BasePart?
+	if not shop then
+		return nil
+	end
+	local found = HubWorld.findShopPart(shop, STORAGE_LOOK_AT_NAMES, "storagelookat")
+	if not found then
+		found = HubWorld.findShopPart(shop, STORAGE_LOOK_AT_NAMES, "storagebinlookat")
+	end
+	if not found then
+		found = HubWorld.findShopPart(shop, STORAGE_LOOK_AT_NAMES, "stashlookat")
+	end
+	if not found then
+		found = HubWorld.findShopPart(shop, STORAGE_LOOK_AT_NAMES, "stashbinlookat")
+	end
+	local part = HubWorld.resolveBasePart(found)
+	if part then
+		return part
+	end
+
+	local bin = HubWorld.findStorageBin(shop)
+	if not bin then
+		return nil
+	end
+	if bin:IsA("Model") then
+		local model = bin :: Model
+		if model.PrimaryPart then
+			return model.PrimaryPart
+		end
+	end
+	return HubWorld.resolveBasePart(bin)
+end
+
+function HubWorld.findStashLookAt(shop: Instance?): BasePart?
+	return HubWorld.findStorageLookAt(shop)
+end
+
+local PLAYER_COUNTER_SPOT_NAMES = {
+	"PlayerCounterSpot",
+	"Player_Counter_Spot",
+}
+
+function HubWorld.findPlayerCounterSpot(shop: Instance?): BasePart?
+	if not shop then
+		return nil
+	end
+	local found = HubWorld.findShopPart(shop, PLAYER_COUNTER_SPOT_NAMES, "playercounterspot")
+	return HubWorld.resolveBasePart(found)
+end
+
+export type PresentationAnchors = {
+	cameraSpot: BasePart,
+	counterLookAt: BasePart,
+	customerEntry: BasePart?,
+	customerCounter: BasePart?,
+	customerExit: BasePart?,
+	counterItem: BasePart?,
+	playerCounter: BasePart?,
+	sellShelfLookAt: BasePart?,
+	displayShelfLookAt: BasePart?,
+	stashLookAt: BasePart?,
+}
+
+function HubWorld.resolvePresentationAnchors(shop: Instance?): PresentationAnchors?
+	if not shop then
+		return nil
+	end
+
+	local cameraSpot = HubWorld.findDealCameraSpot(shop)
+	local counterLookAt = HubWorld.findCounterLookAt(shop)
+		or HubWorld.findCounterItemSpot(shop)
+		or HubWorld.findCustomerCounterSpot(shop)
+
+	if not cameraSpot or not counterLookAt then
+		return nil
+	end
+
+	local customerCounter = HubWorld.findCustomerCounterSpot(shop)
+	local customerEntry = HubWorld.findCustomerEntrySpot(shop) or customerCounter
+
+	return {
+		cameraSpot = cameraSpot,
+		counterLookAt = counterLookAt,
+		customerEntry = customerEntry,
+		customerCounter = customerCounter,
+		customerExit = HubWorld.findCustomerExitSpot(shop),
+		counterItem = HubWorld.findCounterItemSpot(shop),
+		playerCounter = HubWorld.findPlayerCounterSpot(shop),
+		sellShelfLookAt = HubWorld.findSellShelfLookAt(shop),
+		displayShelfLookAt = HubWorld.findDisplayShelfLookAt(shop),
+		stashLookAt = HubWorld.findStorageLookAt(shop),
+	}
+end
+
 local INVENTORY_SHELF_EXACT_NAMES = {
 	"InventoryShelf",
 	"Inventory_Shelf",
@@ -269,6 +536,57 @@ function HubWorld.findInventorySlot(shelf: Instance?, slotIndex: number): BasePa
 	return nil
 end
 
+local SHELF_EXACT_NAMES = {
+	"Shelf",
+	"PublicShelf",
+	"Public_Shelf",
+}
+
+function HubWorld.findShelf(shop: Instance?): Instance?
+	if not shop then
+		return nil
+	end
+
+	local found = HubWorld.findShopPart(shop, SHELF_EXACT_NAMES, "shelf")
+	if found then
+		return found
+	end
+
+	return HubWorld.findDisplayShelf(shop) or HubWorld.findInventoryShelf(shop)
+end
+
+function HubWorld.findShelfSlot(shelf: Instance?, slotIndex: number): BasePart?
+	if not shelf then
+		return nil
+	end
+
+	local exactNames = {
+		`ShelfSlot{slotIndex}`,
+		`Shelf_Slot{slotIndex}`,
+		`DisplaySlot{slotIndex}`,
+		`Display_Slot{slotIndex}`,
+		`Slot{slotIndex}`,
+	}
+	local part = HubWorld.findDescendantBasePartByNames(shelf, exactNames)
+	if part then
+		return part
+	end
+
+	for _, child in shelf:GetChildren() do
+		local hay = normalize(child.Name)
+		if hay == `shelfslot{slotIndex}` or hay == `displayslot{slotIndex}` then
+			if hay ~= "shelfback" and not string.find(hay, "shelfback", 1, true) then
+				part = HubWorld.resolveBasePart(child)
+				if part then
+					return part
+				end
+			end
+		end
+	end
+
+	return HubWorld.findDisplaySlot(shelf, slotIndex, `ShelfSlot{slotIndex}`)
+end
+
 local DISPLAY_SHELF_EXACT_NAMES = {
 	"DisplayShelf",
 	"Display_Shelf",
@@ -283,16 +601,30 @@ function HubWorld.findDisplayShelf(shop: Instance?): Instance?
 end
 
 function HubWorld.findDisplayShelfSlot(shelf: Instance?, slotIndex: number): BasePart?
-	return HubWorld.findDisplaySlot(shelf, slotIndex, `DisplaySlot{slotIndex}`)
+	return HubWorld.findShelfSlot(shelf, slotIndex)
 end
 
-function HubWorld.findStashBin(shop: Instance?): Instance?
+function HubWorld.findStorageBin(shop: Instance?): Instance?
 	if not shop then
 		return nil
 	end
 
-	return HubWorld.findChildByNames(shop, { "StashBin", "Stash_Bin", "Stash", "Bin" })
+	return HubWorld.findChildByNames(shop, {
+		"StorageBin",
+		"Storage_Bin",
+		"Storage",
+		"StashBin",
+		"Stash_Bin",
+		"Stash",
+		"Bin",
+	})
+		or HubWorld.findShopPart(shop, {}, "storagebin")
+		or HubWorld.findShopPart(shop, {}, "storage")
 		or HubWorld.findShopPart(shop, {}, "stash")
+end
+
+function HubWorld.findStashBin(shop: Instance?): Instance?
+	return HubWorld.findStorageBin(shop)
 end
 
 function HubWorld.findShopPart(shop: Instance?, names: { string }, pattern: string?): Instance?

@@ -26,4 +26,8 @@ function InventorySnapshot.indexDisplayItemsBySlot(displayItems: any): { [number
 	return bySlot
 end
 
+function InventorySnapshot.indexShelfItemsBySlot(displayItems: any): { [number]: any }
+	return InventorySnapshot.indexDisplayItemsBySlot(displayItems)
+end
+
 return InventorySnapshot

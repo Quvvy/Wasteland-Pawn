@@ -169,19 +169,19 @@ end
 
 function ShopHubController:_onShiftStartPromptTriggered(_prompt: ProximityPrompt)
 	if UIController:isShiftActive() then
-		UIController:showHubMessage("Shift already in progress. Finish or end it first.")
+		UIController:showHubMessage("Shop is already open. Close it first.")
 		return
 	end
 
 	local ok, result = invokeRemote("GetShiftOptions")
 	if not ok or not result or not result.ok then
-		UIController:showHubMessage("Could not load shift options.")
+		UIController:showHubMessage("Could not load traffic windows.")
 		return
 	end
 
-	local opened = UIController:openShiftSelect(result.options, result.traffic)
+	local opened = UIController:openShiftSelect(result.options, result.traffic, result.onboarding)
 	if not opened then
-		UIController:showHubMessage("Could not open shift selection.")
+		UIController:showHubMessage("Could not open Traffic Board.")
 	end
 end
 
@@ -190,6 +190,7 @@ function ShopHubController:_bindShiftStartPrompt(prompt: ProximityPrompt)
 		return
 	end
 	boundPrompts[prompt] = true
+	prompt.ActionText = "Open Shop"
 
 	prompt.Triggered:Connect(function()
 		self:_onShiftStartPromptTriggered(prompt)
@@ -203,9 +204,7 @@ function ShopHubController:_ensureShiftBoardPrompt(shop: Instance): boolean
 	end
 
 	local prompt = getOrCreatePrompt(boardPart, "ShiftStartPrompt")
-	if prompt.ActionText == "" or prompt.ActionText == "Interact" then
-		prompt.ActionText = "Open Shop"
-	end
+	prompt.ActionText = "Open Shop"
 	self:_bindShiftStartPrompt(prompt)
 	return true
 end

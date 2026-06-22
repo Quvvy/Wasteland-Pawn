@@ -87,7 +87,7 @@ AGENTS.md                       Agent brief for Cursor / Codex
 - **Demand Preview V1** — Traffic Board `?` preview for likely buyers, categories/traits, and display effects (**Prototype**)
 - **Physical presentation** — customer rigs at `CustomerSpot`, item props at `CounterItemSpot`, shelf props
 - **Deal archetypes** — weighted deal shapes (scam traps, jackpots, buyer setups, etc.)
-- **Ctrl+U Studio debug overlay** — shift/deal/inventory diagnostics and Studio debug actions
+- **Ctrl+U debug overlay** — read-only live diagnostics; Studio-only debug actions
 - **Hub pickup props** — client-only decorative pick up / place / stash (session-only; **not** economy or saves)
 
 **Not built yet:** full open/close shop simulation, real-time calendar or daily reset, collection log, relics, shop upgrades, permanent hub pickups, full decoration editor, unified scavenging + haggled item economy.

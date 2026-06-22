@@ -231,7 +231,7 @@ Server services own gameplay truth. Client controllers request actions and displ
 | Deal archetypes + shift `buyerWeights` | **Prototype** |
 | Shop hub (Traffic Board, overlay, sign; `ShiftBoard` part name in Studio) | **Prototype** |
 | Counter / shelf / customer presentation | **Prototype** |
-| Ctrl+U debug overlay + Studio actions | **Prototype** |
+| Ctrl+U DevTools overlay (allowlist + role gates) | **Prototype** |
 | Hub pickup props | **Prototype** — client-only decorative |
 | Permanent stash saves, calendar, relics, unified objects | **Not started** |
 

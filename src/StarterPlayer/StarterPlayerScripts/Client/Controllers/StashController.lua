@@ -71,6 +71,36 @@ local function getOrCreatePrompt(stash: Instance, promptParent: BasePart): Proxi
 	return prompt
 end
 
+local STORAGE_LABEL_NAME = "StorageWorldLabel"
+
+local function ensureStorageWorldLabel(attachPart: BasePart)
+	local existing = attachPart:FindFirstChild(STORAGE_LABEL_NAME)
+	if existing and existing:IsA("BillboardGui") then
+		local label = existing:FindFirstChildWhichIsA("TextLabel", true)
+		if label then
+			label.Text = "STORAGE — Saved for later"
+		end
+		return
+	end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = STORAGE_LABEL_NAME
+	billboard.Size = UDim2.fromOffset(200, 40)
+	billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+	billboard.AlwaysOnTop = false
+	billboard.Parent = attachPart
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.fromRGB(200, 220, 200)
+	label.TextStrokeTransparency = 0.5
+	label.Font = Enum.Font.GothamBold
+	label.TextScaled = true
+	label.Text = "STORAGE — Saved for later"
+	label.Parent = billboard
+end
+
 local function clearDuplicateStashPrompts(stash: Instance, keepPrompt: ProximityPrompt)
 	for _, descendant in stash:GetDescendants() do
 		if descendant:IsA("ProximityPrompt") and descendant.Name == "StashPrompt" and descendant ~= keepPrompt then
@@ -86,11 +116,11 @@ function StashController:_refreshPrompt()
 	end
 
 	if HubPickupController:isHolding() then
-		stashPrompt.ActionText = "Drop in Stash"
+		stashPrompt.ActionText = "Drop in Storage"
 	else
-		stashPrompt.ActionText = "Open Stash"
+		stashPrompt.ActionText = "Open Storage"
 	end
-	stashPrompt.ObjectText = ""
+	stashPrompt.ObjectText = "Saved for later"
 	stashPrompt.HoldDuration = 0
 	stashPrompt.MaxActivationDistance = 10
 	stashPrompt.RequiresLineOfSight = false
@@ -142,6 +172,7 @@ function StashController:_resolvePrompt(world: Instance?): ProximityPrompt?
 	local prompt = getOrCreatePrompt(stash, promptParent)
 	stashPrompt = prompt
 	clearDuplicateStashPrompts(stash, prompt)
+	ensureStorageWorldLabel(promptParent)
 	self:_refreshPrompt()
 	self:_bindPrompt(prompt)
 	return prompt

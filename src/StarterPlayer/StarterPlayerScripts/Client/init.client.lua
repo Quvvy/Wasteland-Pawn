@@ -12,6 +12,7 @@ local controllerModules = {
 	Controllers:WaitForChild("StashController"),
 	Controllers:WaitForChild("HubPickupController"),
 	Controllers:WaitForChild("CameraController"),
+	Controllers:WaitForChild("CounterPresentationController"),
 }
 
 local loadedControllers = {}

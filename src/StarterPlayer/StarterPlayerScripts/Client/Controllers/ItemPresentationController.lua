@@ -18,6 +18,7 @@ local localFolder: Folder? = nil
 local activeModel: Model? = nil
 local lastItemKey: string? = nil
 local spotWarned = false
+local orchestratedMode = false
 
 local TERMINAL_PHASES = {
 	Result = true,
@@ -87,12 +88,8 @@ local function resolveCounterItemSpot(): BasePart?
 	return part
 end
 
-local function getSpotCFrame(): CFrame?
-	local spot = resolveCounterItemSpot()
-	if not spot then
-		return nil
-	end
-	return spot.CFrame
+function ItemPresentationController:setOrchestratedMode(enabled: boolean)
+	orchestratedMode = enabled
 end
 
 function ItemPresentationController:clearItem()
@@ -113,8 +110,8 @@ function ItemPresentationController:showItem(itemData: ItemVisuals.ItemData)
 		return
 	end
 
-	local spotCFrame = getSpotCFrame()
-	if not spotCFrame then
+	local spot = resolveCounterItemSpot()
+	if not spot then
 		self:clearItem()
 		return
 	end
@@ -127,7 +124,7 @@ function ItemPresentationController:showItem(itemData: ItemVisuals.ItemData)
 	self:clearItem()
 	lastItemKey = resolved.itemKey
 
-	local model = ItemPropBuilder.build(resolved, spotCFrame)
+	local model = ItemPropBuilder.build(resolved, spot.CFrame)
 	model.Parent = ensureLocalFolder(world)
 	activeModel = model
 end
@@ -153,7 +150,26 @@ function ItemPresentationController:showSellingItem(snapshot: any)
 	})
 end
 
+function ItemPresentationController:showBuyerPreviewItem(snapshot: any)
+	local match = snapshot.inventoryMatches and snapshot.inventoryMatches[1]
+	if not match then
+		self:clearItem()
+		return
+	end
+	self:showItem({
+		phase = "BuyerVisit",
+		itemId = match.itemId,
+		itemName = match.displayName or match.itemName,
+		category = match.category,
+		traits = match.traits,
+		instanceId = match.instanceId,
+	})
+end
+
 local function onDealSnapshot(snapshot: any?)
+	if orchestratedMode then
+		return
+	end
 	if not snapshot then
 		ItemPresentationController:clearItem()
 		return
@@ -172,6 +188,9 @@ local function onDealSnapshot(snapshot: any?)
 end
 
 local function onShiftSnapshot(snapshot: any?)
+	if orchestratedMode then
+		return
+	end
 	if not snapshot or snapshot.active ~= true or snapshot.ended == true then
 		ItemPresentationController:clearItem()
 	end

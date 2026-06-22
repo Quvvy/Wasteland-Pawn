@@ -79,6 +79,11 @@ local function findFirstBasePart(model: Model): BasePart?
 		return model.PrimaryPart
 	end
 
+	local root = model:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") then
+		return root
+	end
+
 	local head = model:FindFirstChild("Head")
 	if head and head:IsA("BasePart") then
 		return head
@@ -93,19 +98,14 @@ local function stripRuntimeScripts(model: Model)
 			descendant:Destroy()
 		end
 	end
-
-	local animate = model:FindFirstChild("Animate")
-	if animate then
-		animate:Destroy()
-	end
 end
 
-local function prepareForDisplay(model: Model)
+local function prepareForDisplay(model: Model, movable: boolean?)
 	stripRuntimeScripts(model)
 
 	for _, descendant in model:GetDescendants() do
 		if descendant:IsA("BasePart") then
-			descendant.Anchored = true
+			descendant.Anchored = not movable
 			descendant.CanCollide = false
 			descendant.CanQuery = false
 			descendant.CanTouch = false
@@ -115,6 +115,14 @@ local function prepareForDisplay(model: Model)
 	local root = findFirstBasePart(model)
 	if root then
 		model.PrimaryPart = root
+	end
+
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.PlatformStand = false
+		humanoid.Sit = false
+		humanoid.AutoRotate = movable == true
+		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 	end
 end
 
@@ -255,16 +263,28 @@ local function applyArchetypeColors(model: Model, bodyColor: Color3, accentColor
 	end
 end
 
-local function placeModelOnSpot(model: Model, spotCFrame: CFrame)
-	prepareForDisplay(model)
+function VisitorAppearanceBuilder.alignToSpot(model: Model, spotCFrame: CFrame, floorYOverride: number?)
 	model:PivotTo(spotCFrame)
 
+	local targetY = floorYOverride or spotCFrame.Position.Y
 	local bboxCFrame, bboxSize = model:GetBoundingBox()
 	local bottomY = bboxCFrame.Position.Y - (bboxSize.Y * 0.5)
-	local lift = spotCFrame.Position.Y - bottomY
+	local lift = targetY - bottomY
 	if math.abs(lift) > 0.01 then
 		model:PivotTo(model:GetPivot() + Vector3.new(0, lift, 0))
 	end
+end
+
+local function placeModelOnSpot(model: Model, spotCFrame: CFrame)
+	prepareForDisplay(model, model:FindFirstChildOfClass("Humanoid") ~= nil)
+	VisitorAppearanceBuilder.alignToSpot(model, spotCFrame)
+end
+
+function VisitorAppearanceBuilder.getHumanoid(model: Model?): Humanoid?
+	if not model then
+		return nil
+	end
+	return model:FindFirstChildOfClass("Humanoid")
 end
 
 function VisitorAppearanceBuilder.updateLabel(model: Model?, title: string, subtitle: string?)

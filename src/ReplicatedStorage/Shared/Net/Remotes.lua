@@ -26,6 +26,7 @@ local REMOTE_DEFINITIONS = {
 	MoveDisplayItemToStash = "RemoteFunction",
 	MoveStashedItemToDisplay = "RemoteFunction",
 	DebugRunAction = "RemoteFunction",
+	DebugGetAccess = "RemoteFunction",
 	KeepItem = "RemoteFunction",
 	CloseShift = "RemoteFunction",
 	-- Legacy (routed to tactics on server)

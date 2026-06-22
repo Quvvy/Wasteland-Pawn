@@ -66,7 +66,7 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 | Buyer haggling (tactics, heat, tells) | **Prototype** |
 | Item traits & categories | **Implemented** (configs) |
 | Buyer matching (score, labels, bonuses) | **Prototype** |
-| Shift inventory — InventoryShelf working stock | **Prototype** |
+| Shift inventory — public Shelf (internal `display`) | **Prototype** |
 | Buyer visits (pick item from inventory) | **Prototype** |
 | Payout summaries | **Prototype** |
 | Closing Rush + liquidation | **Prototype** |
@@ -80,8 +80,9 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 | Hub pickup props (pick up / place / stash) | **Prototype** — decorative only; see GDD |
 | Customer counter presentation (`CustomerPresentationController`, cloned visitor rigs) | **Prototype** |
 | Item counter props at `CounterItemSpot` | **Prototype** |
-| InventoryShelf presentation | **Prototype** |
-| DisplayShelf haggled item routing (Hold Back → display) | **Prototype** |
+| Hybrid Counter Presentation V1 (shopkeeper camera, counter dialogue overlay, legacy UI fallback) | **Prototype** |
+| Public Shelf presentation (`Shop.Shelf`) | **Prototype** |
+| Shelf ↔ Storage routing (Move to Storage / Return to Shelf) | **Prototype** |
 | Stash V1 for haggled items (2 saved slots) | **Prototype** |
 | Persistent Shop State V1 (scraps, 2 Stash slots, DisplayShelf positions) | **Prototype** |
 | Display influence on buyer traffic | **Prototype** |
@@ -89,7 +90,7 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 | First Shift Onboarding V1 | **Prototype** |
 | Traffic Board V1 (session-only traffic windows) | **Prototype** |
 | Rare Buyer Walk-In V1 | **Prototype** |
-| Ctrl+U debug overlay + Studio debug actions | **Prototype** |
+| Ctrl+U DevTools overlay (allowlist + role gates) | **Prototype** |
 
 ---
 
@@ -97,6 +98,7 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 
 **Current phase:** Phase 1 - Readability and first-session clarity.
 
+- [x] Add Open Shop / Shop Day Variables V1 as a compact forecast/prep slice
 - [ ] Finish Traffic Board readability and hardening (forecast/prep, not mission select)
 - [x] Add First Shift Onboarding V1 as a session-only guided first lesson
 - [ ] Make Rare Walk-Ins understandable as extra buyer opportunities
@@ -105,8 +107,9 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 
 **Stabilize:**
 
-- [x] InventoryShelf prompt mode: Offer only during BuyerVisit; Hold Back only outside BuyerVisit
-- [x] Server rejects display items for buyer offers
+- [x] Public Shelves V1 — unified public Shelf (`Shop.Shelf` / `ShelfSlot1-3`), buys land on Shelf, buyers offer from Shelf, Storage for hidden stock
+- [x] InventoryShelf prompt mode: Offer only during BuyerVisit; Hold Back only outside BuyerVisit (superseded by Shelf Offer / Move to Storage on public Shelf)
+- [x] Server rejects storage items for buyer offers; accepts shelf (`display`) items
 - [x] Rapid phase changes do not leave stale shelf prompts
 
 **Phase 1 exit criteria:**
@@ -130,6 +133,7 @@ Goals:
 
 - Finish Traffic Board readability as **forecast/prep**, not mission select.
 - Use open/close shop language in player-facing surfaces when UX is updated (not claiming full sim is built).
+- Keep Shop Day Variables V1 readable: compact forecasts before opening, compact results after closing, light server-owned roll-weight effects only.
 - Make Rare Walk-Ins understandable.
 - Reduce first-session confusion.
 - Make normal-day traffic feel like the reliable baseline.

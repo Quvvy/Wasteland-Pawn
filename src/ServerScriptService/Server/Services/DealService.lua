@@ -21,6 +21,7 @@ local InventoryService = require(script.Parent.InventoryService)
 local CustomerService = require(script.Parent.CustomerService)
 local BuyerService = require(script.Parent.BuyerService)
 local ShiftService = require(script.Parent.ShiftService)
+local DebugAccess = require(script.Parent.Parent.Config.DebugAccess)
 
 local DealService = {}
 
@@ -41,6 +42,11 @@ local VALID_SELL_TACTICS = {
 	[HaggleTactics.Sell.AcceptOffer] = true,
 	[HaggleTactics.Sell.FindAnotherBuyer] = true,
 }
+
+local ONBOARDING_CUSTOMER_ID = "nervous_rookie"
+local ONBOARDING_ITEM_ID = "scrap_wire_bundle"
+local ONBOARDING_ARCHETYPE_ID = "safe_flip"
+local ONBOARDING_FALLBACK_BUYER_ID = "desperate_mechanic"
 
 local activeDeals: { [Player]: any } = {}
 local playerRng: { [Player]: Random } = {}
@@ -379,8 +385,8 @@ function DealService:_applySellResult(deal, result)
 	deal.heatWarning = result.warning
 end
 
-function DealService:_logTacticDebug(_player: Player, side: string, tacticId: string, deal, result)
-	if not RunService:IsStudio() then
+function DealService:_logTacticDebug(player: Player, side: string, tacticId: string, deal, result)
+	if not DebugAccess.canViewHiddenEconomy(player) then
 		return
 	end
 
@@ -499,7 +505,7 @@ function DealService:_buildSnapshot(player: Player, deal)
 		buyerMatch = deal.buyerMatch,
 		buyerMatchLabel = deal.buyerMatch and deal.buyerMatch.label or nil,
 		inventory = InventoryService:getSnapshot(player),
-		inventoryFull = not InventoryService:canAdd(player),
+		inventoryFull = not InventoryService:canAddToDisplay(player),
 		inventoryMatches = deal.inventoryMatches,
 		estimatedLow = deal.estimatedLow,
 		estimatedHigh = deal.estimatedHigh,
@@ -541,6 +547,7 @@ function DealService:_buildSnapshot(player: Player, deal)
 		rareWalkInBuyer = deal.rareWalkInBuyer == true,
 		buyerVisitLabel = deal.buyerVisitLabel,
 		shift = ShiftService:buildSnapshot(player),
+		onboarding = ShiftService:getOnboardingSnapshot(player),
 	}
 
 	if deal.hiddenOutcome then
@@ -552,7 +559,7 @@ function DealService:_buildSnapshot(player: Player, deal)
 		end
 	end
 
-	if RunService:IsStudio() then
+	if DebugAccess.canViewHiddenEconomy(player) then
 		if deal.hiddenOutcome then
 			snapshot.debugTrueValue = deal.hiddenOutcome.trueValue
 			snapshot.debugMinimumAccept = deal.minimumAccept
@@ -584,7 +591,7 @@ function DealService:_formatLiquidationSummaryText(summary)
 		`This is a bad cashout compared to finding a real buyer.`,
 		`Items liquidated: {summary.itemCount}`,
 		`Cash received: {summary.totalCash or 0} {currencyWord()}`,
-		`Shift profit: {formatSignedAmount(summary.totalProfit or 0)} {currencyWord()}`,
+		`Shop day profit: {formatSignedAmount(summary.totalProfit or 0)} {currencyWord()}`,
 	}
 	for _, item in summary.items or {} do
 		table.insert(
@@ -622,14 +629,29 @@ function DealService:startDeal(player: Player, customerId: string?, itemId: stri
 
 	local rng = self:_getRng(player)
 	local forcedGeneration = customerId ~= nil or itemId ~= nil
-	local archetype = if forcedGeneration then nil else rollDealArchetype(ShiftService:getShift(player), rng)
+	local useOnboardingSeller = not forcedGeneration and ShiftService:shouldUseFirstOnboardingSeller(player)
+	local archetype = nil
+	if useOnboardingSeller then
+		archetype = DealArchetypes.get(ONBOARDING_ARCHETYPE_ID)
+	elseif not forcedGeneration then
+		archetype = rollDealArchetype(ShiftService:getShift(player), rng)
+	end
 	local customer
-	if customerId then
+	if useOnboardingSeller then
+		customer = CustomerService:getCustomer(ONBOARDING_CUSTOMER_ID)
+	elseif customerId then
 		customer = CustomerService:getCustomer(customerId)
 	else
 		customer = CustomerService:rollCustomer(rng, archetype and archetype.sellerWeights)
 	end
-	local item = if itemId then CustomerService:getItem(itemId) else CustomerService:rollItem(rng, archetype)
+	local item
+	if useOnboardingSeller then
+		item = CustomerService:getItem(ONBOARDING_ITEM_ID)
+	elseif itemId then
+		item = CustomerService:getItem(itemId)
+	else
+		item = CustomerService:rollItem(rng, archetype)
+	end
 	if not customer or not item then
 		return { ok = false, error = "Invalid customer or item id" }
 	end
@@ -647,6 +669,9 @@ function DealService:startDeal(player: Player, customerId: string?, itemId: stri
 	}, rng)
 
 	local deal = self:_initDealState(customer, item, hidden, ask, minAccept, estLow, estHigh, rng, archetype, weakClue)
+	if useOnboardingSeller then
+		ShiftService:recordOnboardingEvent(player, "first_seller_shown")
+	end
 	activeDeals[player] = deal
 	self:_pushState(player)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
@@ -773,16 +798,42 @@ function DealService:inspectItem(player: Player)
 		deal.sellerTell = bonusTell
 	end
 	deal.dialogue = `Inspection: {deal.inspectClue}`
+	ShiftService:recordOnboardingEvent(player, "item_inspected")
 	self:_pushState(player)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
+end
+
+function DealService:_pickOnboardingBuyerForItem(player: Player, itemEntry)
+	local shift = ShiftService:getShift(player)
+	local bestBuyer = nil
+	local bestScore = -math.huge
+	local buyerWeights = shift and shift.buyerWeights
+
+	if type(buyerWeights) == "table" then
+		for buyerId, weight in buyerWeights do
+			if type(weight) == "number" and weight > 0 then
+				local buyer = BuyerService:getBuyer(buyerId)
+				if buyer then
+					local match = BuyerMatch.score(itemEntry, buyer)
+					local score = (match.score or 0) * 100 + weight
+					if score > bestScore then
+						bestScore = score
+						bestBuyer = buyer
+					end
+				end
+			end
+		end
+	end
+
+	return bestBuyer or BuyerService:getBuyer(ONBOARDING_FALLBACK_BUYER_ID)
 end
 
 function DealService:_rejectPurchaseInventoryFull(player: Player, deal)
 	local inventory = InventoryService:getSnapshot(player)
 	deal.dialogue =
-		`Inventory full ({inventory.usedSlots}/{inventory.maxSlots}). Sell something before buying more.`
+		`Shelf full ({inventory.shelfUsedSlots}/{inventory.shelfMaxSlots}). Sell something or move an item to Storage.`
 	self:_pushState(player)
-	return { ok = false, error = "Inventory full", snapshot = self:_buildSnapshot(player, deal) }
+	return { ok = false, error = "Shelf full", snapshot = self:_buildSnapshot(player, deal) }
 end
 
 function DealService:_completePurchase(player: Player, price: number, deal)
@@ -791,11 +842,11 @@ function DealService:_completePurchase(player: Player, price: number, deal)
 		self:_pushState(player)
 		return { ok = false, error = "Not enough cash" }
 	end
-	if not InventoryService:canAdd(player) then
+	if not InventoryService:canAddToDisplay(player) then
 		return self:_rejectPurchaseInventoryFull(player, deal)
 	end
 
-	local instanceId = InventoryService:addPurchasedItem(player, {
+	local purchasedEntry = {
 		itemId = deal.item.id,
 		displayName = deal.item.displayName,
 		dealArchetypeId = deal.dealArchetypeId,
@@ -816,7 +867,8 @@ function DealService:_completePurchase(player: Player, price: number, deal)
 		inspected = deal.inspected,
 		buyRoundCount = deal.buyRoundCount,
 		tacticsUsed = copyList(deal.tacticsUsed),
-	})
+	}
+	local instanceId = InventoryService:addPurchasedItemToShelf(player, purchasedEntry)
 	if not instanceId then
 		return self:_rejectPurchaseInventoryFull(player, deal)
 	end
@@ -833,14 +885,19 @@ function DealService:_completePurchase(player: Player, price: number, deal)
 	deal.phase = "Stored"
 	local inventory = InventoryService:getSnapshot(player)
 	deal.dialogue =
-		`Bought for {price} {currencyWord()} and stored. Inventory: {inventory.usedSlots}/{inventory.maxSlots}.`
+		`Bought for {price} {currencyWord()} and placed on the Shelf. Shelf: {inventory.shelfUsedSlots}/{inventory.shelfMaxSlots}.`
 	deal.dealSummary = {
 		dealArchetypeId = deal.dealArchetypeId,
 		dealArchetypeName = deal.dealArchetypeName,
 		resultText = deal.dialogue,
 	}
 	self:_pushState(player)
-	self:_scheduleAfterSellerResolution(player, HaggleTuning.autoNextDelayResult, deal)
+	local buyer = self:_pickOnboardingBuyerForItem(player, purchasedEntry)
+	local forceOnboardingBuyer = buyer and ShiftService:queueOnboardingBuyer(player, buyer.id) or false
+	if forceOnboardingBuyer then
+		ShiftService:recordOnboardingEvent(player, "first_item_bought")
+	end
+	self:_scheduleAfterSellerResolution(player, HaggleTuning.autoNextDelayResult, deal, forceOnboardingBuyer)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
 end
 
@@ -857,7 +914,7 @@ end
 
 function DealService:_buildInventoryMatches(player: Player, buyer)
 	local matches = {}
-	for _, entry in InventoryService:getInventoryItems(player) do
+	for _, entry in InventoryService:getDisplayItems(player) do
 		local match = BuyerMatch.score(entry, buyer)
 		table.insert(matches, {
 			instanceId = entry.instanceId,
@@ -958,9 +1015,9 @@ function DealService:setInventoryItemHeldBack(player: Player, instanceId: any, h
 		return { ok = false, error = "Item not found" }
 	end
 	if entry.location == "display" then
-		return { ok = false, error = "Item is on display" }
+		return { ok = false, error = "Item is on the Shelf" }
 	elseif entry.location == "stash" then
-		return { ok = false, error = "Item is stashed" }
+		return { ok = false, error = "Item is in storage" }
 	end
 
 	if not InventoryService:setItemHeldBack(player, instanceId, heldBack) then
@@ -994,15 +1051,15 @@ function DealService:displayInventoryItem(player: Player, instanceId: any)
 		return { ok = false, error = "Item not found" }
 	end
 	if entry.location == "display" then
-		return { ok = false, error = "Item is on display" }
+		return { ok = false, error = "Item is on the Shelf" }
 	elseif entry.location == "stash" then
-		return { ok = false, error = "Item is stashed" }
+		return { ok = false, error = "Item is in storage" }
 	end
 	if entry.location ~= "inventory" then
 		return { ok = false, error = "Item not in inventory" }
 	end
-	if not InventoryService:canAddToDisplay(player) then
-		return { ok = false, error = "Display shelf full" }
+	if not InventoryService:canAddToDisplay(player, instanceId) then
+		return { ok = false, error = "Shelf full" }
 	end
 
 	if not InventoryService:moveItemToDisplay(player, instanceId) then
@@ -1014,36 +1071,7 @@ function DealService:displayInventoryItem(player: Player, instanceId: any)
 end
 
 function DealService:returnDisplayItemToInventory(player: Player, instanceId: any)
-	local shift = ShiftService:getShift(player)
-	if not shift or not shift.active or shift.ended then
-		return { ok = false, error = "No active shift" }
-	end
-	if type(instanceId) ~= "string" then
-		return { ok = false, error = "Invalid item" }
-	end
-
-	local deal = activeDeals[player]
-	if deal and deal.phase == "Selling" and deal.pendingInstanceId == instanceId then
-		return { ok = false, error = "Item is being sold" }
-	end
-
-	local entry = InventoryService:getOwnedItem(player, instanceId)
-	if not entry then
-		return { ok = false, error = "Item not found" }
-	end
-	if entry.location ~= "display" then
-		return { ok = false, error = "Item not on display" }
-	end
-	if not InventoryService:canAdd(player) then
-		return { ok = false, error = "Inventory full" }
-	end
-
-	if not InventoryService:returnItemFromDisplay(player, instanceId) then
-		return { ok = false, error = "Could not return item" }
-	end
-
-	self:_refreshBuyerMatchesIfNeeded(player, deal)
-	return { ok = true }
+	return { ok = false, error = "Items stay on the Shelf" }
 end
 
 function DealService:stashInventoryItem(player: Player, instanceId: any)
@@ -1065,14 +1093,14 @@ function DealService:stashInventoryItem(player: Player, instanceId: any)
 		return { ok = false, error = "Item not found" }
 	end
 	if entry.location == "display" then
-		return { ok = false, error = "Item is on display" }
+		return { ok = false, error = "Item is on the Shelf" }
 	elseif entry.location == "stash" then
-		return { ok = false, error = "Item is stashed" }
+		return { ok = false, error = "Item is in storage" }
 	end
 	if entry.location ~= "inventory" then
 		return { ok = false, error = "Item not in inventory" }
 	end
-	if not InventoryService:canAddToStash(player) then
+	if not InventoryService:canAddToStash(player, instanceId) then
 		return { ok = false, error = "Stash full" }
 	end
 
@@ -1102,10 +1130,10 @@ function DealService:returnStashedItemToInventory(player: Player, instanceId: an
 		return { ok = false, error = "Item not found" }
 	end
 	if entry.location ~= "stash" then
-		return { ok = false, error = "Item not in stash" }
+		return { ok = false, error = "Item not in storage" }
 	end
-	if not InventoryService:canAdd(player) then
-		return { ok = false, error = "Inventory full" }
+	if not InventoryService:canAddToDisplay(player, instanceId) then
+		return { ok = false, error = "Shelf full" }
 	end
 
 	if not InventoryService:returnItemFromStash(player, instanceId) then
@@ -1158,14 +1186,14 @@ function DealService:moveStashedItemToDisplay(player: Player, instanceId: any)
 		return { ok = false, error = "Item not found" }
 	end
 	if entry.location ~= "stash" then
-		return { ok = false, error = "Item not in stash" }
+		return { ok = false, error = "Item not in storage" }
 	end
 	if not InventoryService:canAddToDisplay(player) then
-		return { ok = false, error = "Display full" }
+		return { ok = false, error = "Shelf full" }
 	end
 
 	if not InventoryService:moveStashItemToDisplay(player, instanceId) then
-		return { ok = false, error = "Could not display item" }
+		return { ok = false, error = "Could not return item to Shelf" }
 	end
 
 	return { ok = true }
@@ -1200,12 +1228,17 @@ function DealService:startBuyerVisit(player: Player)
 	local displayItems = InventoryService:getDisplayItems(player)
 	local buyerVisitKind = if shift and shift.pendingBuyerVisitKind == "rare" then "rare" else "scheduled"
 	local rareWalkInBuyer = buyerVisitKind == "rare"
+	local onboardingBuyerId = if not rareWalkInBuyer then ShiftService:getPendingOnboardingBuyerId(player) else nil
 	local buyer
 	local influenceByBuyerId
 	if rareWalkInBuyer then
 		buyer = if shift and shift.pendingRareBuyerId then BuyerService:getBuyer(shift.pendingRareBuyerId) else nil
 		local _rareWeights
 		_rareWeights, influenceByBuyerId = RareWalkIns.buildAdjustedBuyerWeights(shift, displayItems)
+	elseif onboardingBuyerId then
+		buyer = BuyerService:getBuyer(onboardingBuyerId)
+		local _weights
+		_weights, influenceByBuyerId = DisplayInfluence.applyBuyerWeightBonuses(shift and shift.buyerWeights, displayItems)
 	else
 		buyer, influenceByBuyerId = rollBuyerForVisit(player, rng, shift, displayItems)
 	end
@@ -1213,10 +1246,10 @@ function DealService:startBuyerVisit(player: Player)
 		return { ok = false, error = "No buyers configured" }
 	end
 
-	if InventoryService:getCount(player) <= 0 then
+	if InventoryService:getDisplayCount(player) <= 0 then
 		local dialogue = if rareWalkInBuyer
-			then `Rare walk-in: {buyer.displayName} came looking, but your shelves are empty.`
-			else `{buyer.displayName} came looking, but your shelves are empty.`
+			then `Rare walk-in: {buyer.displayName} came looking, but you have no items on the Shelf. Buy something or move an item from Storage.`
+			else `{buyer.displayName} came looking, but you have no items on the Shelf. Buy something or move an item from Storage.`
 		local deal = {
 			phase = "BuyerSkipped",
 			buyer = buyer,
@@ -1228,10 +1261,14 @@ function DealService:startBuyerVisit(player: Player)
 			buyerVisitLabel = if rareWalkInBuyer then "Rare Walk-In" else nil,
 			dialogue = dialogue,
 			dealSummary = {
-				resultText = "Buyer visit skipped. No inventory to offer.",
+				resultText = "Buyer visit skipped. No items on the Shelf.",
 			},
 		}
 		applyDisplayInfluenceFeedback(deal, buyer, influenceByBuyerId)
+		if (deal.displayInfluenceBonus or 0) > 0 then
+			ShiftService:recordDisplayInfluenceHelped(player)
+		end
+		ShiftService:recordOnboardingEvent(player, "buyer_skipped")
 		activeDeals[player] = deal
 		self:_pushState(player)
 		self:_scheduleAfterBuyerResolution(player, HaggleTuning.autoNextDelayPass, deal, nil)
@@ -1249,11 +1286,15 @@ function DealService:startBuyerVisit(player: Player)
 		rareWalkInBuyer = rareWalkInBuyer,
 		buyerVisitLabel = if rareWalkInBuyer then "Rare Walk-In" else nil,
 		dialogue = if rareWalkInBuyer
-			then `Rare walk-in: {buyer.openingLine} Choose an item from your shelves.`
-			else `{buyer.openingLine} Choose an item from your shelves.`,
+			then `Rare walk-in: {buyer.openingLine} Choose a shelf item to offer.`
+			else `{buyer.openingLine} Choose a shelf item to offer.`,
 	}
 	applyDisplayInfluenceFeedback(deal, buyer, influenceByBuyerId)
+	if (deal.displayInfluenceBonus or 0) > 0 then
+		ShiftService:recordDisplayInfluenceHelped(player)
+	end
 	deal.inventoryMatches = self:_buildInventoryMatches(player, buyer)
+	ShiftService:recordOnboardingEvent(player, "buyer_visit_started")
 	activeDeals[player] = deal
 	self:_pushState(player)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
@@ -1300,24 +1341,20 @@ function DealService:selectInventoryItemForBuyer(player: Player, instanceId: any
 	if not entry then
 		return { ok = false, error = "Item not found" }
 	end
-	if entry.location == "display" then
-		return { ok = false, error = "Item is on display" }
-	elseif entry.location == "stash" then
-		return { ok = false, error = "Item is stashed" }
+	if entry.location == "stash" then
+		return { ok = false, error = "Item is in storage" }
 	end
-	if entry.location ~= "inventory" then
-		return { ok = false, error = "Item not in inventory" }
+	if entry.location ~= "display" then
+		return { ok = false, error = "Item not on shelf" }
 	end
 	if entry.disposed then
 		return { ok = false, error = "Item not available" }
-	end
-	if entry.heldBack == true then
-		return { ok = false, error = "Item is held back" }
 	end
 	if not visitDeal.buyer then
 		return { ok = false, error = "No buyer for visit" }
 	end
 
+	ShiftService:recordOnboardingEvent(player, "item_offered")
 	local saleDeal = self:_buildSaleDealFromInventory(entry, visitDeal)
 	local ok, err = pcall(function()
 		self:_beginBuyerNegotiation(saleDeal, visitDeal.buyer, self:_getRng(player))
@@ -1568,6 +1605,7 @@ function DealService:_completeSale(player: Player, deal, salePrice: number)
 	deal.phase = "Result"
 	deal.dialogue = deal.dealSummary.resultText
 	deal.pendingInstanceId = nil
+	ShiftService:recordOnboardingEvent(player, "first_sale_completed")
 	self:_pushState(player)
 	self:_scheduleAfterBuyerResolution(player, HaggleTuning.autoNextDelayResult, deal, deal.dealSummary)
 	return { ok = true, snapshot = self:_buildSnapshot(player, deal) }
@@ -1655,7 +1693,7 @@ function DealService:_canManualAdvanceContinue(player: Player): boolean
 		return true
 	end
 	return ShiftService:isClosingRush(player)
-		and InventoryService:getCount(player) > 0
+		and InventoryService:getDisplayCount(player) > 0
 		and ShiftService:canRollClosingRushBuyer(player)
 end
 
@@ -1916,7 +1954,7 @@ function DealService:debugRejectUnsafePhase(player: Player): { ok: boolean, erro
 end
 
 function DealService:debugRefreshBuyerVisitMatches(player: Player)
-	if not RunService:IsStudio() then
+	if not DebugAccess.canUseDangerousActions(player) then
 		return
 	end
 
@@ -1928,8 +1966,8 @@ function DealService:debugRefreshBuyerVisitMatches(player: Player)
 end
 
 function DealService:debugForceBuyerVisit(player: Player)
-	if not RunService:IsStudio() then
-		return { ok = false, error = "Debug actions disabled" }
+	if not DebugAccess.canRunDebugAction(player, "ForceBuyerVisit") then
+		return { ok = false, error = "Forbidden" }
 	end
 
 	local unsafe = self:debugRejectUnsafePhase(player)
@@ -1960,8 +1998,8 @@ function DealService:debugForceBuyerVisit(player: Player)
 end
 
 function DealService:debugForceRareBuyerVisit(player: Player)
-	if not RunService:IsStudio() then
-		return { ok = false, error = "Debug actions disabled" }
+	if not DebugAccess.canRunDebugAction(player, "ForceRareBuyerVisit") then
+		return { ok = false, error = "Forbidden" }
 	end
 
 	local unsafe = self:debugRejectUnsafePhase(player)
@@ -1979,7 +2017,7 @@ function DealService:debugForceRareBuyerVisit(player: Player)
 	if shift.pendingBuyerVisit then
 		return { ok = false, error = "Buyer visit already queued" }
 	end
-	if InventoryService:getCount(player) <= 0 then
+	if InventoryService:getDisplayCount(player) <= 0 then
 		return { ok = false, error = "No working inventory for rare buyer" }
 	end
 	if (shift.rareBuyerVisitsSeen or 0) >= (shift.rareBuyerMax or RareWalkIns.MAX_PER_SHIFT) then
@@ -2008,8 +2046,8 @@ function DealService:debugForceRareBuyerVisit(player: Player)
 end
 
 function DealService:debugEndShift(player: Player)
-	if not RunService:IsStudio() then
-		return { ok = false, error = "Debug actions disabled" }
+	if not DebugAccess.canRunDebugAction(player, "EndShift") then
+		return { ok = false, error = "Forbidden" }
 	end
 
 	local unsafe = self:debugRejectUnsafePhase(player)
@@ -2029,7 +2067,7 @@ function DealService:debugEndShift(player: Player)
 		local rushSnapshot = ShiftService:enterClosingRush(player)
 		shift = ShiftService:getShift(player)
 		if not rushSnapshot or (shift and shift.ended) then
-			return { ok = true, message = "Shift ended (no inventory to liquidate)" }
+			return { ok = true, message = "Shop day closed (no inventory to liquidate)" }
 		end
 	end
 
@@ -2045,11 +2083,11 @@ function DealService:debugEndShift(player: Player)
 	if summary and summary.itemCount and summary.itemCount > 0 then
 		return {
 			ok = true,
-			message = `Shift ended. Liquidated {summary.itemCount} item(s) for {summary.totalCash or 0} scraps.`,
+			message = `Shop day closed. Liquidated {summary.itemCount} item(s) for {summary.totalCash or 0} scraps.`,
 		}
 	end
 
-	return { ok = true, message = "Shift ended." }
+	return { ok = true, message = "Shop day closed." }
 end
 
 return DealService

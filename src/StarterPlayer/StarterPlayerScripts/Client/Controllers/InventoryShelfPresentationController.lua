@@ -505,77 +505,25 @@ function InventoryShelfPresentationController:showSlot(slotIndex: number, entry:
 	self:syncSlotPresentation(slotIndex, entry, model, resolved.displayName)
 end
 
-function InventoryShelfPresentationController:refreshShelf(inventorySnapshot: any?)
-	if not shiftActive or not inventorySnapshot then
-		self:clearAll()
-		return
-	end
-
-	local maxSlots = inventorySnapshot.maxSlots or DEFAULT_MAX_SLOTS
-	local items = inventorySnapshot.items or {}
-
-	for slotIndex = 1, maxSlots do
-		local entry = items[slotIndex]
-		if entry then
-			self:showSlot(slotIndex, entry)
-		else
-			self:clearSlot(slotIndex)
-		end
-	end
-
-	for slotIndex, _ in slotModels do
-		if slotIndex > maxSlots then
-			self:clearSlot(slotIndex)
-		end
-	end
-
-	self:syncAllShelfPrompts()
+function InventoryShelfPresentationController:refreshShelf(_inventorySnapshot: any?)
+	-- Public shelf props are owned by DisplayShelfPresentationController on Shop.Shelf.
+	return
 end
 
 local function onInventorySnapshot(snapshot: any?)
 	lastInventorySnapshot = snapshot
-	bumpPromptGeneration()
 	InventoryShelfPresentationController:refreshShelf(snapshot)
 end
 
 local function onShiftSnapshot(snapshot: any?)
 	shiftActive = snapshot ~= nil and snapshot.active == true and snapshot.ended ~= true
-	bumpPromptGeneration()
 	if not shiftActive then
-		InventoryShelfPresentationController:clearAll()
-		return
+		clearAllShelfPrompts()
 	end
-
-	InventoryShelfPresentationController:refreshShelf(lastInventorySnapshot)
 end
 
-local function onDealSnapshot(snapshot: any?)
-	local wasBuyerVisit = isBuyerVisit
-	local previousSellingId = activeSellingInstanceId
-
-	currentDealSnapshot = snapshot
-	isBuyerVisit = snapshot ~= nil and snapshot.phase == "BuyerVisit"
-
-	if snapshot and snapshot.phase == "Selling" and snapshot.instanceId then
-		activeSellingInstanceId = snapshot.instanceId
-	else
-		activeSellingInstanceId = nil
-	end
-
-	if not shiftActive then
-		return
-	end
-
-	local sellingIdChanged = previousSellingId ~= activeSellingInstanceId
-	local buyerVisitChanged = wasBuyerVisit ~= isBuyerVisit
-
-	if sellingIdChanged then
-		bumpPromptGeneration()
-		InventoryShelfPresentationController:refreshShelf(lastInventorySnapshot)
-	elseif buyerVisitChanged or isBuyerVisit then
-		bumpPromptGeneration()
-		InventoryShelfPresentationController:syncAllShelfPrompts()
-	end
+local function onDealSnapshot(_snapshot: any?)
+	-- Shelf prompts handled by DisplayShelfPresentationController.
 end
 
 function InventoryShelfPresentationController:Init() end

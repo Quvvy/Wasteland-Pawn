@@ -1,3 +1,4 @@
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -10,21 +11,47 @@ local InventoryService = {}
 
 local DEFAULT_MAX_SLOTS = 3
 local DEFAULT_DISPLAY_SLOTS = 3
-local DEFAULT_STASH_SLOTS = 6
+local DEFAULT_STASH_SLOTS = 2
 
 local LOCATION_INVENTORY = ObjectModel.Locations.Inventory
 local LOCATION_DISPLAY = ObjectModel.Locations.Display
 local LOCATION_STASH = ObjectModel.Locations.Stash
+
+local DataService = require(script.Parent.DataService)
 
 local inventories: { [Player]: { items: { any }, maxSlots: number, displayMaxSlots: number, stashMaxSlots: number } } = {}
 local nextInstanceId = 0
 
 function InventoryService:Init()
 	Remotes.setup()
+	DataService:setShopStateProvider(function(player)
+		return self:getPersistentShopState(player)
+	end)
+
+	Players.PlayerAdded:Connect(function(player)
+		task.delay(1.5, function()
+			if player.Parent then
+				self:_ensureInventory(player)
+				self:_pushState(player)
+			end
+		end)
+	end)
 
 	Players.PlayerRemoving:Connect(function(player)
-		inventories[player] = nil
+		DataService:savePlayer(player, "inventory_leave")
+		task.defer(function()
+			inventories[player] = nil
+		end)
 	end)
+
+	for _, player in Players:GetPlayers() do
+		task.delay(1.5, function()
+			if player.Parent then
+				self:_ensureInventory(player)
+				self:_pushState(player)
+			end
+		end)
+	end
 end
 
 function InventoryService:Start() end
@@ -32,6 +59,117 @@ function InventoryService:Start() end
 function InventoryService:_nextInstanceId(): string
 	nextInstanceId += 1
 	return `item_{nextInstanceId}`
+end
+
+function InventoryService:_newPermanentId(): string
+	return HttpService:GenerateGUID(false)
+end
+
+function InventoryService:_markPersistentDirty(player: Player)
+	DataService:markShopStateDirty(player)
+	task.spawn(function()
+		if player.Parent then
+			DataService:savePlayer(player, "shop_state_changed")
+		end
+	end)
+end
+
+function InventoryService:_applyPermanentHome(entry, location: string, slotIndex: number)
+	entry.permanentId = entry.permanentId or self:_newPermanentId()
+	entry.permanentOrigin = true
+	entry.permanentHomeLocation = location
+	entry.permanentHomeSlotIndex = slotIndex
+end
+
+function InventoryService:_updatePermanentHomeFromLocation(entry)
+	local location = self:_itemLocation(entry)
+	if location == LOCATION_DISPLAY and entry.displaySlotIndex then
+		self:_applyPermanentHome(entry, LOCATION_DISPLAY, entry.displaySlotIndex)
+	elseif location == LOCATION_STASH and entry.stashSlotIndex then
+		self:_applyPermanentHome(entry, LOCATION_STASH, entry.stashSlotIndex)
+	end
+end
+
+function InventoryService:_copyLoadedEntry(raw, location: string, slotIndex: number)
+	local entry = {
+		instanceId = self:_nextInstanceId(),
+		permanentId = raw.permanentId or self:_newPermanentId(),
+		permanentOrigin = true,
+		permanentHomeLocation = location,
+		permanentHomeSlotIndex = slotIndex,
+		objectId = raw.objectId or raw.itemId,
+		itemId = raw.itemId or raw.objectId,
+		displayName = raw.displayName,
+		dealArchetypeId = raw.dealArchetypeId,
+		dealArchetypeName = raw.dealArchetypeName,
+		category = raw.category,
+		traits = raw.traits or {},
+		flavorText = raw.flavorText,
+		rarityId = raw.rarityId,
+		trueValue = raw.trueValue,
+		purchasePrice = raw.purchasePrice,
+		estimatedLow = raw.estimatedLow,
+		estimatedHigh = raw.estimatedHigh,
+		sellerId = raw.sellerId,
+		sellerName = raw.sellerName,
+		sellerTell = raw.sellerTell,
+		sellerAsk = raw.sellerAsk,
+		sellerMinimum = raw.sellerMinimum,
+		inspected = raw.inspected == true,
+		buyRoundCount = raw.buyRoundCount,
+		tacticsUsed = raw.tacticsUsed or {},
+		location = location,
+		heldBack = false,
+		displaySlotIndex = if location == LOCATION_DISPLAY then slotIndex else nil,
+		stashSlotIndex = if location == LOCATION_STASH then slotIndex else nil,
+	}
+	return ObjectModel.normalizeOwnedObject(entry)
+end
+
+function InventoryService:_applyLoadedPersistentState(player: Player, inventory)
+	if inventory.persistentStateLoaded then
+		return
+	end
+	inventory.persistentStateLoaded = true
+
+	local state = DataService:getLoadedPersistentState(player)
+	local usedPermanentIds = {}
+	local usedDisplaySlots = {}
+	local usedStashSlots = {}
+
+	for _, raw in (state.display or {}) do
+		local slotIndex = raw.displaySlotIndex
+		local permanentId = raw.permanentId
+		if
+			type(slotIndex) == "number"
+			and slotIndex >= 1
+			and slotIndex <= inventory.displayMaxSlots
+			and not usedDisplaySlots[slotIndex]
+			and (not permanentId or not usedPermanentIds[permanentId])
+		then
+			local entry = self:_copyLoadedEntry(raw, LOCATION_DISPLAY, slotIndex)
+			usedDisplaySlots[slotIndex] = true
+			usedPermanentIds[entry.permanentId] = true
+			table.insert(inventory.items, entry)
+		end
+	end
+
+	for _, raw in (state.stash or {}) do
+		local slotIndex = raw.stashSlotIndex
+		local permanentId = raw.permanentId
+		if
+			type(slotIndex) == "number"
+			and slotIndex >= 1
+			and slotIndex <= inventory.stashMaxSlots
+			and not usedStashSlots[slotIndex]
+			and (not permanentId or not usedPermanentIds[permanentId])
+		then
+			local entry = self:_copyLoadedEntry(raw, LOCATION_STASH, slotIndex)
+			usedStashSlots[slotIndex] = true
+			usedPermanentIds[entry.permanentId] = true
+			table.insert(inventory.items, entry)
+		end
+	end
 end
 
 function InventoryService:_ensureInventory(player: Player)
@@ -51,6 +189,7 @@ function InventoryService:_ensureInventory(player: Player)
 	if inventory.stashMaxSlots == nil then
 		inventory.stashMaxSlots = DEFAULT_STASH_SLOTS
 	end
+	self:_applyLoadedPersistentState(player, inventory)
 	return inventory
 end
 
@@ -71,14 +210,17 @@ function InventoryService:pushSnapshot(player: Player)
 end
 
 function InventoryService:startShiftInventory(player: Player, maxSlots: number?)
+	self:restorePermanentInventoryItems(player)
 	local existing = inventories[player]
 	local preservedItems = {}
 	local displayMaxSlots = DEFAULT_DISPLAY_SLOTS
 	local stashMaxSlots = DEFAULT_STASH_SLOTS
+	local persistentStateLoaded = true
 
 	if existing then
 		displayMaxSlots = existing.displayMaxSlots or DEFAULT_DISPLAY_SLOTS
 		stashMaxSlots = existing.stashMaxSlots or DEFAULT_STASH_SLOTS
+		persistentStateLoaded = existing.persistentStateLoaded == true
 		for _, entry in existing.items do
 			local location = self:_itemLocation(entry)
 			if not entry.disposed and (location == LOCATION_DISPLAY or location == LOCATION_STASH) then
@@ -92,8 +234,65 @@ function InventoryService:startShiftInventory(player: Player, maxSlots: number?)
 		maxSlots = maxSlots or DEFAULT_MAX_SLOTS,
 		displayMaxSlots = displayMaxSlots,
 		stashMaxSlots = stashMaxSlots,
+		persistentStateLoaded = persistentStateLoaded,
 	}
+	self:migrateLegacyInventoryToShelf(player)
 	self:_pushState(player)
+end
+
+function InventoryService:migrateLegacyInventoryToShelf(player: Player): number
+	local inventory = inventories[player]
+	if not inventory then
+		return 0
+	end
+
+	local migrated = 0
+	for _, entry in inventory.items do
+		if entry.disposed or self:_itemLocation(entry) ~= LOCATION_INVENTORY then
+			continue
+		end
+
+		local displaySlotIndex = self:findFirstEmptyDisplaySlot(player, entry.instanceId)
+		if not displaySlotIndex then
+			continue
+		end
+
+		entry.location = LOCATION_DISPLAY
+		entry.heldBack = false
+		entry.displaySlotIndex = displaySlotIndex
+		entry.stashSlotIndex = nil
+		self:_applyPermanentHome(entry, LOCATION_DISPLAY, displaySlotIndex)
+		migrated += 1
+	end
+
+	if migrated > 0 then
+		self:_markPersistentDirty(player)
+	end
+	return migrated
+end
+
+function InventoryService:addPurchasedItemToShelf(player: Player, entry)
+	if not self:canAddToDisplay(player) then
+		return nil
+	end
+
+	local displaySlotIndex = self:findFirstEmptyDisplaySlot(player)
+	if not displaySlotIndex then
+		return nil
+	end
+
+	local inventory = self:_ensureInventory(player)
+	entry.instanceId = entry.instanceId or self:_nextInstanceId()
+	ObjectModel.normalizeOwnedObject(entry)
+	entry.location = LOCATION_DISPLAY
+	entry.heldBack = false
+	entry.displaySlotIndex = displaySlotIndex
+	entry.stashSlotIndex = nil
+	self:_applyPermanentHome(entry, LOCATION_DISPLAY, displaySlotIndex)
+	table.insert(inventory.items, entry)
+	self:_pushState(player)
+	self:_markPersistentDirty(player)
+	return entry.instanceId
 end
 
 function InventoryService:addPurchasedItem(player: Player, entry)
@@ -139,13 +338,33 @@ function InventoryService:setItemHeldBack(player: Player, instanceId: string, he
 	return true
 end
 
-function InventoryService:findFirstEmptyDisplaySlot(player: Player): number?
+function InventoryService:_reserveHomeSlotIfNeeded(entry, location: string, taken: { [number]: boolean }, ignoreInstanceId: string?)
+	if entry.disposed or entry.permanentOrigin ~= true then
+		return
+	end
+	if ignoreInstanceId and entry.instanceId == ignoreInstanceId then
+		return
+	end
+	if self:_itemLocation(entry) ~= LOCATION_INVENTORY then
+		return
+	end
+	if entry.permanentHomeLocation ~= location then
+		return
+	end
+	local slotIndex = entry.permanentHomeSlotIndex
+	if type(slotIndex) == "number" then
+		taken[slotIndex] = true
+	end
+end
+
+function InventoryService:findFirstEmptyDisplaySlot(player: Player, ignoreInstanceId: string?): number?
 	local inventory = self:_ensureInventory(player)
 	local taken = {}
 	for _, entry in inventory.items do
 		if not entry.disposed and self:_itemLocation(entry) == LOCATION_DISPLAY and entry.displaySlotIndex then
 			taken[entry.displaySlotIndex] = true
 		end
+		self:_reserveHomeSlotIfNeeded(entry, LOCATION_DISPLAY, taken, ignoreInstanceId)
 	end
 
 	for slotIndex = 1, inventory.displayMaxSlots do
@@ -157,13 +376,14 @@ function InventoryService:findFirstEmptyDisplaySlot(player: Player): number?
 	return nil
 end
 
-function InventoryService:findFirstEmptyStashSlot(player: Player): number?
+function InventoryService:findFirstEmptyStashSlot(player: Player, ignoreInstanceId: string?): number?
 	local inventory = self:_ensureInventory(player)
 	local taken = {}
 	for _, entry in inventory.items do
 		if not entry.disposed and self:_itemLocation(entry) == LOCATION_STASH and entry.stashSlotIndex then
 			taken[entry.stashSlotIndex] = true
 		end
+		self:_reserveHomeSlotIfNeeded(entry, LOCATION_STASH, taken, ignoreInstanceId)
 	end
 
 	for slotIndex = 1, inventory.stashMaxSlots do
@@ -181,16 +401,18 @@ function InventoryService:moveItemToDisplay(player: Player, instanceId: string):
 		return false
 	end
 
-	local displaySlotIndex = self:findFirstEmptyDisplaySlot(player)
+	local displaySlotIndex = self:findFirstEmptyDisplaySlot(player, instanceId)
 	if not displaySlotIndex then
 		return false
 	end
 
 	entry.location = LOCATION_DISPLAY
-	entry.heldBack = true
+	entry.heldBack = false
 	entry.displaySlotIndex = displaySlotIndex
 	entry.stashSlotIndex = nil
+	self:_applyPermanentHome(entry, LOCATION_DISPLAY, displaySlotIndex)
 	self:_pushState(player)
+	self:_markPersistentDirty(player)
 	return true
 end
 
@@ -208,6 +430,9 @@ function InventoryService:returnItemFromDisplay(player: Player, instanceId: stri
 	entry.displaySlotIndex = nil
 	entry.stashSlotIndex = nil
 	self:_pushState(player)
+	if entry.permanentOrigin == true then
+		self:_markPersistentDirty(player)
+	end
 	return true
 end
 
@@ -217,7 +442,7 @@ function InventoryService:moveInventoryItemToStash(player: Player, instanceId: s
 		return false
 	end
 
-	local stashSlotIndex = self:findFirstEmptyStashSlot(player)
+	local stashSlotIndex = self:findFirstEmptyStashSlot(player, instanceId)
 	if not stashSlotIndex then
 		return false
 	end
@@ -226,25 +451,14 @@ function InventoryService:moveInventoryItemToStash(player: Player, instanceId: s
 	entry.heldBack = false
 	entry.displaySlotIndex = nil
 	entry.stashSlotIndex = stashSlotIndex
+	self:_applyPermanentHome(entry, LOCATION_STASH, stashSlotIndex)
 	self:_pushState(player)
+	self:_markPersistentDirty(player)
 	return true
 end
 
 function InventoryService:returnItemFromStash(player: Player, instanceId: string): boolean
-	local entry = self:getOwnedItem(player, instanceId)
-	if not entry or self:_itemLocation(entry) ~= LOCATION_STASH then
-		return false
-	end
-	if not self:canAdd(player) then
-		return false
-	end
-
-	entry.location = LOCATION_INVENTORY
-	entry.heldBack = false
-	entry.displaySlotIndex = nil
-	entry.stashSlotIndex = nil
-	self:_pushState(player)
-	return true
+	return self:moveStashItemToDisplay(player, instanceId)
 end
 
 function InventoryService:moveDisplayItemToStash(player: Player, instanceId: string): boolean
@@ -262,7 +476,9 @@ function InventoryService:moveDisplayItemToStash(player: Player, instanceId: str
 	entry.heldBack = false
 	entry.displaySlotIndex = nil
 	entry.stashSlotIndex = stashSlotIndex
+	self:_applyPermanentHome(entry, LOCATION_STASH, stashSlotIndex)
 	self:_pushState(player)
+	self:_markPersistentDirty(player)
 	return true
 end
 
@@ -278,10 +494,12 @@ function InventoryService:moveStashItemToDisplay(player: Player, instanceId: str
 	end
 
 	entry.location = LOCATION_DISPLAY
-	entry.heldBack = true
+	entry.heldBack = false
 	entry.displaySlotIndex = displaySlotIndex
 	entry.stashSlotIndex = nil
+	self:_applyPermanentHome(entry, LOCATION_DISPLAY, displaySlotIndex)
 	self:_pushState(player)
+	self:_markPersistentDirty(player)
 	return true
 end
 
@@ -293,7 +511,148 @@ function InventoryService:markDisposed(player: Player, instanceId: string): bool
 
 	entry.disposed = true
 	self:_pushState(player)
+	if entry.permanentOrigin == true then
+		self:_markPersistentDirty(player)
+	end
 	return true
+end
+
+function InventoryService:_serializePersistentItem(entry, location: string, slotIndex: number)
+	return {
+		permanentId = entry.permanentId,
+		itemId = entry.itemId or entry.objectId,
+		objectId = entry.objectId or entry.itemId,
+		displayName = entry.displayName,
+		dealArchetypeId = entry.dealArchetypeId,
+		dealArchetypeName = entry.dealArchetypeName,
+		category = entry.category,
+		traits = entry.traits or {},
+		flavorText = entry.flavorText,
+		rarityId = entry.rarityId,
+		trueValue = entry.trueValue,
+		purchasePrice = entry.purchasePrice,
+		estimatedLow = entry.estimatedLow,
+		estimatedHigh = entry.estimatedHigh,
+		sellerId = entry.sellerId,
+		sellerName = entry.sellerName,
+		sellerTell = entry.sellerTell,
+		sellerAsk = entry.sellerAsk,
+		sellerMinimum = entry.sellerMinimum,
+		inspected = entry.inspected == true,
+		buyRoundCount = entry.buyRoundCount,
+		tacticsUsed = entry.tacticsUsed or {},
+		displaySlotIndex = if location == LOCATION_DISPLAY then slotIndex else nil,
+		stashSlotIndex = if location == LOCATION_STASH then slotIndex else nil,
+	}
+end
+
+function InventoryService:getPersistentShopState(player: Player)
+	local inventory = self:_ensureInventory(player)
+	local display = {}
+	local stash = {}
+	local seenPermanentIds = {}
+
+	for _, entry in inventory.items do
+		if entry.disposed then
+			continue
+		end
+
+		local location = self:_itemLocation(entry)
+		local saveLocation = nil
+		local slotIndex = nil
+
+		if location == LOCATION_DISPLAY and entry.displaySlotIndex then
+			saveLocation = LOCATION_DISPLAY
+			slotIndex = entry.displaySlotIndex
+			self:_updatePermanentHomeFromLocation(entry)
+		elseif location == LOCATION_STASH and entry.stashSlotIndex then
+			saveLocation = LOCATION_STASH
+			slotIndex = entry.stashSlotIndex
+			self:_updatePermanentHomeFromLocation(entry)
+		elseif location == LOCATION_INVENTORY and entry.permanentOrigin == true then
+			saveLocation = entry.permanentHomeLocation
+			slotIndex = entry.permanentHomeSlotIndex
+		end
+
+		if saveLocation ~= LOCATION_DISPLAY and saveLocation ~= LOCATION_STASH then
+			continue
+		end
+		if type(slotIndex) ~= "number" then
+			continue
+		end
+
+		entry.permanentId = entry.permanentId or self:_newPermanentId()
+		if seenPermanentIds[entry.permanentId] then
+			continue
+		end
+		seenPermanentIds[entry.permanentId] = true
+
+		local payload = self:_serializePersistentItem(entry, saveLocation, slotIndex)
+		if saveLocation == LOCATION_DISPLAY then
+			table.insert(display, payload)
+		else
+			table.insert(stash, payload)
+		end
+	end
+
+	table.sort(display, function(a, b)
+		return (a.displaySlotIndex or 0) < (b.displaySlotIndex or 0)
+	end)
+	table.sort(stash, function(a, b)
+		return (a.stashSlotIndex or 0) < (b.stashSlotIndex or 0)
+	end)
+
+	return {
+		display = display,
+		stash = stash,
+	}
+end
+
+function InventoryService:restorePermanentInventoryItems(player: Player): number
+	local inventory = self:_ensureInventory(player)
+	local restored = 0
+	for _, entry in inventory.items do
+		if entry.disposed or entry.permanentOrigin ~= true or self:_itemLocation(entry) ~= LOCATION_INVENTORY then
+			continue
+		end
+
+		local homeLocation = entry.permanentHomeLocation
+		local homeSlot = entry.permanentHomeSlotIndex
+		if homeLocation == LOCATION_DISPLAY and type(homeSlot) == "number" then
+			entry.location = LOCATION_DISPLAY
+			entry.heldBack = false
+			entry.displaySlotIndex = homeSlot
+			entry.stashSlotIndex = nil
+			restored += 1
+		elseif homeLocation == LOCATION_STASH and type(homeSlot) == "number" then
+			entry.location = LOCATION_STASH
+			entry.heldBack = false
+			entry.displaySlotIndex = nil
+			entry.stashSlotIndex = homeSlot
+			restored += 1
+		end
+	end
+
+	if restored > 0 then
+		self:_pushState(player)
+		self:_markPersistentDirty(player)
+	end
+	return restored
+end
+
+function InventoryService:getLiquidatableInventoryItems(player: Player): { any }
+	local inventory = inventories[player]
+	if not inventory then
+		return {}
+	end
+
+	local items = {}
+	for _, entry in inventory.items do
+		if not entry.disposed and self:_itemLocation(entry) == LOCATION_INVENTORY and entry.permanentOrigin ~= true then
+			table.insert(items, entry)
+		end
+	end
+	return items
 end
 
 function InventoryService:getActiveItems(player: Player): { any }
@@ -398,31 +757,37 @@ function InventoryService:canAdd(player: Player): boolean
 	return self:getCount(player) < self:getMaxSlots(player)
 end
 
-function InventoryService:canAddToDisplay(player: Player): boolean
-	return self:getDisplayCount(player) < self:getDisplayMaxSlots(player)
+function InventoryService:canAddToDisplay(player: Player, ignoreInstanceId: string?): boolean
+	return self:findFirstEmptyDisplaySlot(player, ignoreInstanceId) ~= nil
 end
 
-function InventoryService:canAddToStash(player: Player): boolean
-	return self:getStashCount(player) < self:getStashMaxSlots(player)
+function InventoryService:canAddToStash(player: Player, ignoreInstanceId: string?): boolean
+	return self:findFirstEmptyStashSlot(player, ignoreInstanceId) ~= nil
 end
 
-local function assertStudioDebug(): boolean
-	return game:GetService("RunService"):IsStudio()
+local DebugAccess = require(script.Parent.Parent.Config.DebugAccess)
+
+local function assertDebugDangerous(player: Player): boolean
+	return DebugAccess.canUseDangerousActions(player)
+end
+
+local function assertDebugReset(player: Player): boolean
+	return DebugAccess.canResetSave(player)
 end
 
 function InventoryService:debugAddInventoryItem(player: Player, itemDef: any): (string?, string?)
-	if not assertStudioDebug() then
-		return nil, "Debug actions disabled"
+	if not assertDebugDangerous(player) then
+		return nil, "Forbidden"
 	end
 	if not itemDef then
 		return nil, "No item configured"
 	end
-	if not self:canAdd(player) then
-		return nil, "Inventory full"
+	if not self:canAddToDisplay(player) then
+		return nil, "Shelf full"
 	end
 
 	local baseValue = itemDef.baseValue or 10
-	local instanceId = self:addPurchasedItem(player, ObjectModel.fromDefinition(itemDef, {
+	local instanceId = self:addPurchasedItemToShelf(player, ObjectModel.fromDefinition(itemDef, {
 		purchasePrice = baseValue,
 		trueValue = baseValue,
 		rarityId = "Common",
@@ -431,26 +796,26 @@ function InventoryService:debugAddInventoryItem(player: Player, itemDef: any): (
 		sellerName = "Debug",
 	}))
 	if not instanceId then
-		return nil, "Inventory full"
+		return nil, "Shelf full"
 	end
 
 	return instanceId, itemDef.displayName
 end
 
 function InventoryService:debugAddDisplayItem(player: Player, itemDef: any): (string?, string?)
-	if not assertStudioDebug() then
-		return nil, "Debug actions disabled"
+	if not assertDebugDangerous(player) then
+		return nil, "Forbidden"
 	end
 	if not itemDef then
 		return nil, "No item configured"
 	end
 	if not self:canAddToDisplay(player) then
-		return nil, "Display shelf full"
+		return nil, "Shelf full"
 	end
 
 	local displaySlotIndex = self:findFirstEmptyDisplaySlot(player)
 	if not displaySlotIndex then
-		return nil, "Display shelf full"
+		return nil, "Shelf full"
 	end
 
 	local inventory = self:_ensureInventory(player)
@@ -464,18 +829,20 @@ function InventoryService:debugAddDisplayItem(player: Player, itemDef: any): (st
 		estimatedHigh = math.ceil(baseValue * 1.2),
 		sellerName = "Debug",
 		location = LOCATION_DISPLAY,
-		heldBack = true,
+		heldBack = false,
 		displaySlotIndex = displaySlotIndex,
 		stashSlotIndex = nil,
 	})
+	self:_applyPermanentHome(entry, LOCATION_DISPLAY, displaySlotIndex)
 	table.insert(inventory.items, entry)
 	self:_pushState(player)
+	self:_markPersistentDirty(player)
 	return entry.instanceId, itemDef.displayName
 end
 
 function InventoryService:debugClearWorkingInventory(player: Player): (number, string?)
-	if not assertStudioDebug() then
-		return 0, "Debug actions disabled"
+	if not assertDebugDangerous(player) then
+		return 0, "Forbidden"
 	end
 
 	local cleared = 0
@@ -489,8 +856,8 @@ function InventoryService:debugClearWorkingInventory(player: Player): (number, s
 end
 
 function InventoryService:debugClearDisplay(player: Player): (number, string?)
-	if not assertStudioDebug() then
-		return 0, "Debug actions disabled"
+	if not assertDebugDangerous(player) then
+		return 0, "Forbidden"
 	end
 
 	local cleared = 0
@@ -500,6 +867,26 @@ function InventoryService:debugClearDisplay(player: Player): (number, string?)
 		end
 	end
 
+	return cleared, nil
+end
+
+function InventoryService:debugClearPersistentShopState(player: Player): (number, string?)
+	if not assertDebugReset(player) then
+		return 0, "Forbidden"
+	end
+
+	local cleared = 0
+	local inventory = self:_ensureInventory(player)
+	for _, entry in inventory.items do
+		local location = self:_itemLocation(entry)
+		if not entry.disposed and (entry.permanentOrigin == true or location == LOCATION_DISPLAY or location == LOCATION_STASH) then
+			entry.disposed = true
+			cleared += 1
+		end
+	end
+
+	self:_pushState(player)
+	self:_markPersistentDirty(player)
 	return cleared, nil
 end
 
@@ -551,10 +938,15 @@ function InventoryService:getSnapshot(player: Player)
 		displayMaxSlots = inventory.displayMaxSlots,
 		displayUsedSlots = displayUsedSlots,
 		displayItems = displayItems,
+		shelfMaxSlots = inventory.displayMaxSlots,
+		shelfUsedSlots = displayUsedSlots,
+		shelfItems = displayItems,
 		stashMaxSlots = inventory.stashMaxSlots,
 		stashUsedSlots = stashUsedSlots,
 		stashItems = stashItems,
 		displayAppealSummary = DisplayInfluence.summarizeDisplayAppeal(self:getDisplayItems(player)),
+		shelfAppealSummary = DisplayInfluence.summarizeDisplayAppeal(self:getDisplayItems(player)),
+		persistenceDebug = DataService:getDebugSnapshot(player),
 	}
 end
 

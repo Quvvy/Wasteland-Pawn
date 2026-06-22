@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local RareWalkIns = require(Shared.Config.RareWalkIns)
+local ShopDayVariables = require(Shared.Config.ShopDayVariables)
 local Shifts = require(Shared.Config.Shifts)
 local TrafficCalendar = require(Shared.Config.TrafficCalendar)
 local Remotes = require(Shared.Net.Remotes)
@@ -14,9 +15,23 @@ local ShiftService = {}
 
 local playerShifts: { [Player]: any } = {}
 local playerTraffic: { [Player]: { boardIndex: number, completedWindows: number } } = {}
+local playerOnboarding: { [Player]: any } = {}
+local playerShopDayForecasts: { [Player]: any } = {}
 local PHASE_BUYING = "Buying"
 local PHASE_CLOSING_RUSH = "ClosingRush"
 local PHASE_ENDED = "Ended"
+
+local ONBOARDING_RECOMMENDED_SHIFT_ID = "scrap_rush"
+local ONBOARDING_HINTS = {
+	open_board = "Open the Traffic Board. Start with Scrap Rush.",
+	start_scrap_rush = "Recommended first shift: Scrap Rush. Normal buyers, normal junk, fewer surprises.",
+	first_seller = "Inspect before you buy. Clues tell you if the junk is worth the risk.",
+	after_buy = "Bought items go to working stock. Buyers can only buy from the InventoryShelf.",
+	buyer_visit = "Good match. This buyer wants this kind of junk.",
+	offer_item = "The right buyer pays more. Match labels show interest.",
+	first_sale = "The right buyer paid extra. Some items are worth saving for better traffic.",
+	forward = "Display attracts traffic. Stash saves up to 2 items between visits.",
+}
 
 local function getGrade(shift): string
 	local target = math.max(shift.targetProfit or 0, 1)
@@ -34,13 +49,13 @@ end
 local function getResultTitle(shift): string
 	local grade = getGrade(shift)
 	if grade == "Big Win" then
-		return "Shift Crushed"
+		return "Shop Day Crushed"
 	elseif grade == "Success" then
-		return "Shift Complete"
+		return "Shop Day Complete"
 	elseif grade == "Close" then
-		return "Close Run"
+		return "Close Shop Run"
 	end
-	return "Shift Failed"
+	return "Shop Day Failed"
 end
 
 local function copyShiftOption(shift, trafficEntry)
@@ -58,6 +73,27 @@ local function copyShiftOption(shift, trafficEntry)
 		trafficLabel = trafficEntry and trafficEntry.label or nil,
 		trafficDescription = trafficEntry and trafficEntry.description or nil,
 		windowIndex = trafficEntry and trafficEntry.windowIndex or nil,
+	}
+end
+
+local function newOnboardingState()
+	return {
+		active = true,
+		stepId = "open_board",
+		hint = ONBOARDING_HINTS.open_board,
+		recommendedShiftId = ONBOARDING_RECOMMENDED_SHIFT_ID,
+		firstShiftCompleted = false,
+		boardOpened = false,
+		recommendedShiftStarted = false,
+		firstSellerShown = false,
+		itemInspected = false,
+		firstItemBought = false,
+		buyerVisitStarted = false,
+		itemOffered = false,
+		firstSaleCompleted = false,
+		buyerSkipped = false,
+		pendingBuyerId = nil,
+		buyerQueued = false,
 	}
 end
 
@@ -85,9 +121,19 @@ end
 function ShiftService:Init()
 	Remotes.setup()
 
+	Players.PlayerAdded:Connect(function(player)
+		task.delay(1.5, function()
+			if player.Parent then
+				self:_pushState(player)
+			end
+		end)
+	end)
+
 	Players.PlayerRemoving:Connect(function(player)
 		playerShifts[player] = nil
 		playerTraffic[player] = nil
+		playerOnboarding[player] = nil
+		playerShopDayForecasts[player] = nil
 	end)
 end
 
@@ -99,12 +145,136 @@ function ShiftService:Start()
 
 	local getShiftOptions = Remotes.get("GetShiftOptions") :: RemoteFunction
 	getShiftOptions.OnServerInvoke = function(player)
+		self:recordOnboardingEvent(player, "board_opened")
 		return {
 			ok = true,
 			options = self:getShiftOptions(player),
 			traffic = self:getTrafficSnapshot(player),
+			onboarding = self:getOnboardingSnapshot(player),
 		}
 	end
+end
+
+function ShiftService:_getOnboardingState(player: Player)
+	local state = playerOnboarding[player]
+	if not state then
+		state = newOnboardingState()
+		playerOnboarding[player] = state
+	end
+	return state
+end
+
+function ShiftService:getOnboardingSnapshot(player: Player)
+	local state = self:_getOnboardingState(player)
+	return {
+		active = state.active == true,
+		stepId = state.stepId,
+		hint = state.hint,
+		recommendedShiftId = state.recommendedShiftId,
+		firstShiftCompleted = state.firstShiftCompleted == true,
+		boardOpened = state.boardOpened == true,
+		recommendedShiftStarted = state.recommendedShiftStarted == true,
+		firstSellerShown = state.firstSellerShown == true,
+		itemInspected = state.itemInspected == true,
+		firstItemBought = state.firstItemBought == true,
+		buyerVisitStarted = state.buyerVisitStarted == true,
+		itemOffered = state.itemOffered == true,
+		firstSaleCompleted = state.firstSaleCompleted == true,
+		buyerSkipped = state.buyerSkipped == true,
+		pendingBuyerId = state.pendingBuyerId,
+	}
+end
+
+function ShiftService:_setOnboardingStep(state, stepId: string)
+	state.stepId = stepId
+	state.hint = ONBOARDING_HINTS[stepId] or state.hint
+end
+
+function ShiftService:recordOnboardingEvent(player: Player, eventName: string)
+	local state = self:_getOnboardingState(player)
+	if state.firstShiftCompleted == true then
+		state.active = false
+		return self:getOnboardingSnapshot(player)
+	end
+
+	if eventName == "board_opened" then
+		state.boardOpened = true
+		self:_setOnboardingStep(state, "start_scrap_rush")
+	elseif eventName == "recommended_shift_started" then
+		state.recommendedShiftStarted = true
+		self:_setOnboardingStep(state, "first_seller")
+	elseif eventName == "first_seller_shown" then
+		state.firstSellerShown = true
+		self:_setOnboardingStep(state, "first_seller")
+	elseif eventName == "item_inspected" then
+		state.itemInspected = true
+		self:_setOnboardingStep(state, "first_seller")
+	elseif eventName == "first_item_bought" then
+		state.firstItemBought = true
+		self:_setOnboardingStep(state, "after_buy")
+	elseif eventName == "buyer_visit_started" then
+		state.buyerVisitStarted = true
+		self:_setOnboardingStep(state, "buyer_visit")
+	elseif eventName == "item_offered" then
+		state.itemOffered = true
+		self:_setOnboardingStep(state, "offer_item")
+	elseif eventName == "first_sale_completed" then
+		state.firstSaleCompleted = true
+		self:_setOnboardingStep(state, "first_sale")
+	elseif eventName == "buyer_skipped" then
+		state.buyerSkipped = true
+		self:_setOnboardingStep(state, "forward")
+	elseif eventName == "first_shift_ended" then
+		state.firstShiftCompleted = true
+		state.active = false
+		state.pendingBuyerId = nil
+		self:_setOnboardingStep(state, "forward")
+	end
+
+	self:_pushState(player)
+	return self:getOnboardingSnapshot(player)
+end
+
+function ShiftService:shouldUseFirstOnboardingSeller(player: Player): boolean
+	local state = self:_getOnboardingState(player)
+	local shift = playerShifts[player]
+	return state.active == true
+		and state.recommendedShiftStarted == true
+		and state.firstSellerShown ~= true
+		and shift ~= nil
+		and shift.active == true
+		and shift.shiftId == ONBOARDING_RECOMMENDED_SHIFT_ID
+end
+
+function ShiftService:queueOnboardingBuyer(player: Player, buyerId: string?): boolean
+	local state = self:_getOnboardingState(player)
+	if state.active ~= true or state.firstItemBought == true or state.buyerQueued == true then
+		return false
+	end
+	if type(buyerId) ~= "string" or buyerId == "" then
+		return false
+	end
+
+	state.firstItemBought = true
+	state.buyerQueued = true
+	state.pendingBuyerId = buyerId
+	self:_setOnboardingStep(state, "after_buy")
+	self:_pushState(player)
+	return true
+end
+
+function ShiftService:getPendingOnboardingBuyerId(player: Player): string?
+	local state = self:_getOnboardingState(player)
+	if state.active ~= true or state.buyerQueued ~= true then
+		return nil
+	end
+	return state.pendingBuyerId
+end
+
+function ShiftService:clearPendingOnboardingBuyer(player: Player)
+	local state = self:_getOnboardingState(player)
+	state.pendingBuyerId = nil
+	state.buyerQueued = false
 end
 
 function ShiftService:_getTrafficState(player: Player)
@@ -141,15 +311,61 @@ function ShiftService:_advanceTrafficBoard(player: Player)
 	local state = self:_getTrafficState(player)
 	state.boardIndex = TrafficCalendar.nextBoardIndex(state.boardIndex)
 	state.completedWindows += 1
+	playerShopDayForecasts[player] = nil
+end
+
+function ShiftService:_buildShopDayForecastCache(player: Player)
+	local trafficState = self:_getTrafficState(player)
+	local displayItems = InventoryService:getDisplayItems(player)
+	local displayFingerprint = ShopDayVariables.displayFingerprint(displayItems)
+	local cache = {
+		boardIndex = trafficState.boardIndex,
+		displayFingerprint = displayFingerprint,
+		forecasts = {},
+	}
+	local rng = Random.new()
+
+	for _, trafficEntry in TrafficCalendar.getBoardShiftEntries(trafficState.boardIndex) do
+		local shift = Shifts.get(trafficEntry.shiftId)
+		if shift then
+			cache.forecasts[shift.id] = ShopDayVariables.build(shift, trafficEntry, displayItems, rng)
+		end
+	end
+
+	playerShopDayForecasts[player] = cache
+	return cache
+end
+
+function ShiftService:_getShopDayForecastCache(player: Player)
+	local trafficState = self:_getTrafficState(player)
+	local displayFingerprint = ShopDayVariables.displayFingerprint(InventoryService:getDisplayItems(player))
+	local cache = playerShopDayForecasts[player]
+	if cache and cache.boardIndex == trafficState.boardIndex and cache.displayFingerprint == displayFingerprint then
+		return cache
+	end
+	return self:_buildShopDayForecastCache(player)
+end
+
+function ShiftService:_getShopDayForecast(player: Player, shiftId: string)
+	local cache = self:_getShopDayForecastCache(player)
+	return cache and cache.forecasts and cache.forecasts[shiftId] or nil
 end
 
 function ShiftService:getShiftOptions(player: Player)
 	local trafficState = self:_getTrafficState(player)
+	local forecastCache = self:_getShopDayForecastCache(player)
 	local options = {}
+	local onboarding = self:_getOnboardingState(player)
 	for _, trafficEntry in TrafficCalendar.getBoardShiftEntries(trafficState.boardIndex) do
 		local shift = Shifts.get(trafficEntry.shiftId)
 		if shift then
-			table.insert(options, copyShiftOption(shift, trafficEntry))
+			local option = copyShiftOption(shift, trafficEntry)
+			option.shopDayForecast = ShopDayVariables.toSnapshot(forecastCache.forecasts[shift.id])
+			if onboarding.active == true and option.id == onboarding.recommendedShiftId then
+				option.recommended = true
+				option.recommendedText = "Recommended first shift"
+			end
+			table.insert(options, option)
 		end
 	end
 	return options
@@ -182,6 +398,9 @@ function ShiftService:startShift(player: Player, shiftId: string?)
 	local buyerVisitEvery = shift.buyerVisitEvery or 2
 	local sellerVisitCount = shift.sellerVisitCount or shift.dealCount
 	local closingRushBuyerLimit = shift.closingRushBuyerLimit or (inventorySlots + 1)
+	local shopDayForecast = self:_getShopDayForecast(player, shift.id)
+	local adjustedBuyerWeights = ShopDayVariables.applyBuyerWeights(shift.buyerWeights, shopDayForecast)
+	local adjustedDealArchetypeWeights = ShopDayVariables.applyDealArchetypeWeights(shift.dealArchetypeWeights, shopDayForecast)
 	InventoryService:startShiftInventory(player, inventorySlots)
 
 	playerShifts[player] = {
@@ -207,8 +426,8 @@ function ShiftService:startShift(player: Player, shiftId: string?)
 		pendingRareBuyerId = nil,
 		rareBuyerVisitsSeen = 0,
 		rareBuyerMax = RareWalkIns.getMaxPerShift(shift),
-		dealArchetypeWeights = shift.dealArchetypeWeights,
-		buyerWeights = shift.buyerWeights,
+		dealArchetypeWeights = adjustedDealArchetypeWeights,
+		buyerWeights = adjustedBuyerWeights,
 		closingRushBuyerLimit = closingRushBuyerLimit,
 		closingRushBuyersRemaining = closingRushBuyerLimit,
 		closingRushBuyersSeen = 0,
@@ -219,7 +438,12 @@ function ShiftService:startShift(player: Player, shiftId: string?)
 		trafficAdvanced = false,
 		trafficAdvanceSkipped = false,
 		lastLiquidationItemCount = 0,
+		shopDay = ShopDayVariables.toSnapshot(shopDayForecast),
 	}
+
+	if shift.id == ONBOARDING_RECOMMENDED_SHIFT_ID then
+		self:recordOnboardingEvent(player, "recommended_shift_started")
+	end
 
 	local snapshot = self:buildSnapshot(player)
 	self:_pushState(player)
@@ -254,7 +478,7 @@ function ShiftService:queueClosingRushBuyer(player: Player): boolean
 	if not shift or shift.ended or shift.phase ~= PHASE_CLOSING_RUSH then
 		return false
 	end
-	if InventoryService:getCount(player) <= 0 then
+	if InventoryService:getDisplayCount(player) <= 0 then
 		return false
 	end
 	if not self:canRollClosingRushBuyer(player) then
@@ -272,7 +496,7 @@ function ShiftService:enterClosingRush(player: Player)
 		return nil
 	end
 
-	if InventoryService:getCount(player) <= 0 then
+	if InventoryService:getDisplayCount(player) <= 0 then
 		return self:endShift(player)
 	end
 
@@ -305,7 +529,7 @@ function ShiftService:recordSellerVisitResolved(player: Player, forceBuyerVisit:
 	end
 
 	if shift.sellerVisitsResolved >= shift.sellerVisitCount then
-		if InventoryService:getCount(player) > 0 then
+		if InventoryService:getDisplayCount(player) > 0 then
 			return self:enterClosingRush(player)
 		end
 		return self:endShift(player)
@@ -333,6 +557,16 @@ function ShiftService:recordDealResult(player: Player, dealSummary)
 	return self:buildSnapshot(player)
 end
 
+function ShiftService:recordDisplayInfluenceHelped(player: Player)
+	local shift = playerShifts[player]
+	if not shift or shift.ended or type(shift.shopDay) ~= "table" then
+		return nil
+	end
+
+	shift.shopDay.displayHelped = true
+	return self:buildSnapshot(player)
+end
+
 function ShiftService:shouldTriggerBuyerVisit(player: Player): boolean
 	local shift = playerShifts[player]
 	return shift ~= nil and shift.active and not shift.ended and shift.pendingBuyerVisit == true
@@ -346,7 +580,7 @@ function ShiftService:canQueueRareBuyerVisit(player: Player): boolean
 	if shift.pendingBuyerVisit then
 		return false
 	end
-	if InventoryService:getCount(player) <= 0 then
+	if InventoryService:getDisplayCount(player) <= 0 then
 		return false
 	end
 	return (shift.rareBuyerVisitsSeen or 0) < (shift.rareBuyerMax or RareWalkIns.MAX_PER_SHIFT)
@@ -376,7 +610,7 @@ function ShiftService:beginBuyerVisit(player: Player)
 	end
 
 	if shift.phase == PHASE_CLOSING_RUSH then
-		if InventoryService:getCount(player) <= 0 then
+		if InventoryService:getDisplayCount(player) <= 0 then
 			return self:endShift(player)
 		end
 		if not self:canRollClosingRushBuyer(player) then
@@ -400,18 +634,19 @@ function ShiftService:completeBuyerVisit(player: Player)
 		return nil
 	end
 
+	self:clearPendingOnboardingBuyer(player)
 	shift.pendingBuyerVisit = false
 	shift.pendingBuyerVisitKind = nil
 	shift.pendingRareBuyerId = nil
 	if shift.phase == PHASE_BUYING then
 		if shift.sellerVisitsResolved >= shift.sellerVisitCount then
-			if InventoryService:getCount(player) > 0 then
+			if InventoryService:getDisplayCount(player) > 0 then
 				return self:enterClosingRush(player)
 			end
 			return self:endShift(player)
 		end
 	elseif shift.phase == PHASE_CLOSING_RUSH then
-		if InventoryService:getCount(player) <= 0 then
+		if InventoryService:getDisplayCount(player) <= 0 then
 			return self:endShift(player)
 		end
 		if self:canRollClosingRushBuyer(player) then
@@ -443,11 +678,13 @@ function ShiftService:liquidateRemainingInventory(player: Player, reason: string
 		return nil
 	end
 
+	InventoryService:restorePermanentInventoryItems(player)
+
 	local items = {}
 	local totalCash = 0
 	local totalProfit = 0
 
-	for _, entry in InventoryService:getInventoryItems(player) do
+	for _, entry in InventoryService:getLiquidatableInventoryItems(player) do
 		local trueValue = entry.trueValue or 0
 		local liquidationValue = math.max(0, math.floor(trueValue * Shifts.LiquidationRate + 0.5))
 		local profit = liquidationValue - (entry.purchasePrice or 0)
@@ -489,13 +726,15 @@ end
 function ShiftService:closeShift(player: Player, reason: string?)
 	local shift = playerShifts[player]
 	if not shift or shift.ended then
-		return { ok = false, error = "No active shift" }
+		return { ok = false, error = "No open shop day" }
 	end
 	if shift.phase ~= PHASE_CLOSING_RUSH then
 		return { ok = false, error = "Can only close during Closing Rush" }
 	end
 
-	if InventoryService:getCount(player) > 0 then
+	InventoryService:restorePermanentInventoryItems(player)
+
+	if #InventoryService:getLiquidatableInventoryItems(player) > 0 then
 		self:liquidateRemainingInventory(player, reason or "Liquidated after close")
 	end
 
@@ -515,6 +754,8 @@ function ShiftService:endShift(player: Player)
 	if shift.ended then
 		return self:buildSnapshot(player)
 	end
+
+	InventoryService:restorePermanentInventoryItems(player)
 
 	shift.active = false
 	shift.ended = true
@@ -536,8 +777,18 @@ function ShiftService:endShift(player: Player)
 		end
 	end
 
+	local onboarding = self:_getOnboardingState(player)
+	if onboarding.firstShiftCompleted ~= true then
+		onboarding.firstShiftCompleted = true
+		onboarding.active = false
+		onboarding.pendingBuyerId = nil
+		onboarding.buyerQueued = false
+		self:_setOnboardingStep(onboarding, "forward")
+	end
+
 	InventoryService:pushSnapshot(player)
 	self:_pushState(player)
+	DataService:savePlayer(player, "shift_end")
 	return self:buildSnapshot(player)
 end
 
@@ -547,6 +798,7 @@ function ShiftService:buildSnapshot(player: Player)
 		return {
 			active = false,
 			ended = false,
+			onboarding = self:getOnboardingSnapshot(player),
 		}
 	end
 
@@ -584,7 +836,9 @@ function ShiftService:buildSnapshot(player: Player)
 		meaningfulProgress = hasMeaningfulProgress(shift),
 		trafficAdvanced = shift.trafficAdvanced == true,
 		trafficAdvanceSkipped = shift.trafficAdvanceSkipped == true,
+		shopDay = shift.shopDay,
 		traffic = self:getTrafficSnapshot(player),
+		onboarding = self:getOnboardingSnapshot(player),
 	}
 end
 
@@ -594,7 +848,8 @@ function ShiftService:_pushState(player: Player)
 end
 
 function ShiftService:debugSetPendingBuyerVisit(player: Player): boolean
-	if not game:GetService("RunService"):IsStudio() then
+	local DebugAccess = require(script.Parent.Parent.Config.DebugAccess)
+	if not DebugAccess.canRunDebugAction(player, "ForceBuyerVisit") then
 		return false
 	end
 

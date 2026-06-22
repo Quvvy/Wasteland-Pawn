@@ -128,7 +128,7 @@ The product direction is **weird shopkeeping / negotiation game with Roblox rete
 
 ## Open Shop / Close Shop direction
 
-**Status:** **Planned direction** — not fully built. The current Traffic Board and internal shift flow are **prototype stepping stones**.
+**Status:** **Prototype direction slice** — not fully built. The current Traffic Board and internal shift flow are **prototype stepping stones**.
 
 The long-term shop loop should be **Open Shop / Close Shop**, not "select the same shift over and over."
 
@@ -140,7 +140,7 @@ Prepare the shop → decide to open → see what kind of day happens
 → close the shop and review results
 ```
 
-Opening the shop starts a **shop day**. A shop day can include:
+Opening the shop starts a **shop day**. Open Shop / Shop Day Variables V1 now adds compact server-owned forecasts and light buyer/seller weight nudges to the existing internal shift loop. A shop day can include:
 
 - normal foot traffic
 - seller quality variance
@@ -155,7 +155,7 @@ Opening the shop starts a **shop day**. A shop day can include:
 
 **Controlled variance:** variables should create readable decisions, not chaos. Player agency comes from prep (what to display, stash, hold, and sell) and forecast hints — not pure RNG punishment.
 
-**Traffic Board evolution:** today it is a session-only traffic-window picker (**Prototype**). It should evolve into a **forecast and preparation tool** (what traffic may show up, how display/stash matter, what to expect) — not a permanent static mission-select menu.
+**Traffic Board evolution:** today it is a session-only traffic-window picker plus compact shop-day forecast (**Prototype**). It should evolve into a stronger **forecast and preparation tool** (what traffic may show up, how display/stash matter, what to expect) — not a permanent static mission-select menu.
 
 **Not built yet:** full open/close shop simulation, real-time calendar, daily reset, collection log, relics, shop upgrades, full decoration editor, global events, broader progression saves.
 
@@ -228,16 +228,16 @@ What players can do in the **current repo**. Code still uses the internal term *
 1. Walk to the **Traffic Board** (physical `ShiftBoard` part) and review session traffic conditions via the forecast/prep overlay.
 2. Start a **shop day** (internal: shift) from an available traffic window on the current board.
 3. **Seller visits** bring weird items; player haggles, inspects, buys, or passes.
-4. Bought items enter **limited working inventory** on the InventoryShelf (3 slots; resets each shop day).
-5. Player may **Hold Back** to DisplayShelf or move items through StashBin. DisplayShelf and 2 Stash slots persist; InventoryShelf does not.
-6. **Buyer visits** occur; player chooses which held item to offer.
-7. **Buyer matching** and **display influence** affect interest and traffic.
+4. Bought items land on the **public Shelf** (3 slots; internal `display`; persists).
+5. Player may **Move to Storage** or **Return to Shelf** via Storage overlay / world prompts.
+6. **Buyer visits** occur; player chooses a shelf item to offer.
+7. **Buyer matching** and **shelf appeal** (display influence) affect interest and traffic.
 8. **Rare walk-ins** may add an extra buyer opportunity during Buying (capped per shop day).
-9. Sellers run out; remaining inventory enters **Closing Rush** or the shop day ends.
-10. Unsold working-stock items may **liquidate** (~35%). Display and stash items are excluded.
+9. Sellers run out; remaining legacy inventory (if any) enters **Closing Rush** or the shop day ends.
+10. Unsold legacy working-stock items may **liquidate** (~35%). Shelf and Storage items are excluded.
 11. Shop-day result vs profit quota; Traffic Board may advance after meaningful progress.
 
-**Persistent Shop State V1:** scraps, 2 Stash slots, and DisplayShelf items/positions survive rejoin. Working InventoryShelf stock remains current-shop-day only.
+**Persistent Shop State V1:** scraps, 2 Storage slots, and public Shelf items/positions survive rejoin. Legacy working inventory is compat-only.
 
 Separately (decorative only): **hub pickup props** do not affect scraps, working inventory, or saves.
 
@@ -390,13 +390,14 @@ Session-only rotating traffic conditions wrap internal shift configs. Normal-day
 
 ### Counter and shelf presentation — **Prototype**
 
+- **Hybrid Counter Presentation V1** — shopkeeper camera, counter dialogue overlay, simplified actions; legacy deal UI fallback when anchors missing or `ForceLegacyDealUI` (`CounterPresentationController`, `CameraController`).
 - **CounterItemSpot** — item prop during seller haggle and buyer sell phases (`ItemPresentationController`).
 - **InventoryShelf** / **DisplayShelf** — client props and prompts for working stock and display routing.
 - **CustomerSpot** — cloned visitor rigs during visits (`CustomerPresentationController`).
 
-### Studio debug tools — **Prototype**
+### Debug tools — **Prototype**
 
-Ctrl+U debug overlay (shift, deal, inventory, world, prompts) and Studio-gated debug actions (`DebugService`). Not player-facing.
+Ctrl+U debug overlay (shift, deal, inventory, persistence, world, prompts) is available as a read-only live diagnostic. Debug write actions (`DebugService`) remain Studio-gated and are not player-facing.
 
 ### Buyer visits + matching — **Prototype**
 
@@ -465,7 +466,7 @@ Workspace
 
 ### Current — **Prototype**
 
-Forecast/prep at Traffic Board, then start a shop day (internal: shift). Client sign, decorative hub props, deal UI while open, InventoryShelf/DisplayShelf/Stash routing, session display/stash persistence, counter and visitor presentation, Studio debug overlay.
+Forecast/prep at Traffic Board, then start a shop day (internal: shift). Client sign, decorative hub props, deal UI while open, InventoryShelf/DisplayShelf/Stash routing, persistent scraps/display/stash V1, counter and visitor presentation, read-only live debug overlay with Studio-gated actions.
 
 ### Future — **Planned / future direction**
 
@@ -834,9 +835,9 @@ See [ROADMAP.md](ROADMAP.md) for milestone order and [Current Scope Snapshot](RO
 | **Open shop** | Future core verb: start the shop day and let traffic/deals run (**Planned**) |
 | **Close shop** | Future core verb: end the shop day, review receipt/results (**Planned**) |
 | **Shift** | Internal/code term for prototype shop day (**Prototype**) — sellers, buyers, inventory cap, quota |
-| **InventoryShelf** | Working stock for immediate selling during an open shop day; resets each shop day (**Prototype**) |
-| **DisplayShelf** | Server-routed display slots; traffic influence / shop identity (**Prototype**) |
-| **Stash** | 2 permanent saved slots; save for a better future shop day; not demand influence (**Prototype**) |
+| **InventoryShelf** | Legacy working stock (compat); Public Shelves V1 uses unified **Shelf** instead (**Prototype**) |
+| **Shelf** (internal `display`) | Public sellable stock on `Shop.Shelf`; traffic influence; persists (**Prototype**) |
+| **Storage** (internal `stash`) | 2 permanent hidden slots; save for a better future shop day (**Prototype**) |
 | **Persistent Shop State** | Scraps, Stash, and DisplayShelf items/positions survive rejoin; InventoryShelf and hub pickups do not (**Prototype**) |
 | **Display influence** | Displayed categories/traits bias buyer visit roll weights (**Prototype**) |
 | **Demand Preview** | Traffic Board `?` panel: likely buyers, good stock, display match hints (**Prototype**) |

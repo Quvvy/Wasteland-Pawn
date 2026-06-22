@@ -19,9 +19,9 @@ That split is acceptable for the prototype, but it cannot become the final game.
 
 **Shop-day preparation:** object routing supports preparing before and during an open shop day:
 
-- `inventory` — immediate selling during an open shop day
-- `display` — traffic influence / shop identity
-- `stash` — save for a better future shop day; V1 persists 2 haggled-item slots
+- `display` — public Shelf (sellable, traffic influence, persistent); player-facing: **Shelf**
+- `stash` — hidden Storage (not sellable, persistent); player-facing: **Storage**
+- `inventory` — legacy working stock (compat only; migrated to Shelf on shift start; liquidated at close)
 
 Traffic Board / internal shift configs are prototype traffic wrappers, not the final open-shop fantasy.
 
@@ -53,9 +53,9 @@ Important fields today:
 
 Valid locations today:
 
-- `inventory` - working stock on InventoryShelf; sellable
-- `display` - DisplayShelf; affects demand, not sellable; haggled items/slot positions persist in V1
-- `stash` - 2-slot haggled-item stash; does not affect demand, not sellable
+- `inventory` - legacy working stock (compat); phased out in Public Shelves V1
+- `display` - public Shelf; sellable, affects demand, persists (internal key unchanged)
+- `stash` - Storage; 2-slot hidden stock; does not affect demand, not sellable from shelf
 
 ### Hub pickup props
 
@@ -154,9 +154,9 @@ Keep location semantics simple and authoritative.
 
 | Location | Meaning | Sellable | Affects demand | Liquidated |
 |----------|---------|----------|----------------|------------|
-| `inventory` | Working stock on InventoryShelf | Yes | No | Yes |
-| `display` | DisplayShelf | No | Yes | No |
-| `stash` | StashBin storage | No | No | No |
+| `display` | Public Shelf (`Shop.Shelf`) | Yes | Yes | No |
+| `stash` | Storage | No | No | No |
+| `inventory` | Legacy working stock (compat) | Yes (migrating) | No | Yes |
 | `counter` | Active negotiation item | In active deal only | No | No |
 | `discarded` | Removed / sold / liquidated | No | No | No |
 
@@ -295,9 +295,9 @@ When this plan becomes implementation, preserve these rules:
 - Server creates economy-relevant object instances.
 - Server owns value, purchase price, true value, location, and slot assignment.
 - Client may request routing, never decide routing.
-- Buyer offers only use `location == "inventory"`.
+- Buyer offers only use `location == "display"` (Shelf).
 - Display influence only uses `location == "display"`.
-- Liquidation only uses `location == "inventory"`.
+- Liquidation only uses legacy `location == "inventory"`.
 - Stash never affects buyer rolls.
 - Hub props remain decorative and frozen until explicitly converted to server-owned objects through a future unification milestone.
 
