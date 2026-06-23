@@ -6,6 +6,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Net.Remotes)
 local InventorySnapshot = require(Shared.Util.InventorySnapshot)
+local WorldMarkers = require(Shared.Util.WorldMarkers)
 local HubWorld = require(script.Parent.HubWorld)
 
 local DebugOverlayController = {}
@@ -27,6 +28,8 @@ local LEGACY_PROMPT_NAMES = {
 	ShelfOfferPrompt = true,
 	ShelfHoldPrompt = true,
 	ShelfDisplayPrompt = true,
+	ShelfPrimaryPrompt = true,
+	InventoryShelfPrimaryPrompt = true,
 }
 local LOCAL_FOLDERS = {
 	"HubInventoryLocal",
@@ -53,7 +56,7 @@ local DANGEROUS_ACTIONS = {
 	{ id = "GiveRandomTech", label = "Give Random Tech" },
 	{ id = "GiveRandomCollectible", label = "Give Random Collectible" },
 	{ id = "FillInventory", label = "Fill Shelf" },
-	{ id = "ClearInventory", label = "Clear Working Stock" },
+	{ id = "ClearInventory", label = "Clear Legacy Stock" },
 	{ id = "ClearDisplay", label = "Clear Shelf" },
 	{ id = "GiveRandomDisplayItem", label = "Give Random Shelf Item" },
 	{ id = "ForceBuyerVisit", label = "Force Buyer Visit" },
@@ -111,6 +114,11 @@ local lastLoggedTacticDebug: string? = nil
 local remoteLog: { string } = {}
 local worldScanCache: any? = nil
 local promptScanCache: any? = nil
+local shelfFocusDebugSnapshot = {
+	active = false,
+	selectedName = nil :: string?,
+	instanceId = nil :: string?,
+}
 
 local function canViewHiddenEconomy(): boolean
 	return debugAccess ~= nil and debugAccess.canViewHiddenEconomy == true
@@ -157,6 +165,49 @@ local function appendLog(line: string)
 	if overlayVisible then
 		DebugOverlayController:rebuildText()
 	end
+end
+
+function DebugOverlayController:appendClientLog(line: string)
+	appendLog(line)
+end
+
+function DebugOverlayController:updateShelfFocusDebugState(state: {
+	active: boolean,
+	selectedName: string?,
+	instanceId: string?,
+})
+	shelfFocusDebugSnapshot = {
+		active = state.active == true,
+		selectedName = state.selectedName,
+		instanceId = state.instanceId,
+	}
+	if overlayVisible then
+		DebugOverlayController:rebuildText()
+	end
+end
+
+local function shortenInstanceId(instanceId: string?): string
+	if type(instanceId) ~= "string" or instanceId == "" then
+		return "-"
+	end
+	if #instanceId <= 8 then
+		return instanceId
+	end
+	return string.sub(instanceId, 1, 8) .. "..."
+end
+
+local function formatShelfFocusDebugSection(): string
+	local snapshot = shelfFocusDebugSnapshot
+	local selectedLabel = if snapshot.selectedName and snapshot.selectedName ~= ""
+		then snapshot.selectedName
+		elseif snapshot.active then "none"
+		else "-"
+	return table.concat({
+		"=== SHELF FOCUS ===",
+		`active: {field(snapshot.active)}`,
+		`selected: {selectedLabel}`,
+		`instanceId: {shortenInstanceId(snapshot.instanceId)}`,
+	}, "\n")
 end
 
 local function appendActionLog(actionId: string, result: any)
@@ -309,7 +360,7 @@ local function formatExpectedInteraction(phase: string?): string
 	elseif phase == "WalkedAway" or phase == "Result" or phase == "Stored" or phase == "BuyerSkipped" then
 		return "Terminal — click Next Customer."
 	elseif phase == nil or phase == "" then
-		return "No deal — use shelf prompts when shop is open."
+		return "No deal — Inspect Shelf on BasicShelf when needed."
 	end
 	return `Phase {phase}.`
 end
@@ -520,7 +571,7 @@ local function formatPersistenceSection(): string
 		`store: {field(persistence.storeName)}`,
 		`key: {field(persistence.key)}`,
 		`load={field(persistence.loadStatus)} | save={field(persistence.saveStatus)} | disabled={field(persistence.saveDisabled)} | dirty={field(persistence.dirty)}`,
-		`saved scraps={field(persistence.savedScraps)} | storage={field(persistence.permanentStashCount)} | shelf={field(persistence.permanentDisplayCount)}`,
+		`saved scraps={field(persistence.savedScraps)} | storage (internal stash)={field(persistence.permanentStashCount)} | shelf (internal display)={field(persistence.permanentDisplayCount)}`,
 	}
 
 	if persistence.lastLoadError then
@@ -575,6 +626,19 @@ function DebugOverlayController:scanWorld()
 		scan.shelfSlots[slotIndex] = HubWorld.findShelfSlot(shelf, slotIndex) ~= nil
 	end
 
+	local focusMarkers = WorldMarkers.findShelfFocusMarkers(shop, shelf)
+	scan.shelfFocusCamera = focusMarkers.camera ~= nil or focusMarkers.cameraPosition ~= nil
+	scan.shelfFocusLookAt = focusMarkers.lookAt ~= nil or focusMarkers.lookAtPosition ~= nil
+	scan.shelfFocusSource = focusMarkers.source
+	scan.shelfPromptAnchor = WorldMarkers.findShelfPromptAnchor(shelf) ~= nil
+
+	local sources = WorldMarkers.collectMarkerSources(shop)
+	scan.markerSources = sources
+	scan.shelfSource = sources.shelf
+	scan.counterSource = sources.counter
+	scan.customerSource = sources.customer
+	scan.storageSource = sources.storage
+
 	if world then
 		for _, folderName in LOCAL_FOLDERS do
 			local folder = world:FindFirstChild(folderName)
@@ -606,6 +670,8 @@ function DebugOverlayController:scanPrompts()
 		ShelfOfferPrompt = 0,
 		ShelfHoldPrompt = 0,
 		ShelfDisplayPrompt = 0,
+		ShelfPrimaryPrompt = 0,
+		InventoryShelfPrimaryPrompt = 0,
 	}
 
 	if world then
@@ -653,13 +719,30 @@ local function formatCameraSection(scan: any, promptScan: any): string
 	end
 
 	table.insert(lines, `presentation ready: {field(scan.presentationReady)}`)
+	local function sourceLine(label: string, source: string?)
+		local value = field(source)
+		if source == "legacy" or source == "derived" then
+			return `{label} source: {value} (warning)`
+		end
+		return `{label} source: {value}`
+	end
+	table.insert(lines, sourceLine("shelf", scan.shelfSource))
+	table.insert(lines, sourceLine("counter", scan.counterSource))
+	table.insert(lines, sourceLine("customer path", scan.customerSource))
+	table.insert(lines, sourceLine("storage", scan.storageSource))
 	table.insert(lines, `deal camera spot: {status(scan.dealCameraSpot)}`)
 	table.insert(lines, `counter look-at: {status(scan.counterLookAt)}`)
 	table.insert(lines, `sell shelf look-at: {status(scan.sellShelfLookAt)}`)
+	table.insert(lines, `display shelf look-at (internal): {status(scan.displayShelfLookAt)}`)
+	table.insert(lines, `shelf focus camera: {status(scan.shelfFocusCamera)} | look-at: {status(scan.shelfFocusLookAt)} | source: {field(scan.shelfFocusSource)}`)
+	table.insert(lines, `shelf prompt anchor: {status(scan.shelfPromptAnchor)}`)
 	table.insert(lines, `storage look-at: {status(scan.storageLookAt)}`)
 	table.insert(lines, `player counter spot: {status(scan.playerCounterSpot)}`)
 	table.insert(lines, `customer entry: {status(scan.customerEntrySpot)} | counter: {status(scan.customerCounterSpot)} | exit: {status(scan.customerExitSpot)}`)
 	table.insert(lines, `open/closed sign: {status(scan.openClosedSign)}`)
+
+	table.insert(lines, "")
+	table.insert(lines, formatShelfFocusDebugSection())
 
 	table.insert(lines, "")
 	table.insert(lines, "=== WORLD PARTS ===")
@@ -692,10 +775,23 @@ local function formatCameraSection(scan: any, promptScan: any): string
 		table.insert(lines, "(click Refresh on Overview)")
 	else
 		local legacy = promptScan.legacyCounts
-		local legacyTotal = legacy.ShelfOfferPrompt + legacy.ShelfHoldPrompt + legacy.ShelfDisplayPrompt
-		table.insert(lines, `active: {#promptScan.prompts} | legacy duplicates: {legacyTotal}`)
+		local legacyTotal = legacy.ShelfOfferPrompt
+			+ legacy.ShelfHoldPrompt
+			+ legacy.ShelfDisplayPrompt
+			+ legacy.ShelfPrimaryPrompt
+			+ legacy.InventoryShelfPrimaryPrompt
+		local stationCount = 0
+		for _, prompt in promptScan.prompts do
+			if prompt.name == "ShelfStationPrompt" then
+				stationCount += 1
+			end
+		end
+		table.insert(lines, `active: {#promptScan.prompts} | legacy duplicates: {legacyTotal} | ShelfStationPrompt: {stationCount}`)
 		if legacyTotal > 0 then
-			table.insert(lines, "Warning: legacy shelf prompts still in world.")
+			table.insert(lines, "Warning: legacy shelf prompts still in world (expect only ShelfStationPrompt on BasicShelf).")
+		end
+		if stationCount > 1 then
+			table.insert(lines, "Warning: multiple ShelfStationPrompt instances found.")
 		end
 		for _, prompt in promptScan.prompts do
 			local modeText = if prompt.promptMode then ` [{prompt.promptMode}]` else ""
@@ -739,6 +835,9 @@ local function formatOverviewSection(): string
 	end
 
 	table.insert(lines, "")
+	table.insert(lines, formatShelfFocusDebugSection())
+
+	table.insert(lines, "")
 	table.insert(lines, "Use Refresh to rescan world prompts and anchors.")
 	return table.concat(lines, "\n")
 end
@@ -764,6 +863,7 @@ local function formatActionsHelpSection(): string
 		"Toggle Legacy Deal UI — presentation preference only",
 		"",
 		"=== DANGEROUS (SERVER) ===",
+		"Clear Legacy Stock removes internal inventory-location items only.",
 	}
 
 	if canRunDangerousActions() then

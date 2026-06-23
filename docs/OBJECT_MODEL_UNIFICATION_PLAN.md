@@ -175,8 +175,8 @@ Notes:
 Status: **Prototype**
 
 - Haggled items are server-owned.
-- DisplayShelf and 2 Stash slots now persist for haggled items through Persistent Shop State V1.
-- InventoryShelf working stock remains temporary.
+- **Shelf** and 2 **Storage** slots (internal `display` / `stash`) persist through Persistent Shop State V1.
+- Legacy `inventory` working stock remains temporary (compat only).
 - Hub pickups are decorative and client-only.
 - Hub pickups are frozen: keep them working, but do not expand them before object unification has a clear gameplay purpose.
 
@@ -296,9 +296,9 @@ When this plan becomes implementation, preserve these rules:
 - Server owns value, purchase price, true value, location, and slot assignment.
 - Client may request routing, never decide routing.
 - Buyer offers only use `location == "display"` (Shelf).
-- Display influence only uses `location == "display"`.
+- Shelf appeal only uses `location == "display"`.
 - Liquidation only uses legacy `location == "inventory"`.
-- Stash never affects buyer rolls.
+- **Storage** (`stash`) never affects buyer rolls.
 - Hub props remain decorative and frozen until explicitly converted to server-owned objects through a future unification milestone.
 
 ---
@@ -307,7 +307,7 @@ When this plan becomes implementation, preserve these rules:
 
 Do not build these as part of the planning milestone:
 
-- broader DataStore persistence beyond scraps / 2-slot Stash / DisplayShelf
+- broader DataStore persistence beyond scraps / 2-slot **Storage** / **Shelf**
 - permanent working inventory
 - collection log
 - full scavenging economy
@@ -346,4 +346,4 @@ Expected outcome:
 - Should `counter` become a real `location`, or stay implicit in `DealService`?
 - Which existing decorative hub prop mappings should survive when object unification begins?
 - Should `heldBack` be removed after all old compatibility paths are gone?
-- Persistent Shop State V1 saves haggled Stash/Display. Future work still needs to decide when hub pickups become server-owned objects.
+- Persistent Shop State V1 saves haggled **Storage** / **Shelf** items. Future work still needs to decide when hub pickups become server-owned objects.

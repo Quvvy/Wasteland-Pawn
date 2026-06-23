@@ -7,6 +7,10 @@ local ItemPropBuilder = {}
 
 local FALLBACK_COLOR = Color3.fromRGB(130, 125, 115)
 
+local HITBOX_NAME = "SelectionHitbox"
+local HITBOX_ATTR = "SelectionHitbox"
+local HITBOX_PADDING = Vector3.new(0.1, 0.1, 0.1)
+
 local function getItemsFolder(): Folder?
 	local assets = ReplicatedStorage:FindFirstChild("Assets")
 	local items = assets and assets:FindFirstChild("Items")
@@ -173,6 +177,24 @@ local function createBillboard(attachPart: BasePart, title: string, subtitle: st
 	return billboard
 end
 
+local function getSpotSurfaceY(spotCFrame: CFrame, placementPart: BasePart?): number
+	if placementPart then
+		return placementPart.Position.Y + (placementPart.Size.Y * 0.5)
+	end
+	return spotCFrame.Position.Y
+end
+
+local function alignToSpot(model: Model, spotCFrame: CFrame, floorY: number)
+	model:PivotTo(spotCFrame)
+
+	local bboxCFrame, bboxSize = model:GetBoundingBox()
+	local bottomY = bboxCFrame.Position.Y - (bboxSize.Y * 0.5)
+	local lift = floorY - bottomY
+	if math.abs(lift) > 0.01 then
+		model:PivotTo(model:GetPivot() + Vector3.new(0, lift, 0))
+	end
+end
+
 local function buildFallbackBlock(spotCFrame: CFrame, title: string, subtitle: string): Model
 	local model = Instance.new("Model")
 	model.Name = "HubItem"
@@ -233,20 +255,51 @@ function ItemPropBuilder.destroy(model: Model?)
 	end
 end
 
-function ItemPropBuilder.build(resolved: ItemVisuals.ResolvedItemVisual, spotCFrame: CFrame): Model
+function ItemPropBuilder.ensureSelectionHitbox(model: Model)
+	local existing = model:FindFirstChild(HITBOX_NAME)
+	if existing then
+		existing:Destroy()
+	end
+
+	local bboxCFrame, bboxSize = model:GetBoundingBox()
+	local hitbox = Instance.new("Part")
+	hitbox.Name = HITBOX_NAME
+	hitbox:SetAttribute(HITBOX_ATTR, true)
+	hitbox.Size = bboxSize + HITBOX_PADDING
+	hitbox.CFrame = bboxCFrame
+	hitbox.Transparency = 1
+	hitbox.Anchored = true
+	hitbox.CanCollide = false
+	hitbox.CanTouch = false
+	hitbox.CanQuery = true
+	hitbox.Massless = true
+	hitbox.Parent = model
+end
+
+function ItemPropBuilder.build(
+	resolved: ItemVisuals.ResolvedItemVisual,
+	spotCFrame: CFrame,
+	placementPart: BasePart?
+): Model
+	local floorY = getSpotSurfaceY(spotCFrame, placementPart)
 	local cloned = cloneItemTemplate(resolved)
 	if not cloned then
-		return buildFallbackBlock(spotCFrame, resolved.displayName, resolved.subtitle)
+		local model = buildFallbackBlock(spotCFrame, resolved.displayName, resolved.subtitle)
+		alignToSpot(model, spotCFrame, floorY)
+		ItemPropBuilder.ensureSelectionHitbox(model)
+		return model
 	end
 
 	cloned.Name = "HubItem"
 	prepareForDisplay(cloned)
-	cloned:PivotTo(spotCFrame)
+	alignToSpot(cloned, spotCFrame, floorY)
 
 	local labelPart = findLabelPart(cloned)
 	if labelPart then
 		createBillboard(labelPart, resolved.displayName, resolved.subtitle)
 	end
+
+	ItemPropBuilder.ensureSelectionHitbox(cloned)
 
 	return cloned
 end

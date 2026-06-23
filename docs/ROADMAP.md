@@ -27,11 +27,11 @@ The current game is a physical-shop **shop-day prototype** (internal: shift). Ta
 - buying from sellers
 - buyer visits
 - matching items to buyers
-- holding working inventory
-- displaying haggled items
-- Persistent Shop State V1 (scraps, 2 Stash slots, DisplayShelf items/positions)
-- haggled item stash/display routing
-- display influence on buyer traffic
+- holding items on the public Shelf
+- moving items to Storage
+- Persistent Shop State V1 (scraps, 2 Storage slots, Shelf items/positions)
+- Shelf ↔ Storage routing
+- shelf appeal on buyer traffic
 - session-only Traffic Board V1 (forecast/prep prototype)
 - Rare Buyer Walk-In V1
 - Closing Rush and liquidation
@@ -67,7 +67,7 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 | Item traits & categories | **Implemented** (configs) |
 | Buyer matching (score, labels, bonuses) | **Prototype** |
 | Shift inventory — public Shelf (internal `display`) | **Prototype** |
-| Buyer visits (pick item from inventory) | **Prototype** |
+| Buyer visits (pick item from Shelf) | **Prototype** |
 | Payout summaries | **Prototype** |
 | Closing Rush + liquidation | **Prototype** |
 | Closing Rush / liquidation UI clarity | **Prototype** |
@@ -81,11 +81,13 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 | Customer counter presentation (`CustomerPresentationController`, cloned visitor rigs) | **Prototype** |
 | Item counter props at `CounterItemSpot` | **Prototype** |
 | Hybrid Counter Presentation V1 (shopkeeper camera, counter dialogue overlay, legacy UI fallback) | **Prototype** |
-| Public Shelf presentation (`Shop.Shelf`) | **Prototype** |
+| Public Shelf presentation (`Shop.Shelves.BasicShelf`) | **Prototype** |
+| Shelf Focus V0 (Inspect Shelf station + click/tap management; always-on prompt when shelf exists) | **Prototype** |
+| WorldMarkers helper (tags + hierarchy + legacy fallback) | **Prototype** |
 | Shelf ↔ Storage routing (Move to Storage / Return to Shelf) | **Prototype** |
-| Stash V1 for haggled items (2 saved slots) | **Prototype** |
-| Persistent Shop State V1 (scraps, 2 Stash slots, DisplayShelf positions) | **Prototype** |
-| Display influence on buyer traffic | **Prototype** |
+| Storage for haggled items (2 saved slots; internal `stash`) | **Prototype** |
+| Persistent Shop State V1 (scraps, 2 Storage slots, Shelf positions) | **Prototype** |
+| Shelf appeal on buyer traffic | **Prototype** |
 | Demand Preview V1 (Traffic Board `?` panel) | **Prototype** |
 | First Shift Onboarding V1 | **Prototype** |
 | Traffic Board V1 (session-only traffic windows) | **Prototype** |

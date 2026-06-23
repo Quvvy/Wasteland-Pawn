@@ -23,14 +23,14 @@ local PHASE_ENDED = "Ended"
 
 local ONBOARDING_RECOMMENDED_SHIFT_ID = "scrap_rush"
 local ONBOARDING_HINTS = {
-	open_board = "Open the Traffic Board. Start with Scrap Rush.",
-	start_scrap_rush = "Recommended first shift: Scrap Rush. Normal buyers, normal junk, fewer surprises.",
+	open_board = "Welcome to the shop. Buy junk from sellers, put it on your Shelf, then open the shop for buyers.",
+	start_scrap_rush = "Recommended shop day: Scrap Rush. Normal buyers, normal junk, fewer surprises.",
 	first_seller = "Inspect before you buy. Clues tell you if the junk is worth the risk.",
-	after_buy = "Bought items go to working stock. Buyers can only buy from the InventoryShelf.",
+	after_buy = "It goes on your Shelf. Buyers offer on Shelf items when the shop is open.",
 	buyer_visit = "Good match. This buyer wants this kind of junk.",
 	offer_item = "The right buyer pays more. Match labels show interest.",
-	first_sale = "The right buyer paid extra. Some items are worth saving for better traffic.",
-	forward = "Display attracts traffic. Stash saves up to 2 items between visits.",
+	first_sale = "Nice sale. Some items are worth keeping in Storage for better traffic.",
+	forward = "Shelf items attract buyers. Storage saves up to 2 items for later.",
 }
 
 local function getGrade(shift): string
@@ -363,7 +363,7 @@ function ShiftService:getShiftOptions(player: Player)
 			option.shopDayForecast = ShopDayVariables.toSnapshot(forecastCache.forecasts[shift.id])
 			if onboarding.active == true and option.id == onboarding.recommendedShiftId then
 				option.recommended = true
-				option.recommendedText = "Recommended first shift"
+				option.recommendedText = "Recommended shop day"
 			end
 			table.insert(options, option)
 		end

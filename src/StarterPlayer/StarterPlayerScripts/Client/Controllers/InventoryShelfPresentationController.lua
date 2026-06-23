@@ -96,9 +96,6 @@ local function resolveInventoryShelf(): Instance?
 
 	local shelf = HubWorld.findInventoryShelf(shop)
 	if not shelf then
-		warnShelfOnce(
-			`InventoryShelfPresentation: InventoryShelf not found under Workspace.World.Shop. Children: {HubWorld.listChildNames(shop)}`
-		)
 		return nil
 	end
 
@@ -498,7 +495,7 @@ function InventoryShelfPresentationController:showSlot(slotIndex: number, entry:
 	self:clearSlot(slotIndex)
 	slotKeys[slotIndex] = resolved.itemKey
 
-	local model = ItemPropBuilder.build(resolved, slotPart.CFrame)
+	local model = ItemPropBuilder.build(resolved, slotPart.CFrame, slotPart)
 	model.Name = "HubShelfItem"
 	model.Parent = ensureLocalFolder(world)
 	slotModels[slotIndex] = model
@@ -529,8 +526,16 @@ end
 function InventoryShelfPresentationController:Init() end
 
 function InventoryShelfPresentationController:Start()
+	local shop = waitForShop()
+	if not shop or not HubWorld.findInventoryShelf(shop) then
+		return
+	end
+
 	task.defer(function()
-		resolveInventoryShelf()
+		local shelf = resolveInventoryShelf()
+		if not shelf then
+			return
+		end
 		for slotIndex = 1, DEFAULT_MAX_SLOTS do
 			resolveSlotPart(slotIndex)
 		end

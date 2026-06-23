@@ -1101,7 +1101,7 @@ function DealService:stashInventoryItem(player: Player, instanceId: any)
 		return { ok = false, error = "Item not in inventory" }
 	end
 	if not InventoryService:canAddToStash(player, instanceId) then
-		return { ok = false, error = "Stash full" }
+		return { ok = false, error = "Storage full" }
 	end
 
 	if not InventoryService:moveInventoryItemToStash(player, instanceId) then
@@ -1161,7 +1161,7 @@ function DealService:moveDisplayItemToStash(player: Player, instanceId: any)
 		return { ok = false, error = "Item not on display" }
 	end
 	if not InventoryService:canAddToStash(player) then
-		return { ok = false, error = "Stash full" }
+		return { ok = false, error = "Storage full" }
 	end
 
 	if not InventoryService:moveDisplayItemToStash(player, instanceId) then

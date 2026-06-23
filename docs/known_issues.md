@@ -49,6 +49,15 @@ Possible Fix:
 
 Cosmetic bugs, minor UX issues, cleanup tasks.
 
+### Hub decorative pickups — ScavengeNodes vs JunkLot
+
+Status: Watch
+Area: Hub pickups / Outside
+Notes:
+- `HubPickupController` prefers `World.Outside.ScavengeNodes` for spawn parent lookup, then falls back to legacy `Outside.JunkLot`.
+- On the cleaned hierarchy place, `ScavengeNodes` is empty — decorative hub pickups stay disabled until spawn parts are added under `ScavengeNodes` (or legacy `JunkLot` children exist).
+- No scavenging gameplay is wired to `ScavengeNodes` in this slice.
+
 ---
 
 ## Security / Exploit Risks
@@ -118,7 +127,8 @@ Notes:
 Status: Watch
 Area: DealService / Architecture
 Why it matters:
-- `DealService` sits on buyer visits, seller flow, haggling, payouts, rare walk-ins, and debug-facing state.
+- `DealService` sits on buyer visits, seller flow, haggling, payouts, rare walk-ins, debug-facing state adaptation, and onboarding event hooks that fire from deal flow.
+- `ShiftService` owns onboarding hint routing; both services still absorb cross-cutting prototype features.
 - If unrelated features keep landing there, it becomes hard to change safely.
 Current impact:
 - Work is still possible, but each new feature risks increasing the blast radius of deal-flow edits.
@@ -130,17 +140,87 @@ Fixed when:
 ### Persistent shop state is narrow
 
 Status: Improved / Watch
-Area: Display / Stash / Persistence
+Area: Shelf / Storage / Persistence
 Why it matters:
 - The long-term fantasy depends on saving something for the perfect future buyer.
 - Persistent Shop State V1 now supports trust, but it is still not a full progression system.
 Current impact:
-- Scraps, 2 Stash slots, and DisplayShelf items/positions persist.
-- InventoryShelf working stock, hub pickups, collection goals, relics, upgrades, and broader decoration state do not persist.
+- Scraps, 2 **Storage** slots (internal `stash`), and **Shelf** items/positions (internal `display`) persist.
+- Legacy `inventory` working stock, hub pickups, collection goals, relics, upgrades, and broader decoration state do not persist.
 Recommended next action:
-- Playtest whether players understand Stash/Display permanence and InventoryShelf temporariness.
+- Playtest whether players understand **Storage** / **Shelf** permanence and that unsold legacy stock is temporary.
 Fixed when:
 - Returning players can explain what is saved, what is temporary, and why they care about at least one saved item or scraps goal.
+
+### Persistence save-frequency pressure
+
+Status: Watch
+Area: InventoryService / DataService / Persistence
+Why it matters:
+- `InventoryService:_markPersistentDirty` spawns an immediate `DataService:savePlayer` on every Shelf/Storage route change.
+- Frequent shelf moves during playtests could hit DataStore write limits or add server load.
+Current impact:
+- Intentional for trust (route changes should not be lost on crash), but not batched or debounced.
+Recommended next action:
+- Audit save call volume before larger live playtests; consider debounced saves only after measuring real traffic.
+Fixed when:
+- Save frequency is measured in playtests and either accepted with documented limits or batched without losing route-change durability.
+
+### Shelf focus camera edge cases
+
+Status: Watch
+Area: Shelf Focus V0 / Camera / WorldMarkers
+Why it matters:
+- Shelf focus uses `BasicShelf.Markers.ShelfCameraSpot` / `ShelfLookAt` when present; legacy or derived poses may feel wrong in some Studio layouts.
+- Shelf focus and Hybrid Counter Presentation shopkeeper camera are mutually exclusive but both touch `CameraController`.
+Current impact:
+- Missing markers fall back to legacy names or a derived bounding-box pose (warn-once in Output).
+- Entering shelf focus during an open shop day suspends shopkeeper camera and hides the counter overlay; exiting must restore both from the live deal snapshot (BuyerVisit Offer buttons usable immediately).
+- Entering seller **Haggling** or **Selling** force-exits shelf focus.
+Recommended next action:
+- Place `BasicShelf.Markers` + `ShelfPromptAnchor` in Studio; playtest focus enter/exit during BuyerVisit and around counter deals.
+Fixed when:
+- Focus camera is stable with hierarchy markers in the target place and restores cleanly on exit, buyer visit, and respawn.
+
+### Mobile/touch shelf item selection
+
+Status: Watch
+Area: Shelf Focus V0 / Input
+Why it matters:
+- V0 uses screen-position raycasts against shelf item props; small props or crowded slots may be hard to tap on mobile.
+Current impact:
+- Touch and mouse share the same pick path; no drag-to-select or slot buttons in focus mode.
+Recommended next action:
+- Playtest tap accuracy on phone/tablet before assuming mobile-ready shelf management.
+Fixed when:
+- Players can reliably select shelf items on touch devices or a follow-up adds clearer tap targets.
+
+### Legacy loose marker fallback debt
+
+Status: Open
+Area: WorldMarkers / Studio hierarchy
+Why it matters:
+- Counter, customer, storage, and shelf lookups still fall back to loose `Shop.*` part names when `Counter.Markers` / `CustomerPath` / `Shelves.BasicShelf.Markers` are missing.
+Current impact:
+- Older places keep working; new places should use the cleaned hierarchy to avoid ambiguous descendant scans.
+Recommended next action:
+- Migrate Studio to `Shelves.BasicShelf`, `Counter.Markers`, `CustomerPath`, and `Storage.StorageBin` when editing the map.
+Fixed when:
+- Target place uses hierarchy markers and DevTools camera scan shows `source: hierarchy` or `tag` for shelf focus.
+
+### Shelf reordering not implemented
+
+Status: Intentional (V0)
+Area: Shelf Focus / Product scope
+Notes:
+- Shelf focus supports Inspect and Move to Storage only. No reorder, drag-and-drop, or click-empty-slot placement.
+
+### Storage focus mode not implemented
+
+Status: Intentional (V0)
+Area: Storage / Product scope
+Notes:
+- Storage still uses the existing bin prompt and overlay UI. No storage focus camera in this slice.
 
 ---
 
@@ -154,9 +234,9 @@ Status: Open
 Area: Retention / Progression
 Why it matters:
 - Roblox players need a reason to come back that is clearer than "play the same shift again."
-- The strongest fantasy is saving prep for a better shop day — stash, display, and traffic timing — not re-selecting the same traffic window.
+- The strongest fantasy is saving prep for a better shop day — **Storage**, **Shelf**, and traffic timing — not re-selecting the same traffic window.
 Current impact:
-- Traffic Board, DisplayShelf, and 2-slot permanent Stash now create a small durable return reason.
+- Traffic Board, **Shelf**, and 2-slot permanent **Storage** now create a small durable return reason.
 - The game still lacks collection, reputation, upgrades, or other longer-term goals.
 Recommended next action:
 - Playtest Persistent Shop State V1, then decide whether the next return hook should be collection log, permanent goals, or shop identity.
@@ -181,11 +261,11 @@ Fixed when:
 Status: Watch
 Area: Shop-day variables / Prep
 Why it matters:
-- Variables must tie to readable prep (display/stash/inventory) and forecast hints, not pure RNG punishment.
+- Variables must tie to readable prep (**Shelf** / **Storage** / legacy inventory) and forecast hints, not pure RNG punishment.
 Current impact:
 - Shop Day Variables V1 lightly changes buyer demand and seller flow using visible forecasts, while risk remains informational. The system still needs playtesting to prove it feels fair instead of random.
 Recommended next action:
-- Watch whether players can connect forecast lines, DisplayShelf choices, buyer visits, and the Shop Closed summary without seeing hidden weight math.
+- Watch whether players can connect forecast lines, **Shelf** choices, buyer visits, and the Shop Closed summary without seeing hidden weight math.
 Fixed when:
 - Players can explain why today felt different and what they could have done differently.
 
@@ -289,7 +369,7 @@ Status: Watch
 Area: Rare Buyer Walk-In / Shift pacing
 Risk: Extra buyers could make shifts feel too generous or interrupt seller rhythm if the chance is too high.
 Notes:
-- V1 is capped at one rare buyer per shift and only checks during Buying when working inventory exists.
+- V1 is capped at one rare buyer per shift and only checks during Buying when **Shelf** stock exists.
 - Rare buyers are session-only prototype behavior, not calendar events or persistence.
 Possible Fix:
 - Tune chance, pools, or per-shift caps after playtesting.

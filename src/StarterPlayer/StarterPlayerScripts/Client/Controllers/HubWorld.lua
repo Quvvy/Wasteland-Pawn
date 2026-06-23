@@ -1,5 +1,9 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local WorldMarkers = require(Shared.Util.WorldMarkers)
 
 local HubWorld = {}
 
@@ -229,9 +233,16 @@ local CUSTOMER_SPOT_EXACT_NAMES = {
 	"Customer_Spot",
 }
 
+local inventoryShelfWarned = false
+
 function HubWorld.findCustomerSpot(shop: Instance?): BasePart?
 	if not shop then
 		return nil
+	end
+
+	local resolved = WorldMarkers.findCustomerSpot(shop)
+	if resolved.part then
+		return resolved.part
 	end
 
 	local found = HubWorld.findShopPart(shop, CUSTOMER_SPOT_EXACT_NAMES, "customerspot")
@@ -246,6 +257,11 @@ local COUNTER_ITEM_SPOT_EXACT_NAMES = {
 function HubWorld.findCounterItemSpot(shop: Instance?): BasePart?
 	if not shop then
 		return nil
+	end
+
+	local markers = WorldMarkers.findCounterMarkers(shop)
+	if markers.counterItemSpot then
+		return markers.counterItemSpot
 	end
 
 	local found = HubWorld.findShopPart(shop, COUNTER_ITEM_SPOT_EXACT_NAMES, "counteritemspot")
@@ -263,6 +279,12 @@ function HubWorld.findDealCameraSpot(shop: Instance?): BasePart?
 	if not shop then
 		return nil
 	end
+
+	local markers = WorldMarkers.findCounterMarkers(shop)
+	if markers.dealCameraSpot then
+		return markers.dealCameraSpot
+	end
+
 	local found = HubWorld.findShopPart(shop, DEAL_CAMERA_SPOT_NAMES, "dealcameraspot")
 	if not found then
 		found = HubWorld.findShopPart(shop, DEAL_CAMERA_SPOT_NAMES, "shopcameraspot")
@@ -279,6 +301,12 @@ function HubWorld.findCounterLookAt(shop: Instance?): BasePart?
 	if not shop then
 		return nil
 	end
+
+	local markers = WorldMarkers.findCounterMarkers(shop)
+	if markers.counterLookAt then
+		return markers.counterLookAt
+	end
+
 	local found = HubWorld.findShopPart(shop, COUNTER_LOOK_AT_NAMES, "counterlookat")
 	return HubWorld.resolveBasePart(found)
 end
@@ -292,6 +320,12 @@ function HubWorld.findCustomerEntrySpot(shop: Instance?): BasePart?
 	if not shop then
 		return nil
 	end
+
+	local path = WorldMarkers.findCustomerPathMarkers(shop)
+	if path.entry then
+		return path.entry
+	end
+
 	local found = HubWorld.findShopPart(shop, CUSTOMER_ENTRY_SPOT_NAMES, "customerentryspot")
 	return HubWorld.resolveBasePart(found)
 end
@@ -305,6 +339,12 @@ function HubWorld.findCustomerCounterSpot(shop: Instance?): BasePart?
 	if not shop then
 		return nil
 	end
+
+	local path = WorldMarkers.findCustomerPathMarkers(shop)
+	if path.counter then
+		return path.counter
+	end
+
 	local found = HubWorld.findShopPart(shop, CUSTOMER_COUNTER_SPOT_NAMES, "customercounterspot")
 	if found then
 		return HubWorld.resolveBasePart(found)
@@ -321,6 +361,12 @@ function HubWorld.findCustomerExitSpot(shop: Instance?): BasePart?
 	if not shop then
 		return nil
 	end
+
+	local path = WorldMarkers.findCustomerPathMarkers(shop)
+	if path.exit then
+		return path.exit
+	end
+
 	local found = HubWorld.findShopPart(shop, CUSTOMER_EXIT_SPOT_NAMES, "customerexitspot")
 	return HubWorld.resolveBasePart(found)
 end
@@ -335,6 +381,12 @@ function HubWorld.findSellShelfLookAt(shop: Instance?): BasePart?
 	if not shop then
 		return nil
 	end
+
+	local resolved = WorldMarkers.findShelfLookAt(shop)
+	if resolved.part then
+		return resolved.part
+	end
+
 	local found = HubWorld.findShopPart(shop, SELL_SHELF_LOOK_AT_NAMES, "sellshelflookat")
 	if not found then
 		found = HubWorld.findShopPart(shop, SELL_SHELF_LOOK_AT_NAMES, "inventoryshelflookat")
@@ -370,6 +422,12 @@ function HubWorld.findDisplayShelfLookAt(shop: Instance?): BasePart?
 	if not shop then
 		return nil
 	end
+
+	local resolved = WorldMarkers.findShelfLookAt(shop)
+	if resolved.part then
+		return resolved.part
+	end
+
 	local found = HubWorld.findShopPart(shop, DISPLAY_SHELF_LOOK_AT_NAMES, "displayshelflookat")
 	return HubWorld.resolveBasePart(found)
 end
@@ -387,6 +445,12 @@ function HubWorld.findStorageLookAt(shop: Instance?): BasePart?
 	if not shop then
 		return nil
 	end
+
+	local resolved = WorldMarkers.findStorageLookAt(shop)
+	if resolved.part then
+		return resolved.part
+	end
+
 	local found = HubWorld.findShopPart(shop, STORAGE_LOOK_AT_NAMES, "storagelookat")
 	if not found then
 		found = HubWorld.findShopPart(shop, STORAGE_LOOK_AT_NAMES, "storagebinlookat")
@@ -443,11 +507,29 @@ export type PresentationAnchors = {
 	sellShelfLookAt: BasePart?,
 	displayShelfLookAt: BasePart?,
 	stashLookAt: BasePart?,
+	sources: WorldMarkers.MarkerSources?,
 }
 
 function HubWorld.resolvePresentationAnchors(shop: Instance?): PresentationAnchors?
 	if not shop then
 		return nil
+	end
+
+	local bundle = WorldMarkers.resolvePresentationAnchors(shop)
+	if bundle and bundle.cameraSpot and bundle.counterLookAt then
+		return {
+			cameraSpot = bundle.cameraSpot,
+			counterLookAt = bundle.counterLookAt,
+			customerEntry = bundle.customerEntry,
+			customerCounter = bundle.customerCounter,
+			customerExit = bundle.customerExit,
+			counterItem = bundle.counterItem,
+			playerCounter = bundle.playerCounter,
+			sellShelfLookAt = bundle.sellShelfLookAt,
+			displayShelfLookAt = bundle.displayShelfLookAt,
+			stashLookAt = bundle.stashLookAt,
+			sources = bundle.sources,
+		}
 	end
 
 	local cameraSpot = HubWorld.findDealCameraSpot(shop)
@@ -473,6 +555,7 @@ function HubWorld.resolvePresentationAnchors(shop: Instance?): PresentationAncho
 		sellShelfLookAt = HubWorld.findSellShelfLookAt(shop),
 		displayShelfLookAt = HubWorld.findDisplayShelfLookAt(shop),
 		stashLookAt = HubWorld.findStorageLookAt(shop),
+		sources = WorldMarkers.collectMarkerSources(shop),
 	}
 end
 
@@ -490,10 +573,19 @@ function HubWorld.findInventoryShelf(shop: Instance?): Instance?
 
 	local found = HubWorld.findShopPart(shop, INVENTORY_SHELF_EXACT_NAMES, "inventoryshelf")
 	if found then
+		if not inventoryShelfWarned then
+			inventoryShelfWarned = true
+			warn("[HubWorld] Legacy InventoryShelf found; prefer Shop.Shelves.BasicShelf for display slots.")
+		end
 		return found
 	end
 
-	return HubWorld.findShopPart(shop, INVENTORY_SHELF_EXACT_NAMES, "helditemslots")
+	found = HubWorld.findShopPart(shop, INVENTORY_SHELF_EXACT_NAMES, "helditemslots")
+	if found and not inventoryShelfWarned then
+		inventoryShelfWarned = true
+		warn("[HubWorld] Legacy InventoryShelf found; prefer Shop.Shelves.BasicShelf for display slots.")
+	end
+	return found
 end
 
 function HubWorld.findInventorySlot(shelf: Instance?, slotIndex: number): BasePart?
@@ -543,48 +635,11 @@ local SHELF_EXACT_NAMES = {
 }
 
 function HubWorld.findShelf(shop: Instance?): Instance?
-	if not shop then
-		return nil
-	end
-
-	local found = HubWorld.findShopPart(shop, SHELF_EXACT_NAMES, "shelf")
-	if found then
-		return found
-	end
-
-	return HubWorld.findDisplayShelf(shop) or HubWorld.findInventoryShelf(shop)
+	return WorldMarkers.findPrimaryShelf(shop)
 end
 
 function HubWorld.findShelfSlot(shelf: Instance?, slotIndex: number): BasePart?
-	if not shelf then
-		return nil
-	end
-
-	local exactNames = {
-		`ShelfSlot{slotIndex}`,
-		`Shelf_Slot{slotIndex}`,
-		`DisplaySlot{slotIndex}`,
-		`Display_Slot{slotIndex}`,
-		`Slot{slotIndex}`,
-	}
-	local part = HubWorld.findDescendantBasePartByNames(shelf, exactNames)
-	if part then
-		return part
-	end
-
-	for _, child in shelf:GetChildren() do
-		local hay = normalize(child.Name)
-		if hay == `shelfslot{slotIndex}` or hay == `displayslot{slotIndex}` then
-			if hay ~= "shelfback" and not string.find(hay, "shelfback", 1, true) then
-				part = HubWorld.resolveBasePart(child)
-				if part then
-					return part
-				end
-			end
-		end
-	end
-
-	return HubWorld.findDisplaySlot(shelf, slotIndex, `ShelfSlot{slotIndex}`)
+	return WorldMarkers.findShelfSlot(shelf, slotIndex)
 end
 
 local DISPLAY_SHELF_EXACT_NAMES = {
@@ -605,22 +660,7 @@ function HubWorld.findDisplayShelfSlot(shelf: Instance?, slotIndex: number): Bas
 end
 
 function HubWorld.findStorageBin(shop: Instance?): Instance?
-	if not shop then
-		return nil
-	end
-
-	return HubWorld.findChildByNames(shop, {
-		"StorageBin",
-		"Storage_Bin",
-		"Storage",
-		"StashBin",
-		"Stash_Bin",
-		"Stash",
-		"Bin",
-	})
-		or HubWorld.findShopPart(shop, {}, "storagebin")
-		or HubWorld.findShopPart(shop, {}, "storage")
-		or HubWorld.findShopPart(shop, {}, "stash")
+	return WorldMarkers.findStorageBin(shop)
 end
 
 function HubWorld.findStashBin(shop: Instance?): Instance?

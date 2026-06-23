@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local HubPickups = require(Shared.Config.HubPickups)
+local WorldMarkers = require(Shared.Util.WorldMarkers)
 
 local UIController = require(script.Parent.UIController)
 local HubWorld = require(script.Parent.HubWorld)
@@ -209,7 +210,7 @@ function HubPickupController:_dropInStash()
 	heldProp = nil
 	UIController:setHubHolding(nil)
 	self:_refreshPlacementPrompts()
-	UIController:showHubMessage("Dropped in stash.")
+	UIController:showHubMessage("Dropped in Storage.")
 end
 
 function HubPickupController:isHolding(): boolean
@@ -269,15 +270,16 @@ end
 
 function HubPickupController:_setupOutdoorPickups(world: Instance)
 	local outside = HubWorld.findChildByNames(world, { "Outside" })
-	local junkLot = outside and HubWorld.findChildByNames(outside, { "JunkLot", "Junk_Lot", "Junklot" })
-	if not junkLot then
+	local pickupParent = outside and WorldMarkers.findOutsidePickupParent(outside)
+	if not pickupParent then
 		warnOnce(
-			"junk_lot",
-			`HubPickup: JunkLot not found under Outside. Outside children: {HubWorld.listChildNames(outside)}`
+			"pickup_parent",
+			`HubPickup: Outside.ScavengeNodes (or legacy JunkLot) not found. Outside children: {HubWorld.listChildNames(outside)}`
 		)
 		return
 	end
 
+	local anySpawned = false
 	for index, def in HubPickups.SpawnDefs do
 		if consumedPickupSpawns[def.spawnName] then
 			continue
@@ -285,20 +287,25 @@ function HubPickupController:_setupOutdoorPickups(world: Instance)
 
 		local spawned = spawnedAtPickup[def.spawnName]
 		if spawned and spawned.Parent then
+			anySpawned = true
 			continue
 		elseif spawned then
 			spawnedAtPickup[def.spawnName] = nil
 		end
 
-		local spawn = HubWorld.findPickupSpawn(junkLot, index, def.spawnName)
+		local spawn = HubWorld.findPickupSpawn(pickupParent, index, def.spawnName)
 		if not spawn then
-			warnOnce(
-				`spawn_{def.spawnName}`,
-				`HubPickup: {def.spawnName} not found under JunkLot. Children: {HubWorld.listChildNames(junkLot)}`
-			)
 			continue
 		end
 		self:_spawnPickupAt(spawn, def)
+		anySpawned = true
+	end
+
+	if not anySpawned then
+		warnOnce(
+			"pickup_spawns",
+			`HubPickup: no pickup spawns under {pickupParent:GetFullName()}; decorative hub pickups disabled.`
+		)
 	end
 end
 

@@ -78,17 +78,16 @@ AGENTS.md                       Agent brief for Cursor / Codex
 - **Seller haggling** — tactic-based negotiation (heat, tells, inspect)
 - **Buyer visits and matching** — category/traits → match labels and payout bonuses
 - **Rare Buyer Walk-In V1** — session-only extra buyer chance during Buying; capped at one per shop day
-- **Working inventory** — limited InventoryShelf slots per shop day (server-authoritative; resets each day)
-- **DisplayShelf haggled item display** — Hold Back routes bought items to display slots
-- **Stash V1** — server-authoritative haggled item storage via StashBin; V1 saves 2 slots permanently
-- **Persistent Shop State V1** — persistent scraps, 2 permanent Stash slots, and saved DisplayShelf items/positions
-- **Session working stock** — InventoryShelf remains current-shop-day stock and does not persist
-- **Display influence** — displayed categories/traits bias buyer traffic roll weights
-- **Demand Preview V1** — Traffic Board `?` preview for likely buyers, categories/traits, and display effects (**Prototype**)
+- **Public Shelf** — buys land on the Shelf; buyers offer on Shelf items when the shop is open
+- **Storage** — server-authoritative hidden stock via StorageBin; V1 saves 2 slots permanently
+- **Persistent Shop State V1** — persistent scraps, 2 **Storage** slots, and saved **Shelf** items/positions
+- **Legacy working stock** — internal `inventory` location only; compat-only; liquidated at shop close
+- **Shelf appeal** — Shelf categories/traits bias buyer traffic roll weights
+- **Demand Preview V1** — Traffic Board `?` preview for likely buyers, categories/traits, and shelf match hints (**Prototype**)
 - **Physical presentation** — customer rigs at `CustomerSpot`, item props at `CounterItemSpot`, shelf props
 - **Deal archetypes** — weighted deal shapes (scam traps, jackpots, buyer setups, etc.)
-- **Ctrl+U debug overlay** — read-only live diagnostics; Studio-only debug actions
-- **Hub pickup props** — client-only decorative pick up / place / stash (session-only; **not** economy or saves)
+- **Ctrl+U DevTools** — allowlist-gated live diagnostics; owners get dangerous write actions when enabled in live
+- **Hub pickup props** — client-only decorative pick up / place / Storage (session-only; **not** economy or saves)
 
 **Not built yet:** full open/close shop simulation, real-time calendar or daily reset, collection log, relics, shop upgrades, permanent hub pickups, full decoration editor, unified scavenging + haggled item economy.
 

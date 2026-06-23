@@ -71,17 +71,16 @@ Not a realistic pawn sim or tycoon.
 **Prototype loop today:**
 
 ```text
-Prepare (display/stash/inventory) → Traffic Board forecast/prep
+Prepare (Shelf/Storage) → Traffic Board forecast/prep
 → start shop day (internal: shift)
-Buy weird items from sellers (haggle)
-Hold in limited InventoryShelf working stock
-(Optional) Hold Back → DisplayShelf / StashBin
-Match items to buyers (haggle); display influences buyer traffic
+Buy weird items from sellers (haggle) → Shelf
+(Optional) Move to Storage / Return to Shelf
+Match Shelf items to buyers (haggle); Shelf appeal influences buyer traffic
 Closing Rush / liquidation → close shop day (internal: shift end)
 Hit quota or fail
 ```
 
-DisplayShelf and StashBin haggled items persist across shop days **within the same server session**. Not permanent saves.
+**Shelf** and **Storage** haggled items persist across shop days via DataStore V1. Legacy `inventory` working stock is compat-only and liquidated at close.
 
 *Product direction:* open/close shop days with variable traffic — not re-selecting the same static shift forever.
 
@@ -146,8 +145,8 @@ Unless a milestone has actually merged:
 * global synchronized events
 * unified object inventory (hub props + haggled items)
 * relics / shop modifiers
-* permanent stash or DataStore display saves
-* meaningful shop decoration affecting demand beyond current display influence
+* permanent **Storage** or DataStore **Shelf** saves
+* meaningful shop decoration affecting demand beyond current shelf appeal
 
 ## Sellers still matter
 
@@ -220,11 +219,10 @@ Server services own gameplay truth. Client controllers request actions and displ
 | System | Status |
 |--------|--------|
 | Seller / buyer haggling | **Prototype** |
-| InventoryShelf working stock (shift-scoped) | **Prototype** |
-| DisplayShelf haggled item routing | **Prototype** |
-| Stash V1 haggled item routing | **Prototype** — session-only |
-| Session display/stash persistence | **Prototype** — same server session only |
-| Display influence on buyer traffic | **Prototype** |
+| Public Shelf (internal `display`) | **Prototype** |
+| Storage routing (internal `stash`) | **Prototype** |
+| Persistent Shop State V1 (scraps, Storage, Shelf) | **Prototype** |
+| Shelf appeal on buyer traffic | **Prototype** |
 | Demand Preview V1 (Traffic Board) | **Prototype** |
 | Buyer visits + matching | **Prototype** |
 | Closing Rush + liquidation | **Prototype** |

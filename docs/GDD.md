@@ -101,16 +101,16 @@ The product direction is **weird shopkeeping / negotiation game with Roblox rete
 
 ### Current repo facts
 
-- The playable loop is a shift prototype with sellers, haggling, working inventory, DisplayShelf, StashBin, buyers, Rare Walk-Ins, Traffic Board, Closing Rush, and liquidation.
-- Persistent Shop State V1 saves scraps, 2 Stash slots, and DisplayShelf items/positions.
-- InventoryShelf working stock remains current-shop-day only. Hub pickups remain decorative and non-persistent.
+- The playable loop is a shop-day prototype with sellers, haggling, public **Shelf**, **Storage**, buyers, Rare Walk-Ins, Traffic Board, Closing Rush, and liquidation.
+- Persistent Shop State V1 saves scraps, 2 **Storage** slots (internal `stash`), and **Shelf** items/positions (internal `display`).
+- Public Shelves V1: buys land on the Shelf; buyers offer on Shelf items. Legacy `inventory` working stock is compat-only. Hub pickups remain decorative and non-persistent.
 - There is no collection log, real calendar, relic system, shop upgrade system, full decoration editor, or broader DataStore progression.
 - Hub pickup props are decorative, client-only, and separate from the server-owned haggled-item economy.
 - `DealService` carries a lot of core loop responsibility and should be watched as features stabilize.
 
 ### Strategic assumptions
 
-- The game has its first small return hook: scraps, a tiny permanent stash, and remembered DisplayShelf identity. It still needs stronger long-term goals.
+- The game has its first small return hook: scraps, permanent **Storage**, and remembered **Shelf** identity. It still needs stronger long-term goals.
 - New players may not understand the first shop day fast enough. Onboarding and first-session clarity are as urgent as persistence.
 - Mobile and input readability are retention risks for Roblox.
 - Persistence should save a fantasy players already understand. Saving confusion does not fix retention.
@@ -246,15 +246,15 @@ Separately (decorative only): **hub pickup props** do not affect scraps, working
 ```text
 Traffic Board (forecast/prep) → Open shop day (internal: shift)
     ↓
-Buying Phase: Seller → Haggle/Buy/Pass → InventoryShelf
+Buying Phase: Seller → Haggle/Buy/Pass → Shelf
     ↓
-(Optional) Hold Back → DisplayShelf / StashBin
+(Optional) Move to Storage / Return to Shelf
     ↓
-Buyer Visit → Choose Item → Sell / Hold / Skip
+Buyer Visit → Offer Shelf item → Sell at Counter / Skip
     ↓
 (repeat until sellers exhausted)
     ↓
-Closing Rush → Final buyers / Liquidation
+Closing Rush → Final buyers / Liquidation (legacy inventory only)
     ↓
 Close shop day → Result / receipt
 ```
@@ -356,33 +356,29 @@ Buy tactics: Lowball, Split Difference, Point Out Flaw, Pressure, Accept Price, 
 
 Sell tactics: Small Bump, Pitch Value, Hold Firm, Bluff, Accept Offer, Keep / Skip buyer.
 
-### Shift inventory (InventoryShelf) — **Prototype**
+### Public Shelf — **Prototype**
 
-3 working-stock slots per shift; server-authoritative; resets each shift; no DataStore.
+3 sellable slots on `Shop.Shelves.BasicShelf` (internal `display`; legacy `Shop.Shelf` fallback). Bought items land here. Buyers offer on Shelf items via **counter UI** during shop days — not per-item shelf prompts. One **Inspect Shelf** station prompt (enabled whenever `BasicShelf` exists) opens shelf focus mode (camera + click/tap item + Inspect / Move to Storage). Focus works during shop-open idle and **BuyerVisit** (inspect only — Move to Storage disabled); blocked during seller **Haggling** / **Selling**. Per-item shelf `ProximityPrompt`s are deprecated. Shelf items persist, influence buyer traffic, and are excluded from liquidation. World marker lookup prefers tags/attributes and `BasicShelf.Markers` / `SlotMarkers`; numbered loose names are legacy fallback only.
 
-### DisplayShelf haggled item display — **Prototype**
+### Storage — **Prototype**
 
-Server-authoritative routing from InventoryShelf to DisplayShelf via Hold Back. Displayed items are not offerable to buyers until returned to working stock. Client shelf props mirror server `displayItems`.
-
-### Stash V1 for haggled items — **Prototype**
-
-Server-authoritative storage for haggled items. Persistent Shop State V1 saves 2 Stash slots permanently. Stashed items do not appear in buyer offers, do not influence demand, and are excluded from liquidation. Stash is managed from StashBin.
+Server-authoritative hidden stock (internal `stash`). Persistent Shop State V1 saves 2 **Storage** slots. Storage items do not appear in buyer offers, do not influence demand, and are excluded from liquidation. Managed via Storage bin prompt and overlay.
 
 ### Persistent Shop State V1 — **Prototype**
 
-`location == "display"` and up to 2 `location == "stash"` items persist through DataStore as Persistent Shop State V1. DisplayShelf slot positions are saved. Liquidation only touches temporary working inventory; permanent-origin items return to their saved display/stash home instead of being automatically liquidated.
+`location == "display"` (Shelf) and up to 2 `location == "stash"` (Storage) items persist through DataStore. Shelf slot positions are saved. Liquidation only touches legacy `inventory` items; Shelf and Storage return to saved homes.
 
-### Display influence — **Prototype**
+### Shelf appeal (display influence) — **Prototype**
 
-Displayed categories and traits apply weight bonuses to buyer visit rolls (`DisplayInfluence.lua`). This biases actual buyer traffic during a shift.
+Shelf item categories and traits apply weight bonuses to buyer visit rolls (`DisplayInfluence.lua`). This biases actual buyer traffic during a shop day.
 
 ### Demand Preview — **Prototype**
 
-Traffic Board overlay shows a `?` demand preview: likely buyers, good categories/traits, current display appeal, and which buyers the display may attract. Informational only — does not change rolls.
+Traffic Board overlay shows a `?` demand preview: likely buyers, good categories/traits, current shelf appeal, and which buyers the shelf may attract. Informational only — does not change rolls.
 
 ### First Shift Onboarding V1 — **Prototype**
 
-Session-only guidance for a fresh player. Normal-day traffic is recommended, not forced. The first guided lesson uses existing content to show a readable seller item and a clear buyer match, then points toward display/stash as preparation tools. No DataStore onboarding completion exists yet.
+Session-only guidance for a fresh player. Normal-day traffic is recommended, not forced. Teaches buy → Shelf → open shop → buyer offers on Shelf → Storage for items to save. No DataStore onboarding completion exists yet.
 
 ### Traffic Board V1 — **Prototype stepping stone**
 
@@ -392,20 +388,20 @@ Session-only rotating traffic conditions wrap internal shift configs. Normal-day
 
 - **Hybrid Counter Presentation V1** — shopkeeper camera, counter dialogue overlay, simplified actions; legacy deal UI fallback when anchors missing or `ForceLegacyDealUI` (`CounterPresentationController`, `CameraController`).
 - **CounterItemSpot** — item prop during seller haggle and buyer sell phases (`ItemPresentationController`).
-- **InventoryShelf** / **DisplayShelf** — client props and prompts for working stock and display routing.
+- **Shelf** (`Shop.Shelf`) — client props and prompts for public sellable stock (internal `display`).
 - **CustomerSpot** — cloned visitor rigs during visits (`CustomerPresentationController`).
 
 ### Debug tools — **Prototype**
 
-Ctrl+U debug overlay (shift, deal, inventory, persistence, world, prompts) is available as a read-only live diagnostic. Debug write actions (`DebugService`) remain Studio-gated and are not player-facing.
+Ctrl+U **DevTools** panel for allowlisted Roblox UserIds (`DebugAccess.lua` on server; never replicated). Non-allowlisted players get no overlay. **Owners** may run dangerous live write actions when `EnabledInLive` is true; **testers** get operational read-only diagnostics. `StudioBypass` applies only in Studio. Not player-facing.
 
 ### Buyer visits + matching — **Prototype**
 
-Player picks inventory item to offer. Match labels: Bad Match → … → Perfect Match. Bonuses are real cash.
+Player picks a **Shelf** item to offer. Match labels: Bad Match → … → Perfect Match. Bonuses are real cash.
 
 ### Rare Buyer Walk-In V1 — **Prototype**
 
-During Buying, a server-authoritative rare buyer check can add one extra buyer visit when the player has working inventory and no scheduled buyer is already waiting. V1 uses existing buyer types, is capped at one rare buyer per shift, and is session-only shift prototype behavior. It is not a real-time calendar event, not global, and not persistent.
+During Buying, a server-authoritative rare buyer check can add one extra buyer visit when the player has **Shelf** stock and no scheduled buyer is already waiting. V1 uses existing buyer types, is capped at one rare buyer per shop day, and is session-only prototype behavior. It is not a real-time calendar event, not global, and not persistent.
 
 ### Closing Rush — **Prototype**
 
@@ -424,7 +420,7 @@ Per-shift `dealArchetypeWeights` and `buyerWeights` in [Shifts.lua](../src/Repli
 - **Traffic Board** uses the existing `ShiftBoard` part / `ProximityPrompt` to open the traffic-window overlay; starts shifts via existing remotes.
 - **OpenClosedSign** updates OPEN/CLOSED from shift state (client visual).
 - **CustomerSpot** exists as a future presentation marker (no NPC pathfinding).
-- Physical hierarchy expected under `Workspace.World` (Outside, Shop, JunkLot, DisplayShelf, StashBin, etc.).
+- Physical hierarchy expected under `Workspace.World` (Outside, Shop, JunkLot, Shelf, StorageBin, etc.). Studio part aliases (`DisplayShelf`, `StashBin`, `InventoryShelf`) remain for compat.
 
 ### Hub pickup props — **Prototype** (decorative only)
 
@@ -437,7 +433,7 @@ Per-shift `dealArchetypeWeights` and `buyerWeights` in [Shifts.lua](../src/Repli
 | Economy | **No** scraps, shift inventory, progression |
 | Purpose | Flavor + foundation for future object/shop loop |
 
-Player can pick up a prop at outdoor spawns, see `Holding: …` UI, place on `DisplaySlot1–3`, or drop in `StashBin`. Haggled shift items are a **separate** system.
+Player can pick up a prop at outdoor spawns, see `Holding: …` UI, place on Shelf slots, or drop in StorageBin. Haggled shop items are a **separate** server system.
 
 Future convergence is planned in [OBJECT_MODEL_UNIFICATION_PLAN.md](OBJECT_MODEL_UNIFICATION_PLAN.md). That plan does not make decorative hub props part of the economy yet.
 
@@ -454,19 +450,26 @@ Workspace
 └── World
     ├── PlayerSpawn
     ├── Outside
-    │   └── JunkLot (PickupSpawn1–3, JunkPile, …)
+    │   └── ScavengeNodes (placeholder; legacy JunkLot for decorative pickups)
     └── Shop
         ├── ShiftBoard (+ ProximityPrompt)
         ├── OpenClosedSign
-        ├── CustomerSpot
-        ├── DisplayShelf (DisplaySlot1–3, ShelfBack or Back)
-        ├── StashBin
-        ├── Counter, CashRegister, Building, …
+        ├── CustomerPath (CustomerEntrySpot, CustomerSpot, CustomerExitSpot)
+        ├── Shelves
+        │   └── BasicShelf
+        │       ├── Markers (ShelfCameraSpot, ShelfLookAt, ShelfPromptAnchor + ShelfStationPrompt)
+        │       ├── SlotMarkers (Slot ×3)
+        │       └── ShelfParts
+        ├── Counter
+        │   └── Markers (CounterItemSpot, CounterLookAt, DealCameraSpot)
+        ├── Storage
+        │   └── StorageBin
+        ├── CashRegister, Building, …
 ```
 
 ### Current — **Prototype**
 
-Forecast/prep at Traffic Board, then start a shop day (internal: shift). Client sign, decorative hub props, deal UI while open, InventoryShelf/DisplayShelf/Stash routing, persistent scraps/display/stash V1, counter and visitor presentation, read-only live debug overlay with Studio-gated actions.
+Forecast/prep at Traffic Board, then start a shop day (internal: shift). Client sign, decorative hub props, deal UI while open, Shelf/Storage routing, persistent scraps/Shelf/Storage V1, counter and visitor presentation, allowlist-gated Ctrl+U DevTools.
 
 ### Future — **Planned / future direction**
 
@@ -551,8 +554,8 @@ Sources (future): scavenging, walk-in sellers, event rewards, rare customers, ha
 | Decision | Status | Meaning |
 |----------|--------|---------|
 | **Sell** | **Prototype** | Immediate scraps via buyer haggle during an open shop day |
-| **Display** (haggled items) | **Prototype** | Route to DisplayShelf; session persistence; influences buyer traffic / shop identity |
-| **Stash** (haggled items) | **Prototype** | 2 permanent slots; save for a better future shop day; no demand influence |
+| **Shelf** (haggled items) | **Prototype** | Public sellable stock (internal `display`); persists; influences buyer traffic |
+| **Storage** (haggled items) | **Prototype** | 2 permanent hidden slots (internal `stash`); save for a better future shop day; no demand influence |
 | **Activate** | **Future direction** | Relic modifiers |
 
 Future design must use **slot limits** on stash and display so players curate, not hoard infinitely.
@@ -565,7 +568,7 @@ Future design must use **slot limits** on stash and display so players curate, n
 
 **Future direction:** buyers are the **main money engine** during open shop hours.
 
-**Prototype today:** buyer visits, rare walk-ins, matching labels/bonuses, **display influence**, **Demand Preview**, and Traffic Board V1 before opening a shop day (internal: shift). Preview is approximate — not a real-time calendar or guarantee.
+**Prototype today:** buyer visits, rare walk-ins, matching labels/bonuses, **shelf appeal**, **Demand Preview**, and Traffic Board V1 before opening a shop day (internal: shift). Preview is approximate — not a real-time calendar or guarantee.
 
 Buyer types: scavengers, mechanics, collectors, black market dealers, alien tourists, robot appraisers, cultists, military buyers, desperate weirdos.
 
@@ -711,9 +714,9 @@ Receipt paper, price tags, stamped labels, clarity over decoration. Shift/deal U
 
 | System | Status |
 |--------|--------|
-| Persistent scraps + 2-slot Stash + saved DisplayShelf | **Prototype** |
+| Persistent scraps + 2-slot Storage + saved Shelf | **Prototype** |
 | Collection log | **Planned** |
-| Shop display (haggled items + influence) | **Prototype** |
+| Shop Shelf (haggled items + shelf appeal) | **Prototype** |
 | Broader permanent inventory / decoration saves | **Future direction** |
 | Shop customization (fixed slots) | **Future direction** |
 | Broader DataStore / persistence | **Future direction** |
@@ -744,7 +747,7 @@ Examples (not implemented):
 7. **Do not document hub pickups as real economy** — they are client-only decorative prototype.
 8. **Do not imply calendar, relics, collection, broader inventory saves, or shop upgrades are built** until milestones ship.
 9. **Do not confuse display influence with Demand Preview** — influence changes rolls during a shift; preview only explains likely demand before opening.
-10. **Do not claim all shop objects are permanent** — Persistent Shop State V1 saves scraps, 2 Stash slots, and DisplayShelf items/positions only.
+10. **Do not claim all shop objects are permanent** — Persistent Shop State V1 saves scraps, 2 **Storage** slots, and **Shelf** items/positions only.
 11. **Do not describe the long-term game as a static shift picker** — open/close shop days with variable traffic is the direction.
 12. **Do not imply full open/close shop simulation, real-time calendar, or daily reset are built** — Traffic Board V1 is a prototype forecast/prep tool.
 13. **Do not solve retention by becoming a tycoon-lite game** — no idle cash, employees, rebirth-first ladders, or paid auto-profit.
@@ -777,17 +780,17 @@ If not → wait.
 | Shop day haggle loop (internal: shift) | **Prototype** — playable |
 | Open / close shop day framing | **Planned direction** — not fully built |
 | Shop hub + Traffic Board forecast/prep | **Prototype stepping stone** |
-| InventoryShelf + DisplayShelf + Stash routing | **Prototype** |
-| Persistent Shop State V1 | **Prototype** — scraps, 2 Stash slots, DisplayShelf items/positions |
-| Display influence on buyer traffic | **Prototype** |
+| Public Shelf + Storage routing | **Prototype** |
+| Persistent Shop State V1 | **Prototype** — scraps, 2 Storage slots, Shelf items/positions |
+| Shelf appeal on buyer traffic | **Prototype** |
 | Demand Preview V1 (Traffic Board) | **Prototype** |
 | First Shift Onboarding V1 | **Prototype** — session-only |
 | Traffic Board V1 | **Prototype** — session-only rotating traffic conditions |
 | Rare Buyer Walk-In V1 | **Prototype** — one extra buyer max per shop day |
 | Counter / shelf / customer presentation | **Prototype** |
-| Ctrl+U debug overlay + Studio actions | **Prototype** |
+| Ctrl+U DevTools overlay (allowlist + role gates) | **Prototype** |
 | Hub pickup props | **Prototype** — decorative only |
-| Permanent scraps + tiny permanent stash + DisplayShelf saves | **Prototype** |
+| Permanent scraps + Storage + Shelf saves | **Prototype** |
 | Real-time calendar / event schedule | **Planned** — not built |
 | Broader permanent saves / relics | **Not started** |
 
@@ -838,14 +841,14 @@ See [ROADMAP.md](ROADMAP.md) for milestone order and [Current Scope Snapshot](RO
 | **InventoryShelf** | Legacy working stock (compat); Public Shelves V1 uses unified **Shelf** instead (**Prototype**) |
 | **Shelf** (internal `display`) | Public sellable stock on `Shop.Shelf`; traffic influence; persists (**Prototype**) |
 | **Storage** (internal `stash`) | 2 permanent hidden slots; save for a better future shop day (**Prototype**) |
-| **Persistent Shop State** | Scraps, Stash, and DisplayShelf items/positions survive rejoin; InventoryShelf and hub pickups do not (**Prototype**) |
-| **Display influence** | Displayed categories/traits bias buyer visit roll weights (**Prototype**) |
-| **Demand Preview** | Traffic Board `?` panel: likely buyers, good stock, display match hints (**Prototype**) |
+| **Persistent Shop State** | Scraps, **Storage**, and **Shelf** items/positions survive rejoin; legacy `inventory` and hub pickups do not (**Prototype**) |
+| **Shelf appeal** | Shelf categories/traits bias buyer visit roll weights (**Prototype**) |
+| **Demand Preview** | Traffic Board `?` panel: likely buyers, good stock, shelf match hints (**Prototype**) |
 | **Traffic Board** | Prototype forecast/prep overlay; session-only traffic conditions; evolves toward pre-open forecast (**Prototype stepping stone**) |
 | **Seller visit** | Buying opportunity during an open shop day |
-| **Buyer visit** | Selling opportunity; pick inventory item |
+| **Buyer visit** | Selling opportunity; pick a Shelf item to offer |
 | **Closing Rush** | Final cashout after sellers exhausted |
-| **Liquidation** | Bad fallback for unsold working-stock items (~35%) |
+| **Liquidation** | Bad fallback for unsold legacy inventory items (~35%) |
 | **Buyer match** | Fit between item and buyer preferences |
 | **Deal archetype** | Authored deal shape at generation time |
 | **Hub prop** | Client-only decorative pickup (**Prototype**) |

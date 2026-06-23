@@ -24,6 +24,7 @@ local WORLD_WAIT_SECONDS = 30
 local shop: Instance? = nil
 local anchors: HubWorld.PresentationAnchors? = nil
 local counterModeActive = false
+local shelfFocusOverlaySuppressed = false
 local anchorWarned = false
 local portraitWarned = false
 
@@ -120,7 +121,7 @@ end
 
 local function setCounterOverlayVisible(visible: boolean)
 	if rootFrame then
-		rootFrame.Visible = visible
+		rootFrame.Visible = visible and not shelfFocusOverlaySuppressed
 	end
 end
 
@@ -830,6 +831,24 @@ end
 
 function CounterPresentationController:isCounterModeActive(): boolean
 	return counterModeActive
+end
+
+function CounterPresentationController:prepareForShelfFocus()
+	shelfFocusOverlaySuppressed = true
+	setCounterOverlayVisible(false)
+	if counterModeActive and CameraController:isShopkeeperModeActive() then
+		CameraController:suspendShopkeeperForShelfFocus()
+	end
+end
+
+function CounterPresentationController:restoreAfterShelfFocus()
+	shelfFocusOverlaySuppressed = false
+	if counterModeActive and anchors and shop then
+		CameraController:restoreShopkeeperAfterShelfFocus(shop, anchors)
+		handleDealPresentation(currentDealSnapshot)
+	else
+		CameraController:restoreShopkeeperAfterShelfFocus(shop, anchors)
+	end
 end
 
 function CounterPresentationController:setLegacyDealUiForced(forced: boolean)

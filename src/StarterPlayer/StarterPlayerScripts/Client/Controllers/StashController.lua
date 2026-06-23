@@ -159,13 +159,13 @@ function StashController:_resolvePrompt(world: Instance?): ProximityPrompt?
 	local shop = HubWorld.findChildByNames(world, { "Shop" })
 	local stash = HubWorld.findStashBin(shop)
 	if not stash then
-		warnOnce("stash_bin", `StashController: StashBin not found. Shop children: {HubWorld.listChildNames(shop)}`)
+		warnOnce("stash_bin", `StashController: Shop.Storage.StorageBin not found. Shop children: {HubWorld.listChildNames(shop)}`)
 		return nil
 	end
 
 	local promptParent = HubWorld.resolveBasePart(stash)
 	if not promptParent then
-		warnOnce("stash_part", "StashController: StashBin has no BasePart for ProximityPrompt")
+		warnOnce("stash_part", "StashController: Shop.Storage.StorageBin has no BasePart for ProximityPrompt")
 		return nil
 	end
 

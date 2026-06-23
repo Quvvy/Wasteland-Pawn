@@ -79,7 +79,7 @@ local function resolveCounterItemSpot(): BasePart?
 	local part = HubWorld.findCounterItemSpot(shop)
 	if not part then
 		warnSpotOnce(
-			`ItemPresentation: CounterItemSpot not found under Workspace.World.Shop. Children: {HubWorld.listChildNames(shop)}`
+			`ItemPresentation: Counter.Markers.CounterItemSpot not found under Workspace.World.Shop. Children: {HubWorld.listChildNames(shop)}`
 		)
 		return nil
 	end
@@ -124,7 +124,7 @@ function ItemPresentationController:showItem(itemData: ItemVisuals.ItemData)
 	self:clearItem()
 	lastItemKey = resolved.itemKey
 
-	local model = ItemPropBuilder.build(resolved, spot.CFrame)
+	local model = ItemPropBuilder.build(resolved, spot.CFrame, spot)
 	model.Parent = ensureLocalFolder(world)
 	activeModel = model
 end

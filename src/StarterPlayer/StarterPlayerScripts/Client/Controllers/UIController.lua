@@ -178,7 +178,7 @@ local function formatShopDayResultSummary(snapshot): string
 
 	local displayHelped = if shopDay.displayHelped then "yes" else "no"
 	local rareWalkIn = if (snapshot.rareBuyerVisitsSeen or 0) > 0 then "yes" else "no"
-	return `\nShop day: {forecast}\nDisplay helped: {displayHelped} | Rare Walk-In: {rareWalkIn}`
+	return `\nShop day: {forecast}\nShelf helped: {displayHelped} | Rare Walk-In: {rareWalkIn}`
 end
 
 local function createLabel(parent: Instance, name: string, text: string, position: UDim2, size: UDim2): TextLabel
@@ -391,7 +391,7 @@ local function formatDisplayInfluenceHelp(snapshot): string?
 	appendStrings(matched, snapshot.displayInfluenceMatchedTraits)
 
 	if #matched > 0 then
-		return `Display helped: {table.concat(matched, " / ")}`
+		return `Shelf helped: {table.concat(matched, " / ")}`
 	end
 
 	return snapshot.displayInfluenceLabel or "Shelf appeal helped attract this buyer."
