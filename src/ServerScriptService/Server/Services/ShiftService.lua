@@ -14,6 +14,7 @@ local InventoryService = require(script.Parent.InventoryService)
 local ShiftService = {}
 
 local playerShifts: { [Player]: any } = {}
+local playerScavengeWindow: { [Player]: number } = {}
 local playerTraffic: { [Player]: { boardIndex: number, completedWindows: number } } = {}
 local playerOnboarding: { [Player]: any } = {}
 local playerShopDayForecasts: { [Player]: any } = {}
@@ -32,6 +33,10 @@ local ONBOARDING_HINTS = {
 	first_sale = "Nice sale. Some items are worth keeping in Storage for better traffic.",
 	forward = "Shelf items attract buyers. Storage saves up to 2 items for later.",
 }
+
+local function bumpScavengeWindow(player: Player)
+	playerScavengeWindow[player] = (playerScavengeWindow[player] or 0) + 1
+end
 
 local function getGrade(shift): string
 	local target = math.max(shift.targetProfit or 0, 1)
@@ -131,6 +136,7 @@ function ShiftService:Init()
 
 	Players.PlayerRemoving:Connect(function(player)
 		playerShifts[player] = nil
+		playerScavengeWindow[player] = nil
 		playerTraffic[player] = nil
 		playerOnboarding[player] = nil
 		playerShopDayForecasts[player] = nil
@@ -445,6 +451,8 @@ function ShiftService:startShift(player: Player, shiftId: string?)
 		self:recordOnboardingEvent(player, "recommended_shift_started")
 	end
 
+	bumpScavengeWindow(player)
+
 	local snapshot = self:buildSnapshot(player)
 	self:_pushState(player)
 	return { ok = true, snapshot = snapshot }
@@ -452,6 +460,10 @@ end
 
 function ShiftService:getShift(player: Player)
 	return playerShifts[player]
+end
+
+function ShiftService:getScavengeWindowToken(player: Player): number
+	return playerScavengeWindow[player] or 0
 end
 
 function ShiftService:isBuying(player: Player): boolean
@@ -789,6 +801,7 @@ function ShiftService:endShift(player: Player)
 	InventoryService:pushSnapshot(player)
 	self:_pushState(player)
 	DataService:savePlayer(player, "shift_end")
+	bumpScavengeWindow(player)
 	return self:buildSnapshot(player)
 end
 

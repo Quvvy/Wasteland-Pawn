@@ -11,6 +11,7 @@ local controllerModules = {
 	Controllers:WaitForChild("ShelfFocusController"),
 	Controllers:WaitForChild("StashController"),
 	Controllers:WaitForChild("HubPickupController"),
+	Controllers:WaitForChild("ScavengeNodeController"),
 	Controllers:WaitForChild("CameraController"),
 	Controllers:WaitForChild("CounterPresentationController"),
 }

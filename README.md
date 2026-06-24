@@ -12,11 +12,11 @@ The **current prototype** uses a shift/traffic-board stepping stone — start at
 
 ## Product thesis
 
-Wasteland Pawn is a weird shopkeeping and negotiation game with Roblox retention discipline. The shop is real. The player opens and closes it. Each day should have variables, surprises, and demand conditions. Negotiation resolves deals, but the larger game is deciding what to buy, stash, display, sell, and save for better traffic.
+Wasteland Pawn is a weird shopkeeping and negotiation game with Roblox retention discipline. The shop is real. The player opens and closes it. Each day should have variables, surprises, and demand conditions. Negotiation resolves deals, but the larger game is deciding what to buy, stash, display, sell, and save for better traffic. **The shop is the heart; the world exists to feed the shop** — scavenging and building support stock decisions and shop identity, not a separate survival or tycoon game.
 
 We are **not** trying to build a static shift picker. We are trying to build a weird pawn shop where opening the shop creates a variable day.
 
-More detail: [docs/GDD.md](docs/GDD.md), [docs/ROADMAP.md](docs/ROADMAP.md), [docs/known_issues.md](docs/known_issues.md).
+More detail: [docs/GDD.md](docs/GDD.md), [docs/ROADMAP.md](docs/ROADMAP.md), [docs/WORLD_DIRECTION.md](docs/WORLD_DIRECTION.md), [docs/known_issues.md](docs/known_issues.md).
 
 ## Product direction (planned — not fully built)
 
@@ -30,6 +30,7 @@ More detail: [docs/GDD.md](docs/GDD.md), [docs/ROADMAP.md](docs/ROADMAP.md), [do
 |----------|-------------|
 | [docs/GDD.md](docs/GDD.md) | Design source of truth (v0.3) |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Milestones, current scope, and priorities |
+| [docs/WORLD_DIRECTION.md](docs/WORLD_DIRECTION.md) | Long-term world, building, scavenging, and social direction |
 | [docs/known_issues.md](docs/known_issues.md) | Living bugs, risks, and technical debt |
 
 Edit **GDD.md** in the repo — not the Word export. `docs/Wasteland Pawn GDD.docx` is an optional human export only.
@@ -89,9 +90,9 @@ AGENTS.md                       Agent brief for Cursor / Codex
 - **Ctrl+U DevTools** — allowlist-gated live diagnostics; owners get dangerous write actions when enabled in live
 - **Hub pickup props** — client-only decorative pick up / place / Storage (session-only; **not** economy or saves)
 
-**Not built yet:** full open/close shop simulation, real-time calendar or daily reset, collection log, relics, shop upgrades, permanent hub pickups, full decoration editor, unified scavenging + haggled item economy.
+**Not built yet:** full open/close shop simulation, real-time calendar or daily reset, collection log, relics, shop upgrades, permanent hub pickups, full decoration editor, unified scavenging + haggled item economy, shared pawn town / player shop plots, connected POI scavenging, anchor-based build mode, vehicles.
 
-**Design warning:** scavenging and haggling must eventually feed **one** object economy — not two competing money loops. See [GDD](docs/GDD.md#two-economy-problem).
+**Design warning:** scavenging and haggling must eventually feed **one** object economy — not two competing money loops. See [GDD](docs/GDD.md#two-economy-problem). Long-term world/building direction: [WORLD_DIRECTION.md](docs/WORLD_DIRECTION.md).
 
 Haggling is the **resolution layer**. **Object routing** (what to keep, who to sell to, when to open) is the bigger game.
 

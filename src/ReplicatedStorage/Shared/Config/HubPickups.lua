@@ -1,4 +1,5 @@
 local HubPickups = {
+	Enabled = false,
 	SpawnDefs = {
 		{
 			spawnName = "PickupSpawn1",

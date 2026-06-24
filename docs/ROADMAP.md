@@ -77,12 +77,13 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 | Physical shop hub — Traffic Board opens prototype shop day (internal: shift) | **Prototype** |
 | Traffic-window overlay (from board prompt) | **Prototype** |
 | OpenClosedSign (client visual) | **Prototype** |
-| Hub pickup props (pick up / place / stash) | **Prototype** — decorative only; see GDD |
+| Hub pickup props (pick up / place / stash) | **Disabled V0** — `HubPickups.Enabled = false`; was decorative only; see GDD |
+| Scavenge Node V0 (`ScavengeNodes` / `BasicJunk`, server roll → Shelf → Storage) | **Prototype** |
 | Customer counter presentation (`CustomerPresentationController`, cloned visitor rigs) | **Prototype** |
 | Item counter props at `CounterItemSpot` | **Prototype** |
 | Hybrid Counter Presentation V1 (shopkeeper camera, counter dialogue overlay, legacy UI fallback) | **Prototype** |
 | Public Shelf presentation (`Shop.Shelves.BasicShelf`) | **Prototype** |
-| Shelf Focus V0 (Inspect Shelf station + click/tap management; always-on prompt when shelf exists) | **Prototype** |
+| Shelf Focus V0 (Inspect Shelf station + click/tap management + slot reordering/swaps; always-on prompt when shelf exists) | **Prototype** |
 | WorldMarkers helper (tags + hierarchy + legacy fallback) | **Prototype** |
 | Shelf ↔ Storage routing (Move to Storage / Return to Shelf) | **Prototype** |
 | Storage for haggled items (2 saved slots; internal `stash`) | **Prototype** |
@@ -109,6 +110,7 @@ Planning note: the unification path is drafted in [OBJECT_MODEL_UNIFICATION_PLAN
 
 **Stabilize:**
 
+- [x] Shelf Reorder V0 - selected Shelf items can move to empty slots or swap with another Shelf item while the shop is closed
 - [x] Public Shelves V1 — unified public Shelf (`Shop.Shelf` / `ShelfSlot1-3`), buys land on Shelf, buyers offer from Shelf, Storage for hidden stock
 - [x] InventoryShelf prompt mode: Offer only during BuyerVisit; Hold Back only outside BuyerVisit (superseded by Shelf Offer / Move to Storage on public Shelf)
 - [x] Server rejects storage items for buyer offers; accepts shelf (`display`) items
@@ -242,12 +244,27 @@ Exit criteria:
 
 ## Not yet
 
-- Full decoration editor
+- Full decoration editor / anchor-based Build Mode
 - Player-to-player trading
 - Employees / scheduling
 - Rebirth / idle passive income
-- Full map expansion
+- Connected POI zones (dense scavenging areas — not a huge empty map)
 - Final art pass for hub props
+
+---
+
+## Far-future milestone buckets (not scheduled)
+
+Strategic direction only. See [WORLD_DIRECTION.md](WORLD_DIRECTION.md) for full detail. These are **not** current sprint work.
+
+| Bucket | Intent |
+|--------|--------|
+| **Shop Plot Loading** | Assign plot in shared town; spawn/load shop shell; restore Shelf / Storage / Counter / decoration state |
+| **Anchor-Based Build Mode V1** | Slot-based placement (shelves, relics, signs, decor) — not freeform building |
+| **Scavenge POI V1** | Connected compact POI on same server; server-authoritative finds; 2–5 min runs |
+| **Vehicle Hauling V1** | Short travel + bag capacity; haulers, not mandatory long commutes |
+| **Social Shop Visits** | See other players' shops, guest book, rare displays, shop flex |
+| **Far-Future Outposts** | POI-adjacent stalls/kiosks that supplement the main town shop — do not replace it |
 
 ---
 

@@ -345,6 +345,9 @@ end
 function HubPickupController:Init() end
 
 function HubPickupController:Start()
+	if not HubPickups.Enabled then
+		return
+	end
 	task.spawn(function()
 		self:_watchWorld()
 	end)

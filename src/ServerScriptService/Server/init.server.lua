@@ -8,6 +8,7 @@ local serviceModules = {
 	Services:WaitForChild("DealService"),
 	Services:WaitForChild("DebugService"),
 	Services:WaitForChild("ShopService"),
+	Services:WaitForChild("ScavengeService"),
 }
 
 local loadedServices = {}

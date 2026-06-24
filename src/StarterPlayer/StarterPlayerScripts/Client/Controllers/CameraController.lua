@@ -281,6 +281,15 @@ local function snapCameraToBaseLook()
 	camera.CFrame = buildCameraCFrame(cameraBasePosition, currentYawOffset, currentPitchOffset)
 end
 
+local function restorePlayerCamera()
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	camera.CameraType = Enum.CameraType.Custom
+	if humanoid then
+		camera.CameraSubject = humanoid
+	end
+end
+
 function CameraController:isShelfFocusActive(): boolean
 	return shelfFocusActive
 end
@@ -314,6 +323,13 @@ function CameraController:suspendShopkeeperForShelfFocus(): boolean
 	return true
 end
 
+function CameraController:cancelShopkeeperShelfFocusSuspension()
+	shopkeeperSuspendedForShelfFocus = false
+	suspendedShopkeeperAnchors = nil
+	suspendedFocusMode = nil
+	suspendedShopkeeperCFrame = nil
+end
+
 function CameraController:restoreShopkeeperAfterShelfFocus(shop: Instance?, presentationAnchors: HubWorld.PresentationAnchors?)
 	if not shopkeeperSuspendedForShelfFocus then
 		return
@@ -322,12 +338,17 @@ function CameraController:restoreShopkeeperAfterShelfFocus(shop: Instance?, pres
 	shopkeeperSuspendedForShelfFocus = false
 	local anchorsToRestore = presentationAnchors or suspendedShopkeeperAnchors
 	local focusToRestore = suspendedFocusMode
+	local handoffCFrame = suspendedShopkeeperCFrame
 	suspendedShopkeeperAnchors = nil
 	suspendedFocusMode = nil
 	suspendedShopkeeperCFrame = nil
 
 	if not anchorsToRestore then
 		return
+	end
+
+	if handoffCFrame then
+		camera.CFrame = handoffCFrame
 	end
 
 	self:enterShopkeeperMode(shop :: Instance, anchorsToRestore)
@@ -337,7 +358,7 @@ function CameraController:restoreShopkeeperAfterShelfFocus(shop: Instance?, pres
 	end
 end
 
-function CameraController:exitShelfFocusMode()
+function CameraController:exitShelfFocusMode(restoreShopkeeper: boolean?)
 	stopShelfFocusTween()
 
 	if not shelfFocusActive then
@@ -348,30 +369,29 @@ function CameraController:exitShelfFocusMode()
 	shelfFocusLookAt = nil
 	cameraBasePosition = nil
 
-	local skipRestoreSnap = shopkeeperSuspendedForShelfFocus
+	local skipRestoreSnap = shopkeeperSuspendedForShelfFocus and restoreShopkeeper == true
 
 	pcall(function()
 		if skipRestoreSnap then
+			if suspendedShopkeeperCFrame then
+				camera.CFrame = suspendedShopkeeperCFrame
+			end
 			camera.CameraType = Enum.CameraType.Scriptable
 		else
-			if savedCameraType then
-				camera.CameraType = savedCameraType
-			else
-				camera.CameraType = Enum.CameraType.Custom
-			end
-			if savedCameraSubject then
-				camera.CameraSubject = savedCameraSubject
-			end
-			if savedCameraCFrame then
-				camera.CFrame = savedCameraCFrame
-			end
+			restorePlayerCamera()
 		end
 	end)
+
+	if not skipRestoreSnap then
+		self:cancelShopkeeperShelfFocusSuspension()
+	end
 
 	savedCameraType = nil
 	savedCameraSubject = nil
 	savedCameraCFrame = nil
-	suspendedShopkeeperCFrame = nil
+	if not skipRestoreSnap then
+		suspendedShopkeeperCFrame = nil
+	end
 end
 
 function CameraController:enterShelfFocusMode(cameraPosition: Vector3, lookAtPosition: Vector3): boolean
@@ -388,9 +408,6 @@ function CameraController:enterShelfFocusMode(cameraPosition: Vector3, lookAtPos
 
 	local ok, err = pcall(function()
 		local startCFrame = suspendedShopkeeperCFrame or camera.CFrame
-		if suspendedShopkeeperCFrame then
-			suspendedShopkeeperCFrame = nil
-		end
 
 		savedCameraType = camera.CameraType
 		savedCameraSubject = camera.CameraSubject
@@ -469,17 +486,7 @@ function CameraController:exitShopkeeperMode()
 	currentPitchOffset = 0
 
 	pcall(function()
-		if savedCameraType then
-			camera.CameraType = savedCameraType
-		else
-			camera.CameraType = Enum.CameraType.Custom
-		end
-		if savedCameraSubject then
-			camera.CameraSubject = savedCameraSubject
-		end
-		if savedCameraCFrame then
-			camera.CFrame = savedCameraCFrame
-		end
+		restorePlayerCamera()
 	end)
 
 	savedCameraType = nil

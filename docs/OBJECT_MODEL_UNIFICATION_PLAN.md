@@ -258,7 +258,7 @@ Good candidate:
 
 Bad candidate:
 
-- A full outdoor scavenging loop with value payouts.
+- An open-world collectathon or huge-map scavenging loop with separate value payouts (prefer short connected POI runs; see [WORLD_DIRECTION.md](WORLD_DIRECTION.md)).
 
 Rules:
 
@@ -285,6 +285,22 @@ Possible additions:
 - shop identity
 
 This is intentionally not part of the current prototype.
+
+---
+
+## Future placed buildables
+
+Status: **Future direction** — planning only. Build detail: [WORLD_DIRECTION.md](WORLD_DIRECTION.md).
+
+When anchor-based shop customization ships, placed fixtures on player plots should:
+
+- Use **anchor/slot placement** (valid spots glow in Build Mode) — not freeform Bloxburg-style building first.
+- Remain **server-authoritative**: server owns which buildable is on which plot slot.
+- Assign **stable slot IDs** per placed fixture (e.g. shelf wall slot 2, relic pedestal A) so saves survive reload and plot assignment.
+- Route items through the same `OwnedObject` locations: `display` (**Shelf**), `stash` (**Storage**), legacy `inventory` (compat only).
+- Keep **Counter** as the deal presentation anchor for haggling — buildables extend stock and shop identity, not a second deal UI.
+
+Do **not** rename existing save fields (`display`, `stash`, `displaySlotIndex`, etc.) in this planning pass unless a later migration is explicitly scoped.
 
 ---
 

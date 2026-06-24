@@ -103,7 +103,7 @@ The product direction is **weird shopkeeping / negotiation game with Roblox rete
 
 - The playable loop is a shop-day prototype with sellers, haggling, public **Shelf**, **Storage**, buyers, Rare Walk-Ins, Traffic Board, Closing Rush, and liquidation.
 - Persistent Shop State V1 saves scraps, 2 **Storage** slots (internal `stash`), and **Shelf** items/positions (internal `display`).
-- Public Shelves V1: buys land on the Shelf; buyers offer on Shelf items. Legacy `inventory` working stock is compat-only. Hub pickups remain decorative and non-persistent.
+- Public Shelves V1: buys land on the Shelf; buyers offer on Shelf items; Shelf Focus supports inspect, Move to Storage, and slot reordering/swaps while the shop is closed. Legacy `inventory` working stock is compat-only. Hub pickups remain decorative and non-persistent.
 - There is no collection log, real calendar, relic system, shop upgrade system, full decoration editor, or broader DataStore progression.
 - Hub pickup props are decorative, client-only, and separate from the server-owned haggled-item economy.
 - `DealService` carries a lot of core loop responsibility and should be watched as features stabilize.
@@ -158,6 +158,36 @@ Opening the shop starts a **shop day**. Open Shop / Shop Day Variables V1 now ad
 **Traffic Board evolution:** today it is a session-only traffic-window picker plus compact shop-day forecast (**Prototype**). It should evolve into a stronger **forecast and preparation tool** (what traffic may show up, how display/stash matter, what to expect) — not a permanent static mission-select menu.
 
 **Not built yet:** full open/close shop simulation, real-time calendar, daily reset, collection log, relics, shop upgrades, full decoration editor, global events, broader progression saves.
+
+---
+
+## World, scavenging, and building (future direction)
+
+**Status:** **Planned / strategic direction** — not implemented. Full detail: [WORLD_DIRECTION.md](WORLD_DIRECTION.md).
+
+### Shop-first, world-second
+
+- The **shop** is the heart of the game. The **world** exists to feed the shop.
+- **Scavenging** creates interesting stock decisions tied to upcoming demand — not a separate money machine or infinite collectathon.
+- **Building** makes the shop personal and strategically useful — anchor/slot customization, not freeform Bloxburg building first.
+- The world should feel **connected and social** (shared pawn town, visible player shops) but **dense and readable** — not a huge empty desert.
+
+### Prototype vs future world model
+
+| | Prototype today | Far-future target |
+|---|-----------------|-------------------|
+| World layout | Single embedded `World.Shop` in Studio | Shared wasteland pawn town + **player shop plots** |
+| Scavenging | Server-authoritative Scavenge Node V0 feeds Shelf/Storage; decorative hub pickups disabled | Short **connected POI runs** (2–5 min) on same server; instanced places for rare expeditions only |
+| Building | Fixed Shelf / Storage / Counter anchors | **Build Mode** on valid slots (shelves, relic pedestals, signs, etc.) |
+| Travel | Walk | Optional **vehicles** as haulers/status — not mandatory long commutes |
+
+### Demand-driven scavenging
+
+Future scavenging should start from **Traffic Board / event forecasts**: know what buyers want tomorrow → choose a themed POI (Junkyard, Dead Mall, Crash Site, etc.) → bring 1–5 items home → route to **Shelf**, **Storage**, or hold for the right shop day.
+
+### Anchor-based building (not freeform first)
+
+Players customize through glowing valid spots: more **Shelf** capacity, **Storage**, display cases, relics, signs, counter upgrades, decor. Shop expansion is physical (back room, relic corner, bargain bin) — not idle money printers or rebirth ladders.
 
 ---
 
@@ -422,35 +452,53 @@ Per-shift `dealArchetypeWeights` and `buyerWeights` in [Shifts.lua](../src/Repli
 - **CustomerSpot** exists as a future presentation marker (no NPC pathfinding).
 - Physical hierarchy expected under `Workspace.World` (Outside, Shop, JunkLot, Shelf, StorageBin, etc.). Studio part aliases (`DisplayShelf`, `StashBin`, `InventoryShelf`) remain for compat.
 
-### Hub pickup props — **Prototype** (decorative only)
+### Hub pickup props — **Disabled V0** (was decorative only)
 
-**Be honest:** this is **not** final gameplay.
+**Be honest:** hub pickups are **off** in V0 (`HubPickups.Enabled = false`) so they do not fake storage drops or holding UI while real scavenging is live.
 
-| Property | Hub pickups today |
-|----------|-------------------|
+| Property | Hub pickups (frozen) |
+|----------|----------------------|
 | Authority | **Client-only** |
 | Persistence | **Session-only**; no save data |
 | Economy | **No** scraps, shift inventory, progression |
 | Purpose | Flavor + foundation for future object/shop loop |
 
-Player can pick up a prop at outdoor spawns, see `Holding: …` UI, place on Shelf slots, or drop in StorageBin. Haggled shop items are a **separate** server system.
+When re-enabled, player could pick up a prop at outdoor spawns, see `Holding: …` UI, place on Shelf slots, or drop in StorageBin. Haggled shop items are a **separate** server system.
 
 Future convergence is planned in [OBJECT_MODEL_UNIFICATION_PLAN.md](OBJECT_MODEL_UNIFICATION_PLAN.md). That plan does not make decorative hub props part of the economy yet.
 
-Current decision: **freeze, do not expand**. Keep hub pickups if they support the physical shop fantasy, but stop expanding them until they have a clear relationship to inventory, display, value, or persistence.
+Current decision: **disabled for Scavenge Node V0**; do not re-enable without a clear relationship to inventory, display, value, or persistence.
+
+### Scavenge Node V0 — **Prototype**
+
+**Simple nodes, one loot table, shop-closed only.** Answers: does finding an item outside make the shop loop more fun?
+
+| Property | Scavenge Node V0 |
+|----------|------------------|
+| Nodes | Direct Model/Folder children under `World.Outside.ScavengeNodes` with `ScavengePromptPart`; duplicated `JunkPile` models are supported |
+| Loot | `BasicJunk` — weighted Scrap ids from `ScavengeLoot.lua` |
+| Authority | **Server** discovers nodes, assigns runtime `NodeId`, validates `SearchScavengeNode` |
+| Placement | Shelf if room, else Storage; persists via existing shop save |
+| Use limit | **Session-only** — per-node searches per scavenge window; window bumps on shift start/end; **not** persisted per shop day (see known_issues) |
+| Blocked when | Shop open, active deal (Haggling/Selling/BuyerVisit), both Shelf + Storage full |
+
+No POIs, vehicles, bags, minigames, tools, or alternate loot-table content in V0.
 
 ---
 
 ## Shop hub
 
-### Expected Studio hierarchy
+**Prototype note:** The hierarchy below is a **single embedded shop** for the current repo — a stepping stone. The far-future model is a **shared pawn town** with **player shop plots**, connected compact POIs, and per-player shop shells loaded at assigned plots. See [WORLD_DIRECTION.md](WORLD_DIRECTION.md).
+
+### Expected Studio hierarchy (prototype)
 
 ```text
 Workspace
 └── World
     ├── PlayerSpawn
     ├── Outside
-    │   └── ScavengeNodes (placeholder; legacy JunkLot for decorative pickups)
+    │   └── ScavengeNodes
+    │       └── JunkPile (+ ScavengePromptPart; duplicate node models are supported)
     └── Shop
         ├── ShiftBoard (+ ProximityPrompt)
         ├── OpenClosedSign
@@ -473,7 +521,7 @@ Forecast/prep at Traffic Board, then start a shop day (internal: shift). Client 
 
 ### Future — **Planned / future direction**
 
-**Open shop / close shop** as core verbs; Traffic Board as forecast/prep (not mission select); stash/display for **all** objects; real-time calendar (**planned**, not built); relic placement; shop upgrades; rare walk-ins.
+**Open shop / close shop** as core verbs; Traffic Board as forecast/prep (not mission select); stash/display for **all** objects; real-time calendar (**planned**, not built); relic placement; shop upgrades; **shared pawn town + player shop plots**; **connected compact POI scavenging**; **anchor-based Build Mode**; optional vehicles/outposts as supplements — see [WORLD_DIRECTION.md](WORLD_DIRECTION.md).
 
 ---
 
@@ -752,7 +800,8 @@ Examples (not implemented):
 12. **Do not imply full open/close shop simulation, real-time calendar, or daily reset are built** — Traffic Board V1 is a prototype forecast/prep tool.
 13. **Do not solve retention by becoming a tycoon-lite game** — no idle cash, employees, rebirth-first ladders, or paid auto-profit.
 14. **Do not expand decorative hub pickups yet** — freeze them until they have a clear relationship to inventory, display, value, or persistence.
-15. **Do not let `DealService` absorb every new system** — slice responsibilities out when a feature boundary stabilizes.
+15. **Do not expand into a huge empty open world or menu-teleport scavenging as the default loop** — normal POIs stay connected to the shared town; separate places are for rare expeditions only. See [WORLD_DIRECTION.md](WORLD_DIRECTION.md).
+16. **Do not let `DealService` absorb every new system** — slice responsibilities out when a feature boundary stabilizes.
 
 ---
 

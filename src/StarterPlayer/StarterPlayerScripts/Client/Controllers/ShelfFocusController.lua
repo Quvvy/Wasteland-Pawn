@@ -22,6 +22,7 @@ local SCREEN_GUI_NAME = "ShelfFocusUI"
 local STATION_PROMPT_NAME = "ShelfStationPrompt"
 local SLOT_BUTTON_LAYER_NAME = "ShelfSlotButtonLayer"
 local EMPTY_CLICK_BUTTON_NAME = "ShelfFocusEmptyClick"
+local DESTINATION_BUTTON_PREFIX = "ShelfDestinationButton"
 
 local BUTTON_PADDING_X = 40
 local BUTTON_PADDING_TOP = 96
@@ -36,6 +37,8 @@ local DEFAULT_DISPLAY_SLOTS = 3
 local BUTTON_IDLE_TRANSPARENCY = 0.92
 local BUTTON_HOVER_TRANSPARENCY = 0.84
 local BUTTON_SELECTED_TRANSPARENCY = 0.78
+local DESTINATION_IDLE_TRANSPARENCY = 0.12
+local DESTINATION_HOVER_TRANSPARENCY = 0.04
 
 type SlotPickResult = {
 	slotIndex: number,
@@ -60,6 +63,13 @@ type SlotButtonState = {
 	hovered: boolean,
 }
 
+type DestinationButtonState = {
+	button: TextButton,
+	stroke: UIStroke,
+	slotIndex: number,
+	hovered: boolean,
+}
+
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
@@ -71,7 +81,10 @@ local stationPromptBound = false
 local slotButtonUpdateConnection: RBXScriptConnection? = nil
 
 local currentDealSnapshot: any? = nil
+local currentShiftSnapshot: any? = nil
 local actionPending = false
+local moveSlotMode = false
+local moveSourceInstanceId: string? = nil
 
 local screenGui: ScreenGui? = nil
 local slotButtonLayer: Frame? = nil
@@ -79,10 +92,12 @@ local panelFrame: Frame? = nil
 local itemNameLabel: TextLabel? = nil
 local itemInfoLabel: TextLabel? = nil
 local inspectButton: TextButton? = nil
+local moveSlotButton: TextButton? = nil
 local storageButton: TextButton? = nil
 local closeButton: TextButton? = nil
 
 local slotButtons: { [number]: SlotButtonState } = {}
+local destinationButtons: { [number]: DestinationButtonState } = {}
 local lastPickContext: SlotPickResult? = nil
 local lastLoggedSelectionKey: string? = nil
 
@@ -134,6 +149,21 @@ local function getShelfEntryForSlot(slotIndex: number): any?
 	return getShelfItemsBySlot()[slotIndex]
 end
 
+local function getShelfMoveDestinationSlots(instanceId: string): { number }
+	local entry = getShelfEntry(instanceId)
+	local slots = {}
+	if not entry or type(entry.displaySlotIndex) ~= "number" then
+		return slots
+	end
+
+	for slotIndex = 1, getMaxSlotCount() do
+		if slotIndex ~= entry.displaySlotIndex then
+			table.insert(slots, slotIndex)
+		end
+	end
+	return slots
+end
+
 local function isShelfFocusBlockedPhase(): boolean
 	local phase = currentDealSnapshot and currentDealSnapshot.phase
 	return phase == "Haggling" or phase == "Selling"
@@ -145,6 +175,27 @@ end
 
 local function isMoveToStorageBlocked(): boolean
 	return isBuyerVisitPhase() or isShelfFocusBlockedPhase()
+end
+
+local function getShelfReorderBlockReason(): string?
+	local phase = currentDealSnapshot and currentDealSnapshot.phase
+	if phase == "BuyerVisit" or phase == "Haggling" or phase == "Selling" then
+		return "Finish the current deal first."
+	end
+	if currentShiftSnapshot and currentShiftSnapshot.active == true and currentShiftSnapshot.ended ~= true then
+		return "Close the shop first."
+	end
+	return nil
+end
+
+local function isShiftOpen(): boolean
+	return currentShiftSnapshot ~= nil
+		and currentShiftSnapshot.active == true
+		and currentShiftSnapshot.ended ~= true
+end
+
+local function shouldRestoreShopkeeperAfterShelfFocus(): boolean
+	return CounterPresentationController:isCounterModeActive() and isShiftOpen()
 end
 
 local function canEnterShelfFocus(): (boolean, string?)
@@ -163,6 +214,11 @@ local function setActionButtonsEnabled(enabled: boolean)
 		inspectButton.Active = enabled
 		inspectButton.AutoButtonColor = enabled
 		inspectButton.BackgroundTransparency = if enabled then 0 else 0.45
+	end
+	if moveSlotButton then
+		moveSlotButton.Active = enabled and not actionPending
+		moveSlotButton.AutoButtonColor = enabled and not actionPending
+		moveSlotButton.BackgroundTransparency = if enabled and not actionPending then 0 else 0.45
 	end
 	if storageButton and enabled then
 		storageButton.Active = not actionPending
@@ -242,10 +298,24 @@ local function clearSelectionHighlight()
 	selectedInstanceId = nil
 end
 
+local function clearDestinationButtons()
+	for slotIndex, state in destinationButtons do
+		state.button:Destroy()
+		destinationButtons[slotIndex] = nil
+	end
+end
+
+local function stopMoveSlotMode()
+	moveSlotMode = false
+	moveSourceInstanceId = nil
+	clearDestinationButtons()
+end
+
 local function showIdlePanel()
 	if not panelFrame then
 		return
 	end
+	stopMoveSlotMode()
 	panelFrame.Visible = true
 	if itemNameLabel then
 		itemNameLabel.Text = "No item selected"
@@ -253,11 +323,15 @@ local function showIdlePanel()
 	if itemInfoLabel then
 		itemInfoLabel.Text = "Click a shelf item to select it."
 	end
+	if moveSlotButton then
+		moveSlotButton.Text = "Move Slot"
+	end
 	setActionButtonsEnabled(false)
 end
 
 local function clearSelection(skipSelectionLog: boolean?)
 	local hadSelection = selectedInstanceId ~= nil
+	stopMoveSlotMode()
 	clearSelectionHighlight()
 	lastPickContext = nil
 	if focusActive then
@@ -295,7 +369,11 @@ local function updatePanelForSelection(instanceId: string)
 		itemNameLabel.Text = `Selected: {entry.displayName or "Item"}`
 	end
 	if itemInfoLabel then
-		itemInfoLabel.Text = formatPanelDetailText(entry)
+		if moveSlotMode and moveSourceInstanceId == instanceId then
+			itemInfoLabel.Text = "Choose another Shelf slot."
+		else
+			itemInfoLabel.Text = formatPanelDetailText(entry)
+		end
 	end
 
 	if inspectButton then
@@ -304,11 +382,47 @@ local function updatePanelForSelection(instanceId: string)
 		inspectButton.BackgroundTransparency = 0
 	end
 
+	local reorderBlockReason = getShelfReorderBlockReason()
+	local destinationSlots = getShelfMoveDestinationSlots(instanceId)
+	if moveSlotButton then
+		if actionPending then
+			moveSlotButton.Text = "Moving..."
+			moveSlotButton.Active = false
+			moveSlotButton.AutoButtonColor = false
+			moveSlotButton.BackgroundTransparency = 0.45
+		elseif reorderBlockReason then
+			moveSlotButton.Text = reorderBlockReason
+			moveSlotButton.Active = false
+			moveSlotButton.AutoButtonColor = false
+			moveSlotButton.BackgroundTransparency = 0.45
+		elseif #destinationSlots == 0 then
+			moveSlotButton.Text = "No other slot"
+			moveSlotButton.Active = false
+			moveSlotButton.AutoButtonColor = false
+			moveSlotButton.BackgroundTransparency = 0.45
+		elseif moveSlotMode and moveSourceInstanceId == instanceId then
+			moveSlotButton.Text = "Cancel Move"
+			moveSlotButton.Active = true
+			moveSlotButton.AutoButtonColor = true
+			moveSlotButton.BackgroundTransparency = 0
+		else
+			moveSlotButton.Text = "Move Slot"
+			moveSlotButton.Active = true
+			moveSlotButton.AutoButtonColor = true
+			moveSlotButton.BackgroundTransparency = 0
+		end
+	end
+
 	local snapshot = DisplayShelfPresentationController:getLastInventorySnapshot()
 	local storageFull = snapshot and (snapshot.stashUsedSlots or 0) >= (snapshot.stashMaxSlots or 2)
 	local moveBlocked = isMoveToStorageBlocked()
 	if storageButton then
-		if moveBlocked then
+		if moveSlotMode then
+			storageButton.Text = "Choose slot"
+			storageButton.Active = false
+			storageButton.AutoButtonColor = false
+			storageButton.BackgroundTransparency = 0.45
+		elseif moveBlocked then
 			storageButton.Text = "Finish buyer first"
 			storageButton.Active = false
 			storageButton.AutoButtonColor = false
@@ -350,6 +464,15 @@ local function selectSlot(slotIndex: number)
 	if not entry or type(entry.instanceId) ~= "string" then
 		clearSelection()
 		return
+	end
+
+	if moveSlotMode then
+		if entry.instanceId == moveSourceInstanceId then
+			stopMoveSlotMode()
+			updatePanelForSelection(entry.instanceId)
+			return
+		end
+		stopMoveSlotMode()
 	end
 
 	local model = DisplayShelfPresentationController:findModelBySlotIndex(slotIndex)
@@ -558,6 +681,125 @@ local function getOrCreateSlotButton(slotIndex: number): SlotButtonState?
 	return state
 end
 
+local moveSelectedToSlot
+
+local function styleDestinationButton(state: DestinationButtonState)
+	state.button.BackgroundTransparency = if state.hovered then DESTINATION_HOVER_TRANSPARENCY else DESTINATION_IDLE_TRANSPARENCY
+	state.stroke.Transparency = if state.hovered then 0 else 0.12
+	state.stroke.Thickness = if state.hovered then 3 else 2
+end
+
+local function getOrCreateDestinationButton(slotIndex: number): DestinationButtonState?
+	if not slotButtonLayer then
+		return nil
+	end
+
+	local existing = destinationButtons[slotIndex]
+	if existing and existing.button.Parent then
+		return existing
+	end
+
+	local button = Instance.new("TextButton")
+	button.Name = `{DESTINATION_BUTTON_PREFIX}{slotIndex}`
+	button.BackgroundColor3 = Color3.fromRGB(28, 48, 34)
+	button.BackgroundTransparency = DESTINATION_IDLE_TRANSPARENCY
+	button.BorderSizePixel = 0
+	button.AutoButtonColor = false
+	button.Font = Enum.Font.GothamBold
+	button.Text = "Move here"
+	button.TextColor3 = Color3.fromRGB(255, 246, 210)
+	button.TextSize = 16
+	button.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	button.TextStrokeTransparency = 0.18
+	button.TextWrapped = true
+	button.ZIndex = 8
+	button.Parent = slotButtonLayer
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = button
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(255, 226, 122)
+	stroke.Thickness = 2
+	stroke.Transparency = 0.12
+	stroke.Parent = button
+
+	local state: DestinationButtonState = {
+		button = button,
+		stroke = stroke,
+		slotIndex = slotIndex,
+		hovered = false,
+	}
+	destinationButtons[slotIndex] = state
+
+	button.MouseEnter:Connect(function()
+		state.hovered = true
+		styleDestinationButton(state)
+	end)
+	button.MouseLeave:Connect(function()
+		state.hovered = false
+		styleDestinationButton(state)
+	end)
+	button.Activated:Connect(function()
+		if moveSelectedToSlot then
+			moveSelectedToSlot(slotIndex)
+		end
+	end)
+
+	return state
+end
+
+local function updateDestinationButtons(camera: Camera, viewportSize: Vector2, itemsBySlot: { [number]: any })
+	local activeSlots: { [number]: boolean } = {}
+	if not moveSlotMode or not selectedInstanceId or moveSourceInstanceId ~= selectedInstanceId then
+		clearDestinationButtons()
+		return
+	end
+
+	local sourceEntry = getShelfEntry(moveSourceInstanceId)
+	local sourceSlotIndex = sourceEntry and sourceEntry.displaySlotIndex
+	if type(sourceSlotIndex) ~= "number" then
+		clearDestinationButtons()
+		return
+	end
+
+	for slotIndex = 1, getMaxSlotCount() do
+		if slotIndex == sourceSlotIndex then
+			continue
+		end
+
+		local entry = itemsBySlot[slotIndex]
+		local model = if entry then DisplayShelfPresentationController:findModelBySlotIndex(slotIndex) else nil
+		local rect = if model then getModelScreenRect(model, camera) else nil
+		rect = rect or getSlotFallbackRect(slotIndex, camera)
+		if not rect then
+			continue
+		end
+		rect = clampRectToViewport(rect, viewportSize)
+		local state = rect and getOrCreateDestinationButton(slotIndex)
+		if not rect or not state then
+			continue
+		end
+
+		activeSlots[slotIndex] = true
+		state.button:SetAttribute("SlotIndex", slotIndex)
+		state.button.Text = if entry then "Swap" else "Move here"
+		state.button.Position = UDim2.fromOffset(rect.minX, rect.minY)
+		state.button.Size = UDim2.fromOffset(rect.maxX - rect.minX, rect.maxY - rect.minY)
+		state.button.Visible = true
+		state.button.Active = true
+		styleDestinationButton(state)
+	end
+
+	for slotIndex, state in destinationButtons do
+		if not activeSlots[slotIndex] then
+			state.button.Visible = false
+			state.button.Active = false
+		end
+	end
+end
+
 local function updateSlotButtons()
 	if not focusActive or not slotButtonLayer then
 		return
@@ -630,6 +872,11 @@ local function updateSlotButtons()
 		end
 	end
 
+	if moveSlotMode and (not moveSourceInstanceId or not getShelfEntry(moveSourceInstanceId)) then
+		stopMoveSlotMode()
+	end
+	updateDestinationButtons(camera, viewportSize, itemsBySlot)
+
 	if selectedInstanceId and not getShelfEntry(selectedInstanceId) then
 		clearSelection(true)
 	end
@@ -646,6 +893,54 @@ local function connectSlotButtonUpdates()
 	disconnectSlotButtonUpdates()
 	slotButtonUpdateConnection = RunService.RenderStepped:Connect(updateSlotButtons)
 	updateSlotButtons()
+end
+
+moveSelectedToSlot = function(targetSlotIndex: number)
+	if actionPending or not moveSlotMode then
+		return
+	end
+
+	local instanceId = moveSourceInstanceId or selectedInstanceId
+	if not instanceId then
+		clearSelection()
+		return
+	end
+	if getShelfReorderBlockReason() then
+		showMessage(getShelfReorderBlockReason() or "Close the shop first.")
+		updatePanelForSelection(instanceId)
+		return
+	end
+
+	local sourceEntry = getShelfEntry(instanceId)
+	if sourceEntry and sourceEntry.displaySlotIndex == targetSlotIndex then
+		showMessage("Choose a different Shelf slot.")
+		updatePanelForSelection(instanceId)
+		return
+	end
+
+	actionPending = true
+	updatePanelForSelection(instanceId)
+
+	local remote = Remotes.get("MoveDisplayItemToSlot") :: RemoteFunction
+	local ok, result = pcall(function()
+		return remote:InvokeServer(instanceId, targetSlotIndex)
+	end)
+
+	actionPending = false
+
+	if not ok or type(result) ~= "table" or result.ok ~= true then
+		local err = if ok and type(result) == "table" then result.error else nil
+		showMessage(if type(err) == "string" and err ~= "" then err else "Could not move Shelf item")
+		if selectedInstanceId then
+			updatePanelForSelection(selectedInstanceId)
+		else
+			showIdlePanel()
+		end
+		return
+	end
+
+	stopMoveSlotMode()
+	clearSelection()
 end
 
 local function ensureUi()
@@ -692,7 +987,7 @@ local function ensureUi()
 	panel.Name = "ActionPanel"
 	panel.AnchorPoint = Vector2.new(1, 1)
 	panel.Position = UDim2.new(1, -16, 1, -16)
-	panel.Size = UDim2.fromOffset(260, 200)
+	panel.Size = UDim2.fromOffset(280, 292)
 	panel.BackgroundColor3 = Color3.fromRGB(28, 26, 22)
 	panel.BackgroundTransparency = 0.08
 	panel.BorderSizePixel = 0
@@ -751,12 +1046,14 @@ local function ensureUi()
 		local button = Instance.new("TextButton")
 		button.Name = name
 		button.LayoutOrder = order
-		button.Size = UDim2.new(1, 0, 0, 30)
-		button.BackgroundColor3 = Color3.fromRGB(70, 100, 76)
+		button.Size = UDim2.new(1, 0, 0, 34)
+		button.BackgroundColor3 = Color3.fromRGB(58, 86, 64)
 		button.BorderSizePixel = 0
 		button.Font = Enum.Font.GothamBold
-		button.TextSize = 14
-		button.TextColor3 = Color3.fromRGB(240, 240, 235)
+		button.TextSize = 15
+		button.TextColor3 = Color3.fromRGB(255, 250, 232)
+		button.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		button.TextStrokeTransparency = 0.35
 		button.Text = label
 		button.ZIndex = 21
 		button.Parent = panel
@@ -767,8 +1064,9 @@ local function ensureUi()
 	end
 
 	inspectButton = makeButton("Inspect", "Inspect", 3)
-	storageButton = makeButton("MoveToStorage", "Move to Storage", 4)
-	closeButton = makeButton("Close", "Close", 5)
+	moveSlotButton = makeButton("MoveSlot", "Move Slot", 4)
+	storageButton = makeButton("MoveToStorage", "Move to Storage", 5)
+	closeButton = makeButton("Close", "Close", 6)
 
 	inspectButton.MouseButton1Click:Connect(function()
 		if not selectedInstanceId then
@@ -780,10 +1078,40 @@ local function ensureUi()
 		end
 	end)
 
+	moveSlotButton.MouseButton1Click:Connect(function()
+		if not selectedInstanceId or actionPending then
+			return
+		end
+
+		local blockReason = getShelfReorderBlockReason()
+		if blockReason then
+			showMessage(blockReason)
+			updatePanelForSelection(selectedInstanceId)
+			return
+		end
+
+		if moveSlotMode and moveSourceInstanceId == selectedInstanceId then
+			stopMoveSlotMode()
+		else
+			local destinationSlots = getShelfMoveDestinationSlots(selectedInstanceId)
+			if #destinationSlots == 0 then
+				showMessage("No other Shelf slot.")
+				updatePanelForSelection(selectedInstanceId)
+				return
+			end
+			moveSlotMode = true
+			moveSourceInstanceId = selectedInstanceId
+		end
+
+		updatePanelForSelection(selectedInstanceId)
+		updateSlotButtons()
+	end)
+
 	storageButton.MouseButton1Click:Connect(function()
 		if not selectedInstanceId or actionPending or isMoveToStorageBlocked() then
 			return
 		end
+		stopMoveSlotMode()
 		actionPending = true
 		if storageButton then
 			storageButton.Active = false
@@ -811,7 +1139,7 @@ local function ensureUi()
 	end)
 
 	closeButton.MouseButton1Click:Connect(function()
-		clearSelection()
+		ShelfFocusController:exitFocus()
 	end)
 end
 
@@ -823,6 +1151,7 @@ function ShelfFocusController:exitFocus()
 	focusActive = false
 	disconnectSlotButtonUpdates()
 	local hadSelection = selectedInstanceId ~= nil
+	stopMoveSlotMode()
 	clearSelectionHighlight()
 	lastLoggedSelectionKey = nil
 	if screenGui then
@@ -833,7 +1162,7 @@ function ShelfFocusController:exitFocus()
 	else
 		notifySelectionDebug(false)
 	end
-	CameraController:exitShelfFocusMode()
+	CameraController:exitShelfFocusMode(shouldRestoreShopkeeperAfterShelfFocus())
 	CounterPresentationController:restoreAfterShelfFocus()
 end
 
@@ -1001,6 +1330,21 @@ local function onDealSnapshot(snapshot: any?)
 	end
 end
 
+local function onShiftSnapshot(snapshot: any?)
+	currentShiftSnapshot = snapshot
+	local shopOpen = snapshot and snapshot.active == true and snapshot.ended ~= true
+	if focusActive and not shopOpen then
+		ShelfFocusController:exitFocus()
+		return
+	end
+	if focusActive and moveSlotMode and getShelfReorderBlockReason() then
+		stopMoveSlotMode()
+	end
+	if focusActive and selectedInstanceId then
+		updatePanelForSelection(selectedInstanceId)
+	end
+end
+
 local function shouldForceExit(): boolean
 	return isShelfFocusBlockedPhase()
 end
@@ -1020,6 +1364,9 @@ function ShelfFocusController:Start()
 
 	local dealUpdate = Remotes.get("DealStateUpdate") :: RemoteEvent
 	dealUpdate.OnClientEvent:Connect(onDealSnapshot)
+
+	local shiftUpdate = Remotes.get("ShiftStateUpdate") :: RemoteEvent
+	shiftUpdate.OnClientEvent:Connect(onShiftSnapshot)
 
 	RunService.Heartbeat:Connect(function()
 		if focusActive and shouldForceExit() then

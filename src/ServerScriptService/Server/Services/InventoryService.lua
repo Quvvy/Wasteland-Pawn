@@ -295,6 +295,48 @@ function InventoryService:addPurchasedItemToShelf(player: Player, entry)
 	return entry.instanceId
 end
 
+function InventoryService:addAcquiredItemToStash(player: Player, entry)
+	if not self:canAddToStash(player) then
+		return nil
+	end
+
+	local stashSlotIndex = self:findFirstEmptyStashSlot(player)
+	if not stashSlotIndex then
+		return nil
+	end
+
+	local inventory = self:_ensureInventory(player)
+	entry.instanceId = entry.instanceId or self:_nextInstanceId()
+	ObjectModel.normalizeOwnedObject(entry)
+	entry.location = LOCATION_STASH
+	entry.heldBack = false
+	entry.displaySlotIndex = nil
+	entry.stashSlotIndex = stashSlotIndex
+	self:_applyPermanentHome(entry, LOCATION_STASH, stashSlotIndex)
+	table.insert(inventory.items, entry)
+	self:_pushState(player)
+	self:_markPersistentDirty(player)
+	return entry.instanceId
+end
+
+function InventoryService:addAcquiredItemToShelfOrStash(player: Player, entry): (boolean, string?, string?)
+	if self:canAddToDisplay(player) then
+		local instanceId = self:addPurchasedItemToShelf(player, entry)
+		if instanceId then
+			return true, LOCATION_DISPLAY, instanceId
+		end
+	end
+
+	if self:canAddToStash(player) then
+		local instanceId = self:addAcquiredItemToStash(player, entry)
+		if instanceId then
+			return true, LOCATION_STASH, instanceId
+		end
+	end
+
+	return false, nil, nil
+end
+
 function InventoryService:addPurchasedItem(player: Player, entry)
 	if not self:canAdd(player) then
 		return nil
@@ -480,6 +522,71 @@ function InventoryService:moveDisplayItemToStash(player: Player, instanceId: str
 	self:_pushState(player)
 	self:_markPersistentDirty(player)
 	return true
+end
+
+function InventoryService:moveDisplayItemToDisplaySlot(
+	player: Player,
+	instanceId: string,
+	targetSlotIndex: number
+): (boolean, string?)
+	local inventory = self:_ensureInventory(player)
+	local entry = self:getOwnedItem(player, instanceId)
+	if not entry then
+		return false, "Item not found"
+	end
+	if self:_itemLocation(entry) ~= LOCATION_DISPLAY then
+		return false, "Item not on Shelf"
+	end
+	if type(targetSlotIndex) ~= "number" or targetSlotIndex ~= targetSlotIndex then
+		return false, "Invalid Shelf slot"
+	end
+
+	targetSlotIndex = math.floor(targetSlotIndex)
+	if targetSlotIndex < 1 or targetSlotIndex > inventory.displayMaxSlots then
+		return false, "Invalid Shelf slot"
+	end
+	if entry.displaySlotIndex == targetSlotIndex then
+		return false, "Choose a different Shelf slot."
+	end
+
+	local sourceSlotIndex = entry.displaySlotIndex
+	if type(sourceSlotIndex) ~= "number" then
+		return false, "Item has no Shelf slot"
+	end
+
+	local swapEntry = nil
+	for _, other in inventory.items do
+		if other.disposed or other.instanceId == instanceId then
+			continue
+		end
+
+		local location = self:_itemLocation(other)
+		if location == LOCATION_DISPLAY and other.displaySlotIndex == targetSlotIndex then
+			swapEntry = other
+		end
+		if
+			location == LOCATION_INVENTORY
+			and other.permanentOrigin == true
+			and other.permanentHomeLocation == LOCATION_DISPLAY
+			and other.permanentHomeSlotIndex == targetSlotIndex
+		then
+			return false, "Shelf slot is reserved."
+		end
+	end
+
+	entry.displaySlotIndex = targetSlotIndex
+	entry.heldBack = false
+	entry.stashSlotIndex = nil
+	self:_applyPermanentHome(entry, LOCATION_DISPLAY, targetSlotIndex)
+	if swapEntry then
+		swapEntry.displaySlotIndex = sourceSlotIndex
+		swapEntry.heldBack = false
+		swapEntry.stashSlotIndex = nil
+		self:_applyPermanentHome(swapEntry, LOCATION_DISPLAY, sourceSlotIndex)
+	end
+	self:_pushState(player)
+	self:_markPersistentDirty(player)
+	return true, nil
 end
 
 function InventoryService:moveStashItemToDisplay(player: Player, instanceId: string): boolean

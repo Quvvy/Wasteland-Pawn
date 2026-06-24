@@ -13,6 +13,106 @@ No current critical issues tracked.
 
 ---
 
+## Design risks (world / building / scavenging)
+
+Strategic watch items — not bugs. Full direction: [WORLD_DIRECTION.md](WORLD_DIRECTION.md).
+
+### World scope creep / huge empty map boredom
+
+Status: Watch
+Area: World / Product direction
+Why it matters:
+- The game should feel large because POIs and shops are interesting, not because players walk minutes across empty desert.
+- "Full map expansion" is the wrong goal; prefer dense connected POI zones and social town density.
+Recommended next action:
+- Any world work should pass the feature filter: does it improve weird item discovery, stock decisions, or shop stories?
+
+### Player scattering if main shops relocate freely
+
+Status: Watch
+Area: Multiplayer / Shop plots
+Why it matters:
+- If every player can move their main shop anywhere, the hub dies and new players see emptiness.
+- Main identity stays the **town pawn shop**; far-future outposts supplement, not replace.
+Recommended next action:
+- Keep outposts and remote stalls as supplements in design docs until explicitly scoped.
+
+### Early player trading economy
+
+Status: Watch
+Area: Social / Economy
+Why it matters:
+- Player-to-player trading creates exploit surfaces and balancing problems before the core shop loop is proven.
+- Socialization should come from visible shops, shared POIs, events, and convoys — not trading.
+Recommended next action:
+- Do not add player trading unless explicitly requested after economy is stable.
+
+### Freeform building scope risk
+
+Status: Watch
+Area: Building / Shop customization
+Why it matters:
+- Bloxburg-style freeform building is out of scope; anchor/slot Build Mode keeps shops readable and hard to exploit.
+Recommended next action:
+- New buildables use valid placement zones and server-authoritative slot IDs.
+
+### Vehicles as empty travel padding
+
+Status: Watch
+Area: Vehicles / World
+Why it matters:
+- Vehicles should be haulers, status, and short travel — not mandatory long commutes or the main progression system.
+Recommended next action:
+- Tie vehicle tiers to bag capacity and POI friction, not map size.
+
+### ScavengeNodes name confusion vs real POIs
+
+Status: Watch
+Area: Hub / Outside / Scavenging
+Why it matters:
+- `World.Outside.ScavengeNodes` now hosts **Scavenge Node V0** nodes — server-authoritative finds, not POI runs. Future connected POIs are a separate system (see WORLD_DIRECTION.md).
+Recommended next action:
+- Do not expand to multi-node / POI scavenging without a deliberate design pass.
+
+### Scavenge use limit is session-only (V0 prototype)
+
+Status: Known limitation
+Area: Scavenge / Shift
+Why it matters:
+- Scavenge Node V0 allows successful searches per node per scavenge window. The window token and node use counts are in-memory only (bumps on shift start/end). **Rejoining may reset the limit.** This is intentional prototype debt, not final per-shop-day design.
+Recommended next action:
+- Ship a persisted per-day counter only after V0 proves the loop is fun.
+
+### BasicJunk only; Scavenge Nodes are not POIs
+
+Status: Known limitation
+Area: Scavenge
+Why it matters:
+- V0 supports duplicated junk-pile nodes, but they still use the same `BasicJunk` table. This is not a POI system, vehicles, bags, tools, or minigames.
+Recommended next action:
+- Expand only after smoke-test acceptance criteria pass in Studio.
+
+### HubPickup decorative economy disabled
+
+Status: Intentional V0
+Area: Hub pickups
+Why it matters:
+- `HubPickups.Enabled = false` — no spawn loop, no fake "Dropped in Storage" or holding UI while scavenging is live.
+Recommended next action:
+- Re-enable only with a deliberate inventory/display relationship.
+
+### Teleport / menu fragmentation vs connected town
+
+Status: Watch
+Area: World / POIs
+Why it matters:
+- Normal scavenging should stay in the connected server world; separate Roblox places are for rare instanced expeditions only.
+- Menu-teleport to "dungeon #4" kills social density and shop visibility.
+Recommended next action:
+- Default POI access via roads/gates from the shared town.
+
+---
+
 ## Medium
 
 Issues that hurt testing, confuse players, or create inconsistent behavior.
@@ -55,8 +155,8 @@ Status: Watch
 Area: Hub pickups / Outside
 Notes:
 - `HubPickupController` prefers `World.Outside.ScavengeNodes` for spawn parent lookup, then falls back to legacy `Outside.JunkLot`.
-- On the cleaned hierarchy place, `ScavengeNodes` is empty — decorative hub pickups stay disabled until spawn parts are added under `ScavengeNodes` (or legacy `JunkLot` children exist).
-- No scavenging gameplay is wired to `ScavengeNodes` in this slice.
+- Decorative hub pickups stay disabled; Scavenge Node V0 uses `ScavengeNodes` for server-known junk piles, not client-only pickup spawn rewards.
+- Scavenge Node V0 uses direct `ScavengeNodes` children with `ScavengePromptPart`; decorative HubPickup spawns remain disabled and separate.
 
 ---
 
@@ -177,21 +277,23 @@ Current impact:
 - Missing markers fall back to legacy names or a derived bounding-box pose (warn-once in Output).
 - Entering shelf focus during an open shop day suspends shopkeeper camera and hides the counter overlay; exiting must restore both from the live deal snapshot (BuyerVisit Offer buttons usable immediately).
 - Entering seller **Haggling** or **Selling** force-exits shelf focus.
+- Closing the shop while in shelf focus force-exits focus and restores the player camera (shift-end lifecycle).
+- Exiting shelf focus then closing the shop restores third-person camera instead of replaying a stale Scriptable shelf snapshot.
 Recommended next action:
-- Place `BasicShelf.Markers` + `ShelfPromptAnchor` in Studio; playtest focus enter/exit during BuyerVisit and around counter deals.
+- Place `BasicShelf.Markers` + `ShelfPromptAnchor` in Studio; playtest focus enter/exit during BuyerVisit, exit-then-close-shop, shop close during focus, and around counter deals.
 Fixed when:
-- Focus camera is stable with hierarchy markers in the target place and restores cleanly on exit, buyer visit, and respawn.
+- Focus camera is stable with hierarchy markers in the target place and restores cleanly on exit, exit-then-shift-end, buyer visit, shop close, and respawn.
 
 ### Mobile/touch shelf item selection
 
 Status: Watch
 Area: Shelf Focus V0 / Input
 Why it matters:
-- V0 uses screen-position raycasts against shelf item props; small props or crowded slots may be hard to tap on mobile.
+- V0 uses screen-space slot buttons over shelf items; small props, labels, or crowded camera angles may still need touch playtesting.
 Current impact:
-- Touch and mouse share the same pick path; no drag-to-select or slot buttons in focus mode.
+- Touch and mouse share the same slot-button path; no drag-to-select or Storage focus mode.
 Recommended next action:
-- Playtest tap accuracy on phone/tablet before assuming mobile-ready shelf management.
+- Playtest tap accuracy and destination-slot buttons on phone/tablet before assuming mobile-ready shelf management.
 Fixed when:
 - Players can reliably select shelf items on touch devices or a follow-up adds clearer tap targets.
 
@@ -208,12 +310,19 @@ Recommended next action:
 Fixed when:
 - Target place uses hierarchy markers and DevTools camera scan shows `source: hierarchy` or `tag` for shelf focus.
 
-### Shelf reordering not implemented
+### Shelf reordering V0 limits
 
-Status: Intentional (V0)
+Status: Watch
 Area: Shelf Focus / Product scope
-Notes:
-- Shelf focus supports Inspect and Move to Storage only. No reorder, drag-and-drop, or click-empty-slot placement.
+Why it matters:
+- Shelf order matters now because Shelf positions persist and contribute to shop identity.
+Current impact:
+- Shelf Focus supports empty-slot moves and Shelf-item swaps while the shop is closed.
+- V0 does not support drag-and-drop, Storage focus, or reordering during an open shop day.
+Recommended next action:
+- Playtest whether click-to-move/click-to-swap is enough before adding drag behavior or a broader Shelf/Storage management mode.
+Fixed when:
+- Players can arrange saved Shelf items without item loss, accidental adjacent-slot selection, or needing a hidden workaround.
 
 ### Storage focus mode not implemented
 

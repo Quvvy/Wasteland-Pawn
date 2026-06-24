@@ -247,6 +247,9 @@ function DealService:Start()
 	bind("MoveStashedItemToDisplay", function(player, instanceId)
 		return self:moveStashedItemToDisplay(player, instanceId)
 	end)
+	bind("MoveDisplayItemToSlot", function(player, instanceId, targetSlotIndex)
+		return self:moveDisplayItemToSlot(player, instanceId, targetSlotIndex)
+	end)
 	bind("KeepItem", function(player, instanceId)
 		return self:keepItem(player, instanceId)
 	end)
@@ -948,6 +951,20 @@ function DealService:_stashRoutingBlocked(player: Player): string?
 	return nil
 end
 
+function DealService:_shelfReorderBlocked(player: Player): string?
+	local deal = activeDeals[player]
+	if deal and (deal.phase == "BuyerVisit" or deal.phase == "Haggling" or deal.phase == "Selling") then
+		return "Finish the current deal first."
+	end
+
+	local shift = ShiftService:getShift(player)
+	if shift and shift.active and not shift.ended then
+		return "Manage Shelf slots after closing the shop."
+	end
+
+	return nil
+end
+
 local function rollBuyerForVisit(_player: Player, rng: Random, shift, displayItems)
 	local baseWeights = shift and shift.buyerWeights
 	local adjustedWeights, influenceByBuyerId = DisplayInfluence.applyBuyerWeightBonuses(baseWeights, displayItems)
@@ -1194,6 +1211,35 @@ function DealService:moveStashedItemToDisplay(player: Player, instanceId: any)
 
 	if not InventoryService:moveStashItemToDisplay(player, instanceId) then
 		return { ok = false, error = "Could not return item to Shelf" }
+	end
+
+	return { ok = true }
+end
+
+function DealService:moveDisplayItemToSlot(player: Player, instanceId: any, targetSlotIndex: any)
+	if type(instanceId) ~= "string" then
+		return { ok = false, error = "Invalid item" }
+	end
+	if type(targetSlotIndex) ~= "number" then
+		return { ok = false, error = "Invalid Shelf slot" }
+	end
+
+	local blocked = self:_shelfReorderBlocked(player)
+	if blocked then
+		return { ok = false, error = blocked }
+	end
+
+	local entry = InventoryService:getOwnedItem(player, instanceId)
+	if not entry then
+		return { ok = false, error = "Item not found" }
+	end
+	if entry.location ~= "display" then
+		return { ok = false, error = "Item not on Shelf" }
+	end
+
+	local moved, err = InventoryService:moveDisplayItemToDisplaySlot(player, instanceId, targetSlotIndex)
+	if not moved then
+		return { ok = false, error = err or "Could not move Shelf item" }
 	end
 
 	return { ok = true }
@@ -2088,6 +2134,15 @@ function DealService:debugEndShift(player: Player)
 	end
 
 	return { ok = true, message = "Shop day closed." }
+end
+
+function DealService:hasBlockingDealForScavenge(player: Player): boolean
+	local deal = activeDeals[player]
+	if not deal then
+		return false
+	end
+	local phase = deal.phase
+	return phase == "Haggling" or phase == "Selling" or phase == "BuyerVisit"
 end
 
 return DealService

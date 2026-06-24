@@ -843,11 +843,14 @@ end
 
 function CounterPresentationController:restoreAfterShelfFocus()
 	shelfFocusOverlaySuppressed = false
-	if counterModeActive and anchors and shop then
+	local shopOpen = currentShiftSnapshot
+		and currentShiftSnapshot.active == true
+		and currentShiftSnapshot.ended ~= true
+	if counterModeActive and shopOpen and anchors and shop then
 		CameraController:restoreShopkeeperAfterShelfFocus(shop, anchors)
 		handleDealPresentation(currentDealSnapshot)
 	else
-		CameraController:restoreShopkeeperAfterShelfFocus(shop, anchors)
+		CameraController:cancelShopkeeperShelfFocusSuspension()
 	end
 end
 

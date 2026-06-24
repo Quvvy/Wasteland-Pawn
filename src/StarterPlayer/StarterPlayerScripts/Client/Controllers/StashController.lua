@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared.Net.Remotes)
+local HubPickups = require(Shared.Config.HubPickups)
 
 local UIController = require(script.Parent.UIController)
 local HubPickupController = require(script.Parent.HubPickupController)
@@ -115,7 +116,7 @@ function StashController:_refreshPrompt()
 		return
 	end
 
-	if HubPickupController:isHolding() then
+	if HubPickups.Enabled and HubPickupController:isHolding() then
 		stashPrompt.ActionText = "Drop in Storage"
 	else
 		stashPrompt.ActionText = "Open Storage"
@@ -134,7 +135,7 @@ function StashController:_bindPrompt(prompt: ProximityPrompt)
 	boundPrompts[prompt] = true
 
 	prompt.Triggered:Connect(function()
-		if HubPickupController:isHolding() then
+		if HubPickups.Enabled and HubPickupController:isHolding() then
 			HubPickupController:dropHeldInStash()
 			self:_refreshPrompt()
 			return
@@ -229,7 +230,9 @@ function StashController:Start()
 	end)
 
 	HubPickupController:onHoldingChanged(function()
-		self:_refreshPrompt()
+		if HubPickups.Enabled then
+			self:_refreshPrompt()
+		end
 	end)
 
 	task.spawn(function()

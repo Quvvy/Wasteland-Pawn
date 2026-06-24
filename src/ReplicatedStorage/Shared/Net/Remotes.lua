@@ -25,10 +25,12 @@ local REMOTE_DEFINITIONS = {
 	ReturnStashedItemToInventory = "RemoteFunction",
 	MoveDisplayItemToStash = "RemoteFunction",
 	MoveStashedItemToDisplay = "RemoteFunction",
+	MoveDisplayItemToSlot = "RemoteFunction",
 	DebugRunAction = "RemoteFunction",
 	DebugGetAccess = "RemoteFunction",
 	KeepItem = "RemoteFunction",
 	CloseShift = "RemoteFunction",
+	SearchScavengeNode = "RemoteFunction",
 	-- Legacy (routed to tactics on server)
 	MakeOffer = "RemoteFunction",
 	AcceptCounter = "RemoteFunction",

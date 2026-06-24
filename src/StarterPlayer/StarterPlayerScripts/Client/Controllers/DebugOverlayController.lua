@@ -196,6 +196,16 @@ local function shortenInstanceId(instanceId: string?): string
 	return string.sub(instanceId, 1, 8) .. "..."
 end
 
+local function field(value: any): string
+	if value == nil then
+		return "-"
+	end
+	if type(value) == "boolean" then
+		return if value then "true" else "false"
+	end
+	return tostring(value)
+end
+
 local function formatShelfFocusDebugSection(): string
 	local snapshot = shelfFocusDebugSnapshot
 	local selectedLabel = if snapshot.selectedName and snapshot.selectedName ~= ""
@@ -223,16 +233,6 @@ local function appendActionLog(actionId: string, result: any)
 		appendLog(`[ACTION FAILED] {actionId}: Remote error`)
 		showHubMessage(`{actionId}: Remote error`)
 	end
-end
-
-local function field(value: any): string
-	if value == nil then
-		return "-"
-	end
-	if type(value) == "boolean" then
-		return if value then "true" else "false"
-	end
-	return tostring(value)
 end
 
 local function formatListField(value: any): string
